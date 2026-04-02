@@ -3650,9 +3650,26 @@ function uninstall(isGlobal, runtime = 'claude') {
     // Gemini: still uses commands/gsd/
     const gsdCommandsDir = path.join(targetDir, 'commands', 'gsd');
     if (fs.existsSync(gsdCommandsDir)) {
+      // Preserve user-generated files before wipe (#1423)
+      // Note: if more user files are added, consider a naming convention (e.g., USER-*.md)
+      // and preserve all matching files instead of listing each one individually.
+      const devPrefsPath = path.join(gsdCommandsDir, 'dev-preferences.md');
+      const preservedDevPrefs = fs.existsSync(devPrefsPath) ? fs.readFileSync(devPrefsPath, 'utf-8') : null;
+
       fs.rmSync(gsdCommandsDir, { recursive: true });
       removedCount++;
       console.log(`  ${green}✓${reset} Removed commands/gsd/`);
+
+      // Restore user-generated files
+      if (preservedDevPrefs) {
+        try {
+          fs.mkdirSync(gsdCommandsDir, { recursive: true });
+          fs.writeFileSync(devPrefsPath, preservedDevPrefs);
+          console.log(`  ${green}✓${reset} Preserved commands/gsd/dev-preferences.md`);
+        } catch (err) {
+          console.error(`  ${red}✗${reset} Failed to restore dev-preferences.md: ${err.message}`);
+        }
+      }
     }
   } else {
     // Claude Code: remove skills/gsd-*/ directories
@@ -3675,18 +3692,47 @@ function uninstall(isGlobal, runtime = 'claude') {
     // Also clean up legacy commands/gsd/ from older installs
     const legacyCommandsDir = path.join(targetDir, 'commands', 'gsd');
     if (fs.existsSync(legacyCommandsDir)) {
+      // Preserve user-generated files before legacy wipe (#1423)
+      const devPrefsPath = path.join(legacyCommandsDir, 'dev-preferences.md');
+      const preservedDevPrefs = fs.existsSync(devPrefsPath) ? fs.readFileSync(devPrefsPath, 'utf-8') : null;
+
       fs.rmSync(legacyCommandsDir, { recursive: true });
       removedCount++;
       console.log(`  ${green}✓${reset} Removed legacy commands/gsd/`);
+
+      if (preservedDevPrefs) {
+        try {
+          fs.mkdirSync(legacyCommandsDir, { recursive: true });
+          fs.writeFileSync(devPrefsPath, preservedDevPrefs);
+          console.log(`  ${green}✓${reset} Preserved commands/gsd/dev-preferences.md`);
+        } catch (err) {
+          console.error(`  ${red}✗${reset} Failed to restore dev-preferences.md: ${err.message}`);
+        }
+      }
     }
   }
 
   // 2. Remove get-shit-done directory
   const gsdDir = path.join(targetDir, 'get-shit-done');
   if (fs.existsSync(gsdDir)) {
+    // Preserve user-generated files before wipe (#1423)
+    const userProfilePath = path.join(gsdDir, 'USER-PROFILE.md');
+    const preservedProfile = fs.existsSync(userProfilePath) ? fs.readFileSync(userProfilePath, 'utf-8') : null;
+
     fs.rmSync(gsdDir, { recursive: true });
     removedCount++;
     console.log(`  ${green}✓${reset} Removed get-shit-done/`);
+
+    // Restore user-generated files
+    if (preservedProfile) {
+      try {
+        fs.mkdirSync(gsdDir, { recursive: true });
+        fs.writeFileSync(userProfilePath, preservedProfile);
+        console.log(`  ${green}✓${reset} Preserved get-shit-done/USER-PROFILE.md`);
+      } catch (err) {
+        console.error(`  ${red}✗${reset} Failed to restore USER-PROFILE.md: ${err.message}`);
+      }
+    }
   }
 
   // 3. Remove GSD agents (gsd-*.md files only)

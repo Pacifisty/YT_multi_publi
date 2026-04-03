@@ -1,3 +1,10 @@
+## Linked Issue
+
+> **Required.** PRs without a linked issue are closed without review.
+> Open an issue first if one doesn't exist: https://github.com/gsd-build/get-shit-done/issues/new/choose
+
+Closes #
+
 ## What
 
 <!-- One sentence: what does this PR do? -->
@@ -5,8 +12,6 @@
 ## Why
 
 <!-- One sentence: why is this change needed? -->
-
-Closes #<!-- issue number -->
 
 ## How
 
@@ -35,6 +40,7 @@ Closes #<!-- issue number -->
 
 ## Checklist
 
+- [ ] Issue linked above (`Closes #NNN`) — **PR will be auto-closed if missing**
 - [ ] Follows GSD style (no enterprise patterns, no filler)
 - [ ] Updates CHANGELOG.md for user-facing changes
 - [ ] No unnecessary dependencies added

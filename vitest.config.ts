@@ -19,6 +19,14 @@ export default defineConfig({
           testTimeout: 120_000,
         },
       },
+      {
+        test: {
+          name: 'phase1',
+          root: '.',
+          include: ['tests/phase1/**/*.test.ts', 'tests/phase1/**/*.test.tsx'],
+          environment: 'node',
+        },
+      },
     ],
   },
 });

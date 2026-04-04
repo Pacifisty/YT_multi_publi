@@ -182,7 +182,7 @@
 |---------|---------|-------------|
 | `/gsd-new-project` | 完整项目初始化：提问、研究、需求、路线图 | 新项目开始时 |
 | `/gsd-new-project --auto @idea.md` | 从文档自动初始化 | 有现成的 PRD 或想法文档 |
-| `/gsd-discuss-phase [N]` | 捕获实现决策 | 规划前，塑造构建方式 |
+| `/gsd-discuss-phase [N] [--chain] [--power]` | 捕获实现决策（`--chain` 自动链式，`--power` 文件批量输入） | 规划前，塑造构建方式 |
 | `/gsd-plan-phase [N]` | 研究 + 规划 + 验证 | 执行阶段前 |
 | `/gsd-execute-phase <N>` | 在并行波次中执行所有计划 | 规划完成后 |
 | `/gsd-verify-work [N]` | 带自动诊断的手动 UAT | 执行完成后 |
@@ -211,6 +211,8 @@
 | `/gsd-list-phase-assumptions [N]` | 预览 Claude 的预期方法 | 规划前，验证方向 |
 | `/gsd-plan-milestone-gaps` | 为审计缺口创建阶段 | 审计发现缺失项后 |
 | `/gsd-research-phase [N]` | 仅深度生态研究 | 复杂或不熟悉的领域 |
+| `/gsd-autonomous [--from N] [--to N] [--only N]` | 自主执行剩余阶段（`--to N` 到阶段 N 停止） | 批量自动处理 |
+| `/gsd-analyze-dependencies` | 检测阶段间依赖关系 | `/gsd-manager` 前分析 |
 
 ### 现有代码库和工具
 
@@ -218,7 +220,7 @@
 |---------|---------|-------------|
 | `/gsd-map-codebase` | 分析现有代码库 | 在现有代码上运行 `/gsd-new-project` 之前 |
 | `/gsd-quick` | 带 GSD 保证的临时任务 | Bug 修复、小功能、配置更改 |
-| `/gsd-debug [desc]` | 带持久状态的系统化调试 | 出问题时 |
+| `/gsd-debug [desc] [--diagnose]` | 带持久状态的系统化调试（`--diagnose` 仅诊断） | 出问题时 |
 | `/gsd-add-todo [desc]` | 捕获想法留待后用 | 会话期间想到什么 |
 | `/gsd-check-todos` | 列出待处理事项 | 查看捕获的想法 |
 | `/gsd-settings` | 配置工作流开关和模型配置 | 更改模型、切换代理 |

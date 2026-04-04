@@ -1,0 +1,35 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("admin_users")
+}
+
+model ConnectedAccount {
+  id              String   @id @default(cuid())
+  provider        String
+  email           String?
+  displayName     String?  @map("display_name")
+  accessTokenEnc  String   @map("access_token_enc")
+  refreshTokenEnc String?  @map("refresh_token_enc")
+  scopes          String[] @default([])
+  tokenExpiresAt  DateTime? @map("token_expires_at")
+  status          String   @default("connected")
+  connectedAt     DateTime @default(now()) @map("connected_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("connected_accounts")
+}

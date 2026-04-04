@@ -1,10 +1,8 @@
 import type { SessionRequestLike } from '../auth/session.guard';
 import { SessionGuard } from '../auth/session.guard';
+import { MediaValidationService } from './media-validation.service';
 import { MediaService } from './media.service';
 import type { UploadedMediaFile } from './storage/local-storage.service';
-
-const MAX_VIDEO_SIZE_BYTES = 500 * 1024 * 1024; // 500 MB
-const MAX_THUMBNAIL_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export interface MediaRequest extends SessionRequestLike {
   files?: {
@@ -15,12 +13,15 @@ export interface MediaRequest extends SessionRequestLike {
 
 export class MediaController {
   private readonly sessionGuard: SessionGuard;
+  private readonly validationService: MediaValidationService;
 
   constructor(
     private readonly mediaService: MediaService,
     sessionGuard?: SessionGuard,
+    validationService?: MediaValidationService,
   ) {
     this.sessionGuard = sessionGuard ?? new SessionGuard();
+    this.validationService = validationService ?? new MediaValidationService();
   }
 
   async createAsset(request: MediaRequest): Promise<{ status: number; body: unknown }> {
@@ -47,23 +48,30 @@ export class MediaController {
       };
     }
 
-    const videoSize = videoFiles[0].size ?? videoFiles[0].buffer.byteLength;
-    if (videoSize > MAX_VIDEO_SIZE_BYTES) {
+    // Validation gate: reject invalid files before any persistence
+    const videoValidation = this.validationService.validateVideo(videoFiles[0]);
+    if (!videoValidation.valid) {
       return {
         status: 400,
         body: {
-          error: `Video file exceeds maximum allowed size of ${MAX_VIDEO_SIZE_BYTES} bytes.`,
+          code: videoValidation.errors[0].code,
+          error: videoValidation.errors[0].message,
+          field: videoValidation.errors[0].field,
+          errors: videoValidation.errors,
         },
       };
     }
 
     if (thumbnailFiles.length === 1) {
-      const thumbSize = thumbnailFiles[0].size ?? thumbnailFiles[0].buffer.byteLength;
-      if (thumbSize > MAX_THUMBNAIL_SIZE_BYTES) {
+      const thumbValidation = this.validationService.validateThumbnail(thumbnailFiles[0]);
+      if (!thumbValidation.valid) {
         return {
           status: 400,
           body: {
-            error: `Thumbnail file exceeds maximum allowed size of ${MAX_THUMBNAIL_SIZE_BYTES} bytes.`,
+            code: thumbValidation.errors[0].code,
+            error: thumbValidation.errors[0].message,
+            field: thumbValidation.errors[0].field,
+            errors: thumbValidation.errors,
           },
         };
       }

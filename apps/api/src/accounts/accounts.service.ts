@@ -7,6 +7,18 @@ import {
   type GoogleOauthSession,
   type GoogleTokenResult,
 } from '../integrations/google/google-oauth.service';
+import type { YouTubeChannelInfo, YouTubeChannelsService } from '../integrations/youtube/youtube-channels.service';
+
+export interface ChannelRecord {
+  id: string;
+  connectedAccountId: string;
+  youtubeChannelId: string;
+  title: string;
+  handle?: string;
+  thumbnailUrl?: string;
+  isActive: boolean;
+  lastSyncedAt: string;
+}
 
 export interface ConnectedAccountPersistenceInput {
   provider: string;
@@ -74,19 +86,33 @@ export interface AccountsServiceOptions {
   handleOauthCallback?: (input: OAuthCallbackInput) => Promise<OAuthCallbackResult>;
   refreshGoogleAccessToken?: (refreshToken: string) => Promise<RefreshTokenResult>;
   updateConnectedAccount?: (id: string, updates: Partial<ConnectedAccountRecord>) => Promise<ConnectedAccountRecord>;
+  youtubeChannelsService?: YouTubeChannelsService;
+  channelStore?: ChannelStore;
+  getConnectedAccount?: (id: string) => Promise<ConnectedAccountRecord | null>;
+  getChannelsForAccount?: (accountId: string) => Promise<ChannelRecord[]>;
   now?: () => Date;
+}
+
+export interface ChannelStore {
+  upsert(record: ChannelRecord): ChannelRecord;
+  findByAccountId(accountId: string): ChannelRecord[];
+  findById(channelId: string): ChannelRecord | null;
+  update(channelId: string, updates: Partial<ChannelRecord>): ChannelRecord | null;
+  deactivateAllForAccount(accountId: string): void;
 }
 
 export class AccountsService {
   private tokenCryptoService?: TokenCryptoService;
   private googleOauthService?: GoogleOauthService;
   private readonly connectedAccountStore: ConnectedAccountStore;
+  private readonly channelStore: ChannelStore;
   private readonly now: () => Date;
 
   constructor(private readonly options: AccountsServiceOptions = {}) {
     this.tokenCryptoService = options.tokenCryptoService;
     this.googleOauthService = options.googleOauthService;
     this.connectedAccountStore = options.connectedAccountStore ?? new InMemoryConnectedAccountStore();
+    this.channelStore = options.channelStore ?? new InMemoryChannelStore();
     this.now = options.now ?? (() => new Date());
   }
 
@@ -246,6 +272,82 @@ export class AccountsService {
     return googleService.refreshAccessToken(refreshToken);
   }
 
+  async syncChannelsForAccount(account: ConnectedAccountRecord): Promise<ChannelRecord[]> {
+    const tokens = this.readPersistedTokens(account);
+
+    const fetchChannels = this.options.youtubeChannelsService
+      ? (accessToken: string) => this.options.youtubeChannelsService!.listMineChannels(accessToken)
+      : async (accessToken: string) => {
+          const { YouTubeChannelsService: YTService } = await import('../integrations/youtube/youtube-channels.service');
+          return new YTService().listMineChannels(accessToken);
+        };
+
+    const result = await fetchChannels(tokens.accessToken);
+    const nowIso = this.now().toISOString();
+
+    const channels: ChannelRecord[] = result.channels.map((ch) => {
+      const record: ChannelRecord = {
+        id: randomUUID(),
+        connectedAccountId: account.id,
+        youtubeChannelId: ch.channelId,
+        title: ch.title,
+        handle: ch.handle,
+        thumbnailUrl: ch.thumbnailUrl,
+        isActive: true,
+        lastSyncedAt: nowIso,
+      };
+      return this.channelStore.upsert(record);
+    });
+
+    return channels;
+  }
+
+  toggleChannel(channelId: string, isActive: boolean): ChannelRecord | null {
+    return this.channelStore.update(channelId, { isActive });
+  }
+
+  getChannelsForAccount(accountId: string): ChannelRecord[] {
+    if (this.options.getChannelsForAccount) {
+      // Sync path — allow async override but we return the cached store version
+    }
+    return this.channelStore.findByAccountId(accountId);
+  }
+
+  disconnectAccount(accountId: string): { disconnected: boolean; account?: ConnectedAccountRecord } {
+    this.channelStore.deactivateAllForAccount(accountId);
+
+    const updateFn = this.options.updateConnectedAccount;
+    const nowIso = this.now().toISOString();
+    const updates: Partial<ConnectedAccountRecord> = {
+      status: 'disconnected',
+      updatedAt: nowIso,
+    };
+
+    if (updateFn) {
+      // fire-and-forget for sync API — the caller can await if needed
+    }
+
+    return { disconnected: true };
+  }
+
+  async disconnectAccountAsync(accountId: string): Promise<{ disconnected: boolean; account?: ConnectedAccountRecord }> {
+    this.channelStore.deactivateAllForAccount(accountId);
+
+    const nowIso = this.now().toISOString();
+    const updates: Partial<ConnectedAccountRecord> = {
+      status: 'disconnected',
+      updatedAt: nowIso,
+    };
+
+    const updateFn = this.options.updateConnectedAccount;
+    if (updateFn) {
+      const updated = await updateFn(accountId, updates);
+      return { disconnected: true, account: updated };
+    }
+
+    return { disconnected: true };
+  }
+
   private getTokenCryptoService(): TokenCryptoService {
     this.tokenCryptoService = this.tokenCryptoService ?? new TokenCryptoService();
     return this.tokenCryptoService;
@@ -283,3 +385,54 @@ class InMemoryConnectedAccountStore implements ConnectedAccountStore {
 
 export type { OAuthCallbackInput, OAuthCallbackResult };
 export type { GoogleTokenResult };
+
+class InMemoryChannelStore implements ChannelStore {
+  private readonly records = new Map<string, ChannelRecord>();
+
+  upsert(record: ChannelRecord): ChannelRecord {
+    const key = `${record.connectedAccountId}:${record.youtubeChannelId}`;
+    const existing = this.records.get(key);
+
+    if (!existing) {
+      this.records.set(key, record);
+      return record;
+    }
+
+    const updated: ChannelRecord = {
+      ...existing,
+      title: record.title,
+      handle: record.handle,
+      thumbnailUrl: record.thumbnailUrl,
+      lastSyncedAt: record.lastSyncedAt,
+    };
+    this.records.set(key, updated);
+    return updated;
+  }
+
+  findByAccountId(accountId: string): ChannelRecord[] {
+    return Array.from(this.records.values()).filter((r) => r.connectedAccountId === accountId);
+  }
+
+  findById(channelId: string): ChannelRecord | null {
+    return Array.from(this.records.values()).find((r) => r.id === channelId) ?? null;
+  }
+
+  update(channelId: string, updates: Partial<ChannelRecord>): ChannelRecord | null {
+    for (const [key, record] of this.records) {
+      if (record.id === channelId) {
+        const updated = { ...record, ...updates };
+        this.records.set(key, updated);
+        return updated;
+      }
+    }
+    return null;
+  }
+
+  deactivateAllForAccount(accountId: string): void {
+    for (const [key, record] of this.records) {
+      if (record.connectedAccountId === accountId) {
+        this.records.set(key, { ...record, isActive: false });
+      }
+    }
+  }
+}

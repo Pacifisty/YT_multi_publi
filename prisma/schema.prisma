@@ -31,5 +31,46 @@ model ConnectedAccount {
   connectedAt     DateTime @default(now()) @map("connected_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
+  channels        YouTubeChannel[]
+
   @@map("connected_accounts")
+}
+
+model YouTubeChannel {
+  id                 String   @id @default(cuid())
+  connectedAccountId String   @map("connected_account_id")
+  connectedAccount   ConnectedAccount @relation(fields: [connectedAccountId], references: [id])
+  youtubeChannelId   String   @map("youtube_channel_id")
+  title              String
+  handle             String?
+  thumbnailUrl       String?  @map("thumbnail_url")
+  isActive           Boolean  @default(true) @map("is_active")
+  lastSyncedAt       DateTime @default(now()) @map("last_synced_at")
+
+  @@unique([connectedAccountId, youtubeChannelId])
+  @@index([connectedAccountId])
+  @@map("youtube_channels")
+}
+
+enum MediaAssetType {
+  video
+  thumbnail
+}
+
+model MediaAsset {
+  id                String         @id @default(cuid())
+  assetType         MediaAssetType @map("asset_type")
+  originalName      String         @map("original_name")
+  storagePath       String         @map("storage_path")
+  sizeBytes         Int            @map("size_bytes")
+  mimeType          String         @map("mime_type")
+  durationSeconds   Int            @default(0) @map("duration_seconds")
+  linkedVideoAssetId String?       @map("linked_video_asset_id")
+  linkedVideoAsset  MediaAsset?    @relation("MediaAssetThumbnail", fields: [linkedVideoAssetId], references: [id])
+  thumbnails        MediaAsset[]   @relation("MediaAssetThumbnail")
+  createdAt         DateTime       @default(now()) @map("created_at")
+  updatedAt         DateTime       @updatedAt @map("updated_at")
+
+  @@index([linkedVideoAssetId])
+  @@map("media_assets")
 }

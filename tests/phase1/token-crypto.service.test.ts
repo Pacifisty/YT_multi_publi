@@ -27,7 +27,7 @@ describe('OAuth token encryption service', () => {
     const tokenCryptoService = new TokenCryptoService({
       OAUTH_TOKEN_KEY: '12345678901234567890123456789012',
     });
-    const accountsService = new AccountsService(tokenCryptoService);
+    const accountsService = new AccountsService({ tokenCryptoService });
 
     const record = accountsService.createPersistenceRecord({
       provider: 'google',

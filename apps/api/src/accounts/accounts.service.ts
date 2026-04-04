@@ -54,12 +54,26 @@ type OAuthCallbackResult =
       reason: 'INVALID_STATE';
     };
 
+export interface RefreshTokenResult {
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt: string;
+}
+
+export interface RefreshResult {
+  refreshed: boolean;
+  account: ConnectedAccountRecord;
+  error?: 'REAUTH_REQUIRED';
+}
+
 export interface AccountsServiceOptions {
   tokenCryptoService?: TokenCryptoService;
   googleOauthService?: GoogleOauthService;
   connectedAccountStore?: ConnectedAccountStore;
   createAuthorizationRedirect?: (session?: GoogleOauthSession | null) => string | Promise<string>;
   handleOauthCallback?: (input: OAuthCallbackInput) => Promise<OAuthCallbackResult>;
+  refreshGoogleAccessToken?: (refreshToken: string) => Promise<RefreshTokenResult>;
+  updateConnectedAccount?: (id: string, updates: Partial<ConnectedAccountRecord>) => Promise<ConnectedAccountRecord>;
   now?: () => Date;
 }
 
@@ -145,6 +159,91 @@ export class AccountsService {
       accessToken: tokenCryptoService.decrypt(record.accessTokenEnc),
       refreshToken: record.refreshTokenEnc ? tokenCryptoService.decrypt(record.refreshTokenEnc) : undefined,
     };
+  }
+
+  async refreshAccessTokenIfNeeded(account: ConnectedAccountRecord): Promise<RefreshResult> {
+    const SAFETY_WINDOW_MS = 5 * 60 * 1000;
+    const now = this.now();
+
+    if (account.tokenExpiresAt) {
+      const expiresAt = new Date(account.tokenExpiresAt).getTime();
+      const needsRefresh = expiresAt - now.getTime() < SAFETY_WINDOW_MS;
+
+      if (!needsRefresh) {
+        return { refreshed: false, account };
+      }
+    }
+
+    const tokens = this.readPersistedTokens(account);
+
+    if (!tokens.refreshToken) {
+      return { refreshed: false, account };
+    }
+
+    try {
+      const refreshFn = this.options.refreshGoogleAccessToken ?? this.defaultRefreshGoogleAccessToken.bind(this);
+      const refreshed = await refreshFn(tokens.refreshToken);
+
+      const crypto = this.getTokenCryptoService();
+      const updates: Partial<ConnectedAccountRecord> = {
+        accessTokenEnc: crypto.encrypt(refreshed.accessToken),
+        tokenExpiresAt: refreshed.expiresAt,
+        status: 'connected',
+        updatedAt: now.toISOString(),
+      };
+
+      if (refreshed.refreshToken) {
+        updates.refreshTokenEnc = crypto.encrypt(refreshed.refreshToken);
+      }
+
+      const updateFn = this.options.updateConnectedAccount;
+      const updatedAccount = updateFn
+        ? await updateFn(account.id, updates)
+        : { ...account, ...updates };
+
+      return { refreshed: true, account: updatedAccount as ConnectedAccountRecord };
+    } catch (error: unknown) {
+      if (this.isAuthorizationError(error)) {
+        const updates: Partial<ConnectedAccountRecord> = {
+          status: 'reauth_required',
+          updatedAt: now.toISOString(),
+        };
+
+        const updateFn = this.options.updateConnectedAccount;
+        const updatedAccount = updateFn
+          ? await updateFn(account.id, updates)
+          : { ...account, ...updates };
+
+        return {
+          refreshed: false,
+          account: updatedAccount as ConnectedAccountRecord,
+          error: 'REAUTH_REQUIRED',
+        };
+      }
+
+      throw error;
+    }
+  }
+
+  private isAuthorizationError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+
+    const anyError = error as Record<string, unknown>;
+
+    if (anyError.code === 'invalid_grant') return true;
+
+    const responseData = (anyError.response as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
+    if (responseData?.error === 'invalid_grant') return true;
+
+    const message = error.message.toLowerCase();
+    if (message.includes('invalid_grant') || message.includes('token has been revoked')) return true;
+
+    return false;
+  }
+
+  private async defaultRefreshGoogleAccessToken(refreshToken: string): Promise<RefreshTokenResult> {
+    const googleService = this.getGoogleOauthService();
+    return googleService.refreshAccessToken(refreshToken);
   }
 
   private getTokenCryptoService(): TokenCryptoService {

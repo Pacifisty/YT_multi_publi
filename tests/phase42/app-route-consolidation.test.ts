@@ -4,10 +4,15 @@ import { createCampaignsModule } from '../../apps/api/src/campaigns/campaigns.mo
 import { createAuthModule } from '../../apps/api/src/auth/auth.module';
 import type { ApiRequest } from '../../apps/api/src/router';
 
-const authedSession = { adminUser: { email: 'admin@test.com' } };
+const authedSession = () => ({ adminUser: { email: 'admin@test.com' } });
 
 function setup() {
-  const authModule = createAuthModule();
+  const authModule = createAuthModule({
+    env: {
+      ADMIN_EMAIL: 'admin@test.com',
+      ADMIN_PASSWORD_HASH: '$2b$10$invalidhashfortesting',
+    },
+  });
   const campaignsModule = createCampaignsModule();
   const router = createApiRouter({
     campaignsModule,
@@ -36,7 +41,7 @@ describe('App Route Consolidation', () => {
       const request: ApiRequest = {
         method: 'POST',
         path: '/auth/logout',
-        session: authedSession,
+        session: authedSession(),
       };
 
       const response = await router.handle(request);
@@ -62,7 +67,7 @@ describe('App Route Consolidation', () => {
       const request: ApiRequest = {
         method: 'GET',
         path: '/auth/me',
-        session: authedSession,
+        session: authedSession(),
       };
 
       const response = await router.handle(request);
@@ -82,7 +87,7 @@ describe('App Route Consolidation', () => {
       const request: ApiRequest = {
         method: 'POST',
         path: `/api/campaigns/${campaign.id}/targets`,
-        session: authedSession,
+        session: authedSession(),
         body: {
           channelId: 'ch-1',
           videoTitle: 'Title',
@@ -134,7 +139,7 @@ describe('App Route Consolidation', () => {
       const request: ApiRequest = {
         method: 'POST',
         path: `/api/campaigns/${campaign.id}/ready`,
-        session: authedSession,
+        session: authedSession(),
       };
 
       const response = await router.handle(request);
@@ -152,7 +157,7 @@ describe('App Route Consolidation', () => {
       const request: ApiRequest = {
         method: 'POST',
         path: `/api/campaigns/${campaign.id}/ready`,
-        session: authedSession,
+        session: authedSession(),
       };
 
       const response = await router.handle(request);
@@ -183,7 +188,7 @@ describe('App Route Consolidation', () => {
       const request: ApiRequest = {
         method: 'PATCH',
         path: `/api/campaigns/${campaign.id}`,
-        session: authedSession,
+        session: authedSession(),
         body: { title: 'Updated' },
       };
 

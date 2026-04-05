@@ -4,6 +4,7 @@ import type { CampaignsRequest } from './campaigns/campaigns.controller';
 import type { AccountsController, AccountsRequest } from './accounts/accounts.controller';
 import type { MediaController, MediaRequest } from './media/media.controller';
 import type { UploadProgressService } from './campaigns/upload-progress.service';
+import type { AuthController } from './auth/auth.controller';
 
 export interface ApiRequest {
   method: string;
@@ -15,13 +16,14 @@ export interface ApiRequest {
 export interface ApiResponse {
   status: number;
   body: any;
+  cookies?: any[];
 }
 
 interface Route {
   method: string;
   pattern: RegExp;
   paramNames: string[];
-  handler: (request: any) => Promise<{ status: number; body: any }> | { status: number; body: any };
+  handler: (request: any) => Promise<{ status: number; body: any; cookies?: any[] }> | { status: number; body: any; cookies?: any[] };
 }
 
 export interface ApiRouter {
@@ -33,11 +35,39 @@ export function createApiRouter(options: {
   accountsController?: AccountsController;
   mediaController?: MediaController;
   uploadProgressService?: UploadProgressService;
+  authController?: AuthController;
 }): ApiRouter {
-  const { campaignsModule, accountsController, mediaController, uploadProgressService } = options;
+  const { campaignsModule, accountsController, mediaController, uploadProgressService, authController } = options;
   const ctrl = campaignsModule.campaignsController;
 
-  const routes: Route[] = [
+  const routes: Route[] = [];
+
+  // Auth routes
+  if (authController) {
+    routes.push(
+      {
+        method: 'POST',
+        pattern: /^\/auth\/login$/,
+        paramNames: [],
+        handler: (req) => authController.login(req),
+      },
+      {
+        method: 'POST',
+        pattern: /^\/auth\/logout$/,
+        paramNames: [],
+        handler: (req) => authController.logout(req),
+      },
+      {
+        method: 'GET',
+        pattern: /^\/auth\/me$/,
+        paramNames: [],
+        handler: (req) => authController.me(req),
+      },
+    );
+  }
+
+  // Campaign routes
+  routes.push(
     {
       method: 'GET',
       pattern: /^\/api\/dashboard$/,
@@ -61,6 +91,18 @@ export function createApiRouter(options: {
       pattern: /^\/api\/campaigns\/([^/]+)\/targets\/([^/]+)\/retry$/,
       paramNames: ['id', 'targetId'],
       handler: (req) => ctrl.retryTarget(req),
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/campaigns\/([^/]+)\/targets$/,
+      paramNames: ['id'],
+      handler: (req) => ctrl.addTarget(req),
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/campaigns\/([^/]+)\/ready$/,
+      paramNames: ['id'],
+      handler: (req) => ctrl.markReady(req),
     },
     {
       method: 'POST',
@@ -104,7 +146,7 @@ export function createApiRouter(options: {
       paramNames: [],
       handler: (req) => ctrl.list(req),
     },
-  ];
+  );
 
   // Account routes
   if (accountsController) {
@@ -229,7 +271,7 @@ export function createApiRouter(options: {
         };
 
         const result = await route.handler(controllerRequest);
-        return { status: result.status, body: result.body };
+        return { status: result.status, body: result.body, cookies: result.cookies };
       }
 
       return { status: 404, body: { error: 'Not found' } };

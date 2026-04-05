@@ -25,6 +25,39 @@ export class AccountsController {
     private readonly sessionGuard: SessionGuard,
   ) {}
 
+  async listAccounts(
+    request: SessionRequestLike,
+  ): Promise<AccountsControllerResponse<{ accounts?: ConnectedAccountRecord[]; error?: string }>> {
+    const guardResult = this.sessionGuard.check(request);
+    if (!guardResult.allowed) {
+      return { status: guardResult.status, body: { error: guardResult.reason } };
+    }
+
+    const accounts = await this.accountsService.listAccounts();
+    return { status: 200, body: { accounts } };
+  }
+
+  async getAccount(
+    request: AccountsRequest,
+  ): Promise<AccountsControllerResponse<{ account?: ConnectedAccountRecord; error?: string }>> {
+    const guardResult = this.sessionGuard.check(request);
+    if (!guardResult.allowed) {
+      return { status: guardResult.status, body: { error: guardResult.reason } };
+    }
+
+    const accountId = request.params?.accountId;
+    if (!accountId) {
+      return { status: 400, body: { error: 'Missing accountId parameter.' } };
+    }
+
+    const account = await this.accountsService.getAccount(accountId);
+    if (!account) {
+      return { status: 404, body: { error: 'Account not found.' } };
+    }
+
+    return { status: 200, body: { account } };
+  }
+
   async startGoogleOauth(request: SessionRequestLike): Promise<AccountsControllerResponse<{ error?: string; redirectUrl?: string }>> {
     const guardResult = this.sessionGuard.check(request);
 

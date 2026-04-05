@@ -89,6 +89,7 @@ export interface AccountsServiceOptions {
   youtubeChannelsService?: YouTubeChannelsService;
   channelStore?: ChannelStore;
   getConnectedAccount?: (id: string) => Promise<ConnectedAccountRecord | null>;
+  listConnectedAccounts?: () => Promise<ConnectedAccountRecord[]>;
   getChannelsForAccount?: (accountId: string) => Promise<ChannelRecord[]>;
   now?: () => Date;
 }
@@ -311,6 +312,20 @@ export class AccountsService {
       // Sync path — allow async override but we return the cached store version
     }
     return this.channelStore.findByAccountId(accountId);
+  }
+
+  async listAccounts(): Promise<ConnectedAccountRecord[]> {
+    if (this.options.listConnectedAccounts) {
+      return this.options.listConnectedAccounts();
+    }
+    return [];
+  }
+
+  async getAccount(id: string): Promise<ConnectedAccountRecord | null> {
+    if (this.options.getConnectedAccount) {
+      return this.options.getConnectedAccount(id);
+    }
+    return null;
   }
 
   disconnectAccount(accountId: string): { disconnected: boolean; account?: ConnectedAccountRecord } {

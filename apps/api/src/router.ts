@@ -69,6 +69,12 @@ export function createApiRouter(options: {
       handler: (req) => ctrl.getById(req),
     },
     {
+      method: 'PATCH',
+      pattern: /^\/api\/campaigns\/([^/]+)$/,
+      paramNames: ['id'],
+      handler: (req) => ctrl.update(req),
+    },
+    {
       method: 'DELETE',
       pattern: /^\/api\/campaigns\/([^/]+)$/,
       paramNames: ['id'],

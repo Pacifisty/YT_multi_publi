@@ -2,6 +2,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createServer, type ServerInstance } from './server';
 import { SessionStore } from './auth/session-store';
 import { createSecurityMiddleware } from './middleware/security';
+import { createErrorHandler } from './middleware/error-handler';
+import { createRateLimiter } from './middleware/rate-limiter';
+import { createHealthCheck, type HealthCheckInstance } from './health';
 
 export interface BootstrapOptions {
   env: Record<string, string | undefined>;
@@ -11,6 +14,7 @@ export interface BootstrapOptions {
 export interface BootstrapResult {
   server: ServerInstance;
   sessionStore: SessionStore;
+  healthCheck: HealthCheckInstance;
   handler: (req: IncomingMessage, res: ServerResponse) => Promise<void>;
 }
 
@@ -29,13 +33,39 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
     (server.config.nodeEnv === 'production' ? [] : ['*']);
 
   const securityMiddleware = createSecurityMiddleware({ allowedOrigins });
+  const errorHandler = createErrorHandler({ nodeEnv: server.config.nodeEnv });
+  const authRateLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 10 });
+  const healthCheck = createHealthCheck({
+    nodeEnv: server.config.nodeEnv,
+  });
 
-  // Compose: security middleware → request handler
+  // Compose: error handler → security middleware → (health check | rate limiter → request handler)
   const handler = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-    await securityMiddleware(req, res, async () => {
-      await server.requestHandler(req, res);
+    await errorHandler(req, res, async () => {
+      await securityMiddleware(req, res, async () => {
+        // Health check — no auth, no rate limiting
+        const path = (req.url ?? '/').split('?')[0];
+        if (path === '/health' && (req.method === 'GET' || req.method === 'HEAD')) {
+          const result = healthCheck.handleRequest();
+          res.setHeader('content-type', 'application/json');
+          res.writeHead(result.status);
+          res.end(JSON.stringify(result.body));
+          return;
+        }
+
+        // Rate limit auth endpoints
+        const isAuthRoute = path.startsWith('/auth/');
+        if (isAuthRoute) {
+          await authRateLimiter(req, res, async () => {
+            await server.requestHandler(req, res);
+          });
+          return;
+        }
+
+        await server.requestHandler(req, res);
+      });
     });
   };
 
-  return { server, sessionStore, handler };
+  return { server, sessionStore, healthCheck, handler };
 }

@@ -22,8 +22,11 @@ export interface MediaServiceOptions {
 
 export interface MediaRepository {
   create(record: MediaAssetRecord): MediaAssetRecord;
+  findById(id: string): MediaAssetRecord | null;
   findVideosNewestFirst(): MediaAssetRecord[];
   findThumbnailByVideoId(videoAssetId: string): MediaAssetRecord | null;
+  delete(id: string): boolean;
+  update(id: string, data: Partial<MediaAssetRecord>): MediaAssetRecord | null;
 }
 
 export class InMemoryMediaRepository implements MediaRepository {
@@ -40,8 +43,26 @@ export class InMemoryMediaRepository implements MediaRepository {
       .sort((left, right) => (left.created_at < right.created_at ? 1 : -1));
   }
 
+  findById(id: string): MediaAssetRecord | null {
+    return this.records.find((record) => record.id === id) ?? null;
+  }
+
   findThumbnailByVideoId(videoAssetId: string): MediaAssetRecord | null {
     return this.records.find((record) => record.asset_type === 'thumbnail' && record.linked_video_asset_id === videoAssetId) ?? null;
+  }
+
+  delete(id: string): boolean {
+    const index = this.records.findIndex((record) => record.id === id);
+    if (index === -1) return false;
+    this.records.splice(index, 1);
+    return true;
+  }
+
+  update(id: string, data: Partial<MediaAssetRecord>): MediaAssetRecord | null {
+    const record = this.records.find((r) => r.id === id);
+    if (!record) return null;
+    Object.assign(record, data);
+    return record;
   }
 }
 
@@ -107,6 +128,23 @@ export class MediaService {
     return {
       assets,
     };
+  }
+
+  getAsset(id: string): MediaAssetRecord | null {
+    return this.repository.findById(id);
+  }
+
+  deleteAsset(id: string): boolean {
+    return this.repository.delete(id);
+  }
+
+  linkThumbnail(thumbnailId: string, videoAssetId: string): boolean {
+    const thumbnail = this.repository.findById(thumbnailId);
+    if (!thumbnail) return false;
+    const video = this.repository.findById(videoAssetId);
+    if (!video) return false;
+    const updated = this.repository.update(thumbnailId, { linked_video_asset_id: videoAssetId });
+    return updated !== null;
   }
 }
 

@@ -9,6 +9,8 @@ export interface MediaRequest extends SessionRequestLike {
     video?: UploadedMediaFile[];
     thumbnail?: UploadedMediaFile[];
   };
+  params?: Record<string, string>;
+  body?: unknown;
 }
 
 export class MediaController {
@@ -104,5 +106,67 @@ export class MediaController {
       status: 200,
       body: this.mediaService.listAssets(),
     };
+  }
+
+  async getAsset(request: MediaRequest): Promise<{ status: number; body: unknown }> {
+    const guardResult = this.sessionGuard.check(request);
+    if (!guardResult.allowed) {
+      return { status: guardResult.status, body: { error: guardResult.reason } };
+    }
+
+    const id = request.params?.id;
+    if (!id) {
+      return { status: 400, body: { error: 'Missing asset id' } };
+    }
+
+    const asset = this.mediaService.getAsset(id);
+    if (!asset) {
+      return { status: 404, body: { error: 'Asset not found' } };
+    }
+
+    return { status: 200, body: { asset } };
+  }
+
+  async deleteAsset(request: MediaRequest): Promise<{ status: number; body: unknown }> {
+    const guardResult = this.sessionGuard.check(request);
+    if (!guardResult.allowed) {
+      return { status: guardResult.status, body: { error: guardResult.reason } };
+    }
+
+    const id = request.params?.id;
+    if (!id) {
+      return { status: 400, body: { error: 'Missing asset id' } };
+    }
+
+    const ok = this.mediaService.deleteAsset(id);
+    if (!ok) {
+      return { status: 404, body: { error: 'Asset not found' } };
+    }
+
+    return { status: 200, body: { success: true } };
+  }
+
+  async linkThumbnail(request: MediaRequest): Promise<{ status: number; body: unknown }> {
+    const guardResult = this.sessionGuard.check(request);
+    if (!guardResult.allowed) {
+      return { status: guardResult.status, body: { error: guardResult.reason } };
+    }
+
+    const thumbnailId = request.params?.id;
+    if (!thumbnailId) {
+      return { status: 400, body: { error: 'Missing thumbnail id' } };
+    }
+
+    const body = request.body as { videoAssetId?: string } | undefined;
+    if (!body?.videoAssetId) {
+      return { status: 400, body: { error: 'Missing required field: videoAssetId' } };
+    }
+
+    const ok = this.mediaService.linkThumbnail(thumbnailId, body.videoAssetId);
+    if (!ok) {
+      return { status: 404, body: { error: 'Thumbnail or video asset not found' } };
+    }
+
+    return { status: 200, body: { success: true } };
   }
 }

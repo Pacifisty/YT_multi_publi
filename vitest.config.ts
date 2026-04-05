@@ -59,6 +59,14 @@ export default defineConfig({
           environment: 'node',
         },
       },
+      {
+        test: {
+          name: 'phase6',
+          root: '.',
+          include: ['tests/phase6/**/*.test.ts', 'tests/phase6/**/*.test.tsx'],
+          environment: 'node',
+        },
+      },
     ],
   },
 });

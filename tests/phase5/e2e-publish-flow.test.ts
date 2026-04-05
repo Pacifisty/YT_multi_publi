@@ -138,19 +138,17 @@ describe('E2E: full publish flow', () => {
     await runner.processAll();
 
     const afterFirst = campaignService.getCampaign(campaign.id)!;
-    expect(afterFirst.campaign.status).toBe('failed');
+    // Campaign completes because all targets reached terminal status (1 publicado + 1 erro)
+    expect(afterFirst.campaign.status).toBe('completed');
     const failedTarget = afterFirst.campaign.targets.find((t) => t.status === 'erro')!;
     expect(failedTarget).toBeDefined();
+    expect(failedTarget.errorMessage).toBe('quotaExceeded');
 
     // Retry the failed target's job
     const failedJobs = jobService.getJobsForTarget(failedTarget.id);
     const failedJob = failedJobs.find((j) => j.status === 'failed')!;
     jobService.retry(failedJob.id);
     campaignService.updateTargetStatus(campaign.id, failedTarget.id, 'aguardando', { errorMessage: null });
-
-    // Also need to re-set campaign to launching for the worker
-    // (campaign was set to 'failed' by auto-complete logic)
-    // The campaign status will be re-evaluated when the last target finishes.
 
     // Second pass — retry succeeds
     await runner.processAll();

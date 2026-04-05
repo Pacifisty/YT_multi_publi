@@ -78,7 +78,7 @@ describe('App server bootstrap', () => {
     const app = createApp({
       env: {
         ADMIN_EMAIL: 'admin@example.com',
-        ADMIN_PASSWORD_HASH: '',
+        ADMIN_PASSWORD_HASH: 'plain:secret123',
       },
     });
 

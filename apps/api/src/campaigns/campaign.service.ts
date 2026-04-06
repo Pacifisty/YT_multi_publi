@@ -257,10 +257,11 @@ export class CampaignService {
     return { campaign: (await this.repository.findById(created.id))! };
   }
 
-  async markReady(campaignId: string): Promise<{ campaign: CampaignRecord } | { error: 'NO_TARGETS' | 'NOT_FOUND' }> {
+  async markReady(campaignId: string): Promise<{ campaign: CampaignRecord } | { error: 'NO_TARGETS' | 'NOT_FOUND' | 'INVALID_STATUS' }> {
     const campaign = await this.repository.findById(campaignId);
     if (!campaign) return { error: 'NOT_FOUND' };
     if (campaign.targets.length === 0) return { error: 'NO_TARGETS' };
+    if (campaign.status !== 'draft') return { error: 'INVALID_STATUS' };
 
     const updated = await this.repository.update(campaignId, {
       status: 'ready',

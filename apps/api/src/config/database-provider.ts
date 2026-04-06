@@ -73,6 +73,7 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
   const { databaseUrl } = options;
 
   let connected = false;
+  let desiredConnected = false;
   let connectPromise: Promise<void> | null = null;
   let disconnectPromise: Promise<void> | null = null;
   let prismaClient: any = null;
@@ -119,12 +120,15 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
     },
 
     async connect() {
+      desiredConnected = true;
+
       if (!databaseUrl || !prismaClient) return;
 
       if (disconnectPromise) {
         await disconnectPromise;
       }
 
+      if (!desiredConnected) return;
       if (connected) return;
       if (connectPromise) return connectPromise;
 
@@ -141,6 +145,8 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
     },
 
     async disconnect() {
+      desiredConnected = false;
+
       if (!prismaClient) return;
       if (disconnectPromise) return disconnectPromise;
 

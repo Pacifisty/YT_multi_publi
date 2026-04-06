@@ -62,7 +62,7 @@ export function buildCampaignDetailView(data: CampaignDetailData): CampaignDetai
       videoAssetName: data.videoAssetName,
     },
     targets,
-    pollingEnabled: !allTerminal,
+    pollingEnabled: data.status === 'launching' && !allTerminal,
     pollingIntervalMs: POLLING_INTERVAL_MS,
     progress: {
       completed: completedCount,

@@ -119,7 +119,13 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
     },
 
     async connect() {
-      if (!databaseUrl || !prismaClient || connected) return;
+      if (!databaseUrl || !prismaClient) return;
+
+      if (disconnectPromise) {
+        await disconnectPromise;
+      }
+
+      if (connected) return;
       if (connectPromise) return connectPromise;
 
       connectPromise = (async () => {

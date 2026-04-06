@@ -168,7 +168,20 @@ export class CampaignService {
   }
 
   async removeTarget(campaignId: string, targetId: string): Promise<boolean> {
-    return await this.repository.removeTarget(campaignId, targetId);
+    const removed = await this.repository.removeTarget(campaignId, targetId);
+    if (!removed) {
+      return false;
+    }
+
+    const campaign = await this.repository.findById(campaignId);
+    if (campaign && campaign.targets.length === 0 && campaign.status === 'ready') {
+      await this.repository.update(campaignId, {
+        status: 'draft',
+        updatedAt: this.now().toISOString(),
+      });
+    }
+
+    return true;
   }
 
   async updateTarget(

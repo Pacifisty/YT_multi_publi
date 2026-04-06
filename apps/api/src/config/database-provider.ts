@@ -73,6 +73,8 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
   const { databaseUrl } = options;
 
   let connected = false;
+  let connectPromise: Promise<void> | null = null;
+  let disconnectPromise: Promise<void> | null = null;
   let prismaClient: any = null;
   let campaignRepository: PrismaCampaignRepository | null = null;
   let publishJobRepository: PrismaPublishJobRepository | null = null;
@@ -117,15 +119,35 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
     },
 
     async connect() {
-      if (!databaseUrl || !prismaClient) return;
-      await prismaClient.$connect();
-      connected = true;
+      if (!databaseUrl || !prismaClient || connected) return;
+      if (connectPromise) return connectPromise;
+
+      connectPromise = (async () => {
+        await prismaClient.$connect();
+        connected = true;
+      })();
+
+      try {
+        await connectPromise;
+      } finally {
+        connectPromise = null;
+      }
     },
 
     async disconnect() {
-      if (!connected || !prismaClient) return;
-      await prismaClient.$disconnect();
-      connected = false;
+      if (!prismaClient || !connected) return;
+      if (disconnectPromise) return disconnectPromise;
+
+      disconnectPromise = (async () => {
+        await prismaClient.$disconnect();
+        connected = false;
+      })();
+
+      try {
+        await disconnectPromise;
+      } finally {
+        disconnectPromise = null;
+      }
     },
   };
 }

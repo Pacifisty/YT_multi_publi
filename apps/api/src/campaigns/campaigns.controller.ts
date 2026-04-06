@@ -32,6 +32,8 @@ function parseQueryInteger(rawValue: string | undefined, options?: { allowNegati
   return Number(normalized);
 }
 
+const VALID_TARGET_PRIVACY_VALUES = new Set(['public', 'unlisted', 'private']);
+
 function normalizeNonEmptyString(rawValue: unknown): string | undefined {
   if (typeof rawValue !== 'string') {
     return undefined;
@@ -39,6 +41,15 @@ function normalizeNonEmptyString(rawValue: unknown): string | undefined {
 
   const normalized = rawValue.trim();
   return normalized ? normalized : undefined;
+}
+
+function normalizePrivacyValue(rawValue: unknown): string | undefined {
+  const normalized = normalizeNonEmptyString(rawValue)?.toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+
+  return VALID_TARGET_PRIVACY_VALUES.has(normalized) ? normalized : undefined;
 }
 
 export class CampaignsController {
@@ -148,13 +159,18 @@ export class CampaignsController {
       return { status: 400, body: { error: 'Missing required fields: channelId, videoTitle, videoDescription' } };
     }
 
+    const privacy = body?.privacy === undefined ? undefined : normalizePrivacyValue(body.privacy);
+    if (body?.privacy !== undefined && !privacy) {
+      return { status: 400, body: { error: 'Invalid privacy value. Use public, unlisted, or private.' } };
+    }
+
     try {
       const result = await this.campaignService.addTarget(campaignId, {
         channelId,
         videoTitle,
         videoDescription,
         tags: body?.tags,
-        privacy: body?.privacy,
+        privacy,
         thumbnailAssetId: body?.thumbnailAssetId,
       });
 
@@ -260,6 +276,11 @@ export class CampaignsController {
       return { status: 400, body: { error: 'Invalid target update: text fields must not be blank' } };
     }
 
+    const privacy = body?.privacy === undefined ? undefined : normalizePrivacyValue(body.privacy);
+    if (body?.privacy !== undefined && !privacy) {
+      return { status: 400, body: { error: 'Invalid privacy value. Use public, unlisted, or private.' } };
+    }
+
     const hasUpdates = body && (body.videoTitle !== undefined || body.videoDescription !== undefined ||
       body.tags !== undefined || body.privacy !== undefined || body.thumbnailAssetId !== undefined);
     if (!hasUpdates) {
@@ -270,6 +291,7 @@ export class CampaignsController {
       ...body,
       videoTitle: body?.videoTitle !== undefined ? normalizeNonEmptyString(body.videoTitle) : undefined,
       videoDescription: body?.videoDescription !== undefined ? normalizeNonEmptyString(body.videoDescription) : undefined,
+      privacy,
     });
     if ('error' in result) {
       return { status: 404, body: { error: 'Target not found' } };

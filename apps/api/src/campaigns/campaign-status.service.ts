@@ -28,8 +28,8 @@ export interface CampaignStatusServiceOptions {
   jobService: PublishJobService;
 }
 
-function isTerminalTarget(target: Pick<TargetStatusView, 'status' | 'youtubeVideoId'>): boolean {
-  return target.status === 'erro' || (target.status === 'publicado' && Boolean(target.youtubeVideoId));
+function isTerminalTarget(target: Pick<TargetStatusView, 'status' | 'youtubeVideoId' | 'errorMessage'>): boolean {
+  return (target.status === 'erro' && Boolean(target.errorMessage)) || (target.status === 'publicado' && Boolean(target.youtubeVideoId));
 }
 
 export class CampaignStatusService {
@@ -64,7 +64,7 @@ export class CampaignStatusService {
 
     const allTerminal = targets.length > 0 && targets.every((t) => isTerminalTarget(t));
     const completed = targets.filter((t) => t.status === 'publicado' && t.youtubeVideoId).length;
-    const failed = targets.filter((t) => t.status === 'erro').length;
+    const failed = targets.filter((t) => t.status === 'erro' && t.errorMessage).length;
 
     const shouldPoll = campaign.status === 'launching' && targets.length > 0 && !allTerminal;
 

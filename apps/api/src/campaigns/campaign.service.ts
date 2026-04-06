@@ -336,7 +336,17 @@ export class CampaignService {
           : existingTarget.youtubeVideoId)
       : null;
 
+    const nextErrorMessage = status === 'erro'
+      ? (typeof extra?.errorMessage === 'string' && extra.errorMessage.trim()
+          ? extra.errorMessage.trim()
+          : existingTarget.errorMessage)
+      : null;
+
     if (status === 'publicado' && !nextPublishedVideoId) {
+      return null;
+    }
+
+    if (status === 'erro' && !nextErrorMessage) {
       return null;
     }
 
@@ -353,8 +363,8 @@ export class CampaignService {
 
     if (status !== 'erro') {
       updates.errorMessage = null;
-    } else if (extra && 'errorMessage' in extra) {
-      updates.errorMessage = extra.errorMessage ?? null;
+    } else {
+      updates.errorMessage = nextErrorMessage;
     }
 
     if (extra?.retryCount !== undefined) updates.retryCount = extra.retryCount;
@@ -365,9 +375,9 @@ export class CampaignService {
     // Check if target progress changed overall campaign lifecycle state
     const refreshedCampaign = await this.repository.findById(campaignId);
     if (refreshedCampaign) {
-      const allDone = refreshedCampaign.targets.every((t) => t.status === 'publicado' || t.status === 'erro');
+      const allDone = refreshedCampaign.targets.every((t) => (t.status === 'publicado' && Boolean(t.youtubeVideoId)) || (t.status === 'erro' && Boolean(t.errorMessage)));
       if (allDone) {
-        const anySuccess = refreshedCampaign.targets.some((t) => t.status === 'publicado');
+        const anySuccess = refreshedCampaign.targets.some((t) => t.status === 'publicado' && Boolean(t.youtubeVideoId));
         await this.repository.update(campaignId, {
           status: anySuccess ? 'completed' : 'failed',
           updatedAt: this.now().toISOString(),

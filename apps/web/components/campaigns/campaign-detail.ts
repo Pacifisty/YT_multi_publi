@@ -36,8 +36,8 @@ export interface CampaignDetailView {
   };
 }
 
-function isTerminalTarget(target: Pick<CampaignDetailTarget, 'status' | 'youtubeVideoId'>): boolean {
-  return target.status === 'erro' || (target.status === 'publicado' && Boolean(target.youtubeVideoId));
+function isTerminalTarget(target: Pick<CampaignDetailTarget, 'status' | 'youtubeVideoId' | 'errorMessage'>): boolean {
+  return (target.status === 'erro' && Boolean(target.errorMessage)) || (target.status === 'publicado' && Boolean(target.youtubeVideoId));
 }
 
 const POLLING_INTERVAL_MS = 3000;

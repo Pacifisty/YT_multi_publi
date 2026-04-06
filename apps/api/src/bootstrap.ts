@@ -93,19 +93,21 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
       await securityMiddleware(req, res, async () => {
         // Health/readiness checks — no auth, no rate limiting
         const path = (req.url ?? '/').split('?')[0];
-        if (path === '/health' && (req.method === 'GET' || req.method === 'HEAD')) {
+        const isHeadRequest = req.method === 'HEAD';
+
+        if (path === '/health' && (req.method === 'GET' || isHeadRequest)) {
           const result = healthCheck.handleRequest();
           res.setHeader('content-type', 'application/json');
           res.writeHead(result.status);
-          res.end(JSON.stringify(result.body));
+          res.end(isHeadRequest ? undefined : JSON.stringify(result.body));
           return;
         }
 
-        if (path === '/ready' && (req.method === 'GET' || req.method === 'HEAD')) {
+        if (path === '/ready' && (req.method === 'GET' || isHeadRequest)) {
           const result = healthCheck.handleReadyRequest();
           res.setHeader('content-type', 'application/json');
           res.writeHead(result.status);
-          res.end(JSON.stringify(result.body));
+          res.end(isHeadRequest ? undefined : JSON.stringify(result.body));
           return;
         }
 

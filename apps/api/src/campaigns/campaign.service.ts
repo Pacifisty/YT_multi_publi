@@ -301,7 +301,7 @@ export class CampaignService {
     const target = await this.repository.updateTarget(campaignId, targetId, updates);
     if (!target) return null;
 
-    // Check if all targets completed/failed to update campaign status
+    // Check if target progress changed overall campaign lifecycle state
     const campaign = await this.repository.findById(campaignId);
     if (campaign) {
       const allDone = campaign.targets.every((t) => t.status === 'publicado' || t.status === 'erro');
@@ -309,6 +309,11 @@ export class CampaignService {
         const anySuccess = campaign.targets.some((t) => t.status === 'publicado');
         await this.repository.update(campaignId, {
           status: anySuccess ? 'completed' : 'failed',
+          updatedAt: this.now().toISOString(),
+        });
+      } else if (campaign.status !== 'draft' && campaign.status !== 'ready' && campaign.status !== 'launching') {
+        await this.repository.update(campaignId, {
+          status: 'launching',
           updatedAt: this.now().toISOString(),
         });
       }

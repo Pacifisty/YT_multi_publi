@@ -43,7 +43,7 @@ export class DashboardService {
 
   async getStats(): Promise<DashboardStats> {
     const { campaigns } = await this.campaignService.listCampaigns();
-    const allJobs = this.jobService.getAllJobs();
+    const allJobs = await this.jobService.getAllJobs();
 
     // Campaign breakdown
     const campaignByStatus: Record<CampaignRecord['status'], number> = {

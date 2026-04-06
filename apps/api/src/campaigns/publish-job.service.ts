@@ -14,12 +14,12 @@ export interface PublishJobRecord {
 }
 
 export interface PublishJobRepository {
-  create(record: PublishJobRecord): PublishJobRecord;
-  findById(id: string): PublishJobRecord | null;
-  findByTargetId(targetId: string): PublishJobRecord[];
-  findAll(): PublishJobRecord[];
-  findNextQueued(): PublishJobRecord | null;
-  update(id: string, updates: Partial<PublishJobRecord>): PublishJobRecord | null;
+  create(record: PublishJobRecord): Promise<PublishJobRecord> | PublishJobRecord;
+  findById(id: string): Promise<PublishJobRecord | null> | PublishJobRecord | null;
+  findByTargetId(targetId: string): Promise<PublishJobRecord[]> | PublishJobRecord[];
+  findAll(): Promise<PublishJobRecord[]> | PublishJobRecord[];
+  findNextQueued(): Promise<PublishJobRecord | null> | PublishJobRecord | null;
+  update(id: string, updates: Partial<PublishJobRecord>): Promise<PublishJobRecord | null> | PublishJobRecord | null;
 }
 
 export class InMemoryPublishJobRepository implements PublishJobRepository {
@@ -71,11 +71,12 @@ export class PublishJobService {
     this.now = options.now ?? (() => new Date());
   }
 
-  enqueueForTargets(targets: { id: string; campaignId: string }[]): PublishJobRecord[] {
+  async enqueueForTargets(targets: { id: string; campaignId: string }[]): Promise<PublishJobRecord[]> {
     const nowIso = this.now().toISOString();
 
-    return targets.map((t) =>
-      this.repository.create({
+    const jobs: PublishJobRecord[] = [];
+    for (const t of targets) {
+      const job = await this.repository.create({
         id: randomUUID(),
         campaignTargetId: t.id,
         status: 'queued',
@@ -86,57 +87,59 @@ export class PublishJobService {
         startedAt: null,
         completedAt: null,
         createdAt: nowIso,
-      }),
-    );
+      });
+      jobs.push(job);
+    }
+    return jobs;
   }
 
-  pickNext(): PublishJobRecord | null {
-    const job = this.repository.findNextQueued();
+  async pickNext(): Promise<PublishJobRecord | null> {
+    const job = await this.repository.findNextQueued();
     if (!job) return null;
 
-    return this.repository.update(job.id, {
+    return await this.repository.update(job.id, {
       status: 'processing',
       startedAt: this.now().toISOString(),
     });
   }
 
-  markCompleted(jobId: string, youtubeVideoId: string): PublishJobRecord | null {
-    return this.repository.update(jobId, {
+  async markCompleted(jobId: string, youtubeVideoId: string): Promise<PublishJobRecord | null> {
+    return await this.repository.update(jobId, {
       status: 'completed',
       youtubeVideoId,
       completedAt: this.now().toISOString(),
     });
   }
 
-  markFailed(jobId: string, errorMessage: string): PublishJobRecord | null {
-    return this.repository.update(jobId, {
+  async markFailed(jobId: string, errorMessage: string): Promise<PublishJobRecord | null> {
+    return await this.repository.update(jobId, {
       status: 'failed',
       errorMessage,
     });
   }
 
-  retry(jobId: string): PublishJobRecord | { error: 'MAX_ATTEMPTS_REACHED' | 'NOT_FOUND' } {
-    const job = this.repository.findById(jobId);
+  async retry(jobId: string): Promise<PublishJobRecord | { error: 'MAX_ATTEMPTS_REACHED' | 'NOT_FOUND' }> {
+    const job = await this.repository.findById(jobId);
     if (!job) return { error: 'NOT_FOUND' };
 
     if (job.attempt >= this.maxAttempts) {
       return { error: 'MAX_ATTEMPTS_REACHED' };
     }
 
-    return this.repository.update(jobId, {
+    return (await this.repository.update(jobId, {
       status: 'queued',
       attempt: job.attempt + 1,
       errorMessage: null,
       startedAt: null,
       completedAt: null,
-    })!;
+    }))!;
   }
 
-  getJobsForTarget(targetId: string): PublishJobRecord[] {
-    return this.repository.findByTargetId(targetId);
+  async getJobsForTarget(targetId: string): Promise<PublishJobRecord[]> {
+    return await this.repository.findByTargetId(targetId);
   }
 
-  getAllJobs(): PublishJobRecord[] {
-    return this.repository.findAll();
+  async getAllJobs(): Promise<PublishJobRecord[]> {
+    return await this.repository.findAll();
   }
 }

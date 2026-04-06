@@ -43,9 +43,9 @@ describe('controller retryTarget endpoint', () => {
     });
     await campaignService.markReady(campaign.id);
     await campaignService.launch(campaign.id);
-    const [job] = jobService.enqueueForTargets([{ id: target.id, campaignId: campaign.id }]);
-    jobService.pickNext(); // processing
-    jobService.markFailed(job.id, 'quotaExceeded');
+    const [job] = await jobService.enqueueForTargets([{ id: target.id, campaignId: campaign.id }]);
+    await jobService.pickNext(); // processing
+    await jobService.markFailed(job.id, 'quotaExceeded');
     await campaignService.updateTargetStatus(campaign.id, target.id, 'erro', { errorMessage: 'quotaExceeded' });
 
     const response = await controller.retryTarget(authRequest({
@@ -66,15 +66,15 @@ describe('controller retryTarget endpoint', () => {
     });
     await campaignService.markReady(campaign.id);
     await campaignService.launch(campaign.id);
-    const [job] = jobService.enqueueForTargets([{ id: target.id, campaignId: campaign.id }]);
+    const [job] = await jobService.enqueueForTargets([{ id: target.id, campaignId: campaign.id }]);
 
     // Exhaust all 3 attempts
-    jobService.pickNext();
-    jobService.markFailed(job.id, 'err');
-    const r2 = jobService.retry(job.id);
-    if (!('error' in r2)) { jobService.pickNext(); jobService.markFailed(r2.id, 'err'); }
-    const r3 = jobService.retry(job.id);
-    if (!('error' in r3)) { jobService.pickNext(); jobService.markFailed(r3.id, 'err'); }
+    await jobService.pickNext();
+    await jobService.markFailed(job.id, 'err');
+    const r2 = await jobService.retry(job.id);
+    if (!('error' in r2)) { await jobService.pickNext(); await jobService.markFailed(r2.id, 'err'); }
+    const r3 = await jobService.retry(job.id);
+    if (!('error' in r3)) { await jobService.pickNext(); await jobService.markFailed(r3.id, 'err'); }
 
     const response = await controller.retryTarget(authRequest({
       params: { id: campaign.id, targetId: target.id },

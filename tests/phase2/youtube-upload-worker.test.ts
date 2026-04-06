@@ -31,7 +31,7 @@ async function createReadyTargetScenario() {
   await campaignService.markReady(campaign.id);
   await campaignService.launch(campaign.id);
 
-  const [job] = jobService.enqueueForTargets([{ id: target.id, campaignId: campaign.id }]);
+  const [job] = await jobService.enqueueForTargets([{ id: target.id, campaignId: campaign.id }]);
 
   return { campaignService, jobService, campaign, target, job };
 }
@@ -174,7 +174,7 @@ describe('YouTube upload worker', () => {
     await campaignService.markReady(campaign.id);
     await campaignService.launch(campaign.id);
 
-    jobService.enqueueForTargets([
+    await jobService.enqueueForTargets([
       { id: t1.id, campaignId: campaign.id },
       { id: t2.id, campaignId: campaign.id },
     ]);

@@ -30,7 +30,7 @@ async function setupWithLaunchedCampaign() {
   await campaignService.markReady(campaign.id);
   await campaignService.launch(campaign.id);
 
-  const jobs = jobService.enqueueForTargets([
+  const jobs = await jobService.enqueueForTargets([
     { id: t1.id, campaignId: campaign.id },
     { id: t2.id, campaignId: campaign.id },
   ]);
@@ -57,8 +57,8 @@ describe('campaign status polling', () => {
     const statusService = new CampaignStatusService({ campaignService, jobService });
 
     // Simulate job processing & completion
-    jobService.pickNext();
-    jobService.markCompleted(jobs[0].id, 'yt-abc');
+    await jobService.pickNext();
+    await jobService.markCompleted(jobs[0].id, 'yt-abc');
     await campaignService.updateTargetStatus(campaign.id, t1.id, 'publicado', { youtubeVideoId: 'yt-abc' });
 
     const result = await statusService.getStatus(campaign.id);
@@ -78,12 +78,12 @@ describe('campaign status polling', () => {
     expect(result!.shouldPoll).toBe(true);
 
     // Complete all targets
-    jobService.pickNext();
-    jobService.markCompleted(jobs[0].id, 'yt-1');
+    await jobService.pickNext();
+    await jobService.markCompleted(jobs[0].id, 'yt-1');
     await campaignService.updateTargetStatus(campaign.id, t1.id, 'publicado', { youtubeVideoId: 'yt-1' });
 
-    jobService.pickNext();
-    jobService.markCompleted(jobs[1].id, 'yt-2');
+    await jobService.pickNext();
+    await jobService.markCompleted(jobs[1].id, 'yt-2');
     await campaignService.updateTargetStatus(campaign.id, t2.id, 'publicado', { youtubeVideoId: 'yt-2' });
 
     result = await statusService.getStatus(campaign.id);
@@ -104,8 +104,8 @@ describe('campaign status polling', () => {
     const { campaignService, jobService, campaign, t1, jobs } = await setupWithLaunchedCampaign();
     const statusService = new CampaignStatusService({ campaignService, jobService });
 
-    jobService.pickNext();
-    jobService.markCompleted(jobs[0].id, 'yt-1');
+    await jobService.pickNext();
+    await jobService.markCompleted(jobs[0].id, 'yt-1');
     await campaignService.updateTargetStatus(campaign.id, t1.id, 'publicado', { youtubeVideoId: 'yt-1' });
 
     const result = await statusService.getStatus(campaign.id);

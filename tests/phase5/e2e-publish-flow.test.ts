@@ -145,9 +145,9 @@ describe('E2E: full publish flow', () => {
     expect(failedTarget.errorMessage).toBe('quotaExceeded');
 
     // Retry the failed target's job
-    const failedJobs = jobService.getJobsForTarget(failedTarget.id);
+    const failedJobs = await jobService.getJobsForTarget(failedTarget.id);
     const failedJob = failedJobs.find((j) => j.status === 'failed')!;
-    jobService.retry(failedJob.id);
+    await jobService.retry(failedJob.id);
     await campaignService.updateTargetStatus(campaign.id, failedTarget.id, 'aguardando', { errorMessage: null });
 
     // Second pass — retry succeeds

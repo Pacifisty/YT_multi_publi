@@ -46,8 +46,8 @@ describe('controller launch wired to LaunchService', () => {
     expect(response.body.campaign!.status).toBe('launching');
 
     // Verify jobs were enqueued
-    const t1Jobs = jobService.getJobsForTarget(response.body.campaign!.targets[0].id);
-    const t2Jobs = jobService.getJobsForTarget(response.body.campaign!.targets[1].id);
+    const t1Jobs = await jobService.getJobsForTarget(response.body.campaign!.targets[0].id);
+    const t2Jobs = await jobService.getJobsForTarget(response.body.campaign!.targets[1].id);
     expect(t1Jobs).toHaveLength(1);
     expect(t2Jobs).toHaveLength(1);
   });
@@ -63,7 +63,7 @@ describe('controller status polling endpoint', () => {
     });
     await campaignService.markReady(campaign.id);
     await campaignService.launch(campaign.id);
-    jobService.enqueueForTargets([{ id: target.id, campaignId: campaign.id }]);
+    await jobService.enqueueForTargets([{ id: target.id, campaignId: campaign.id }]);
 
     const response = await controller.getStatus(createAuthenticatedRequest({ params: { id: campaign.id } }));
 

@@ -323,13 +323,13 @@ export class CampaignsController {
     }
 
     // Find the latest failed job for this target
-    const jobs = this.jobService.getJobsForTarget(targetId);
+    const jobs = await this.jobService.getJobsForTarget(targetId);
     const failedJob = [...jobs].reverse().find((j) => j.status === 'failed');
     if (!failedJob) {
       return { status: 400, body: { error: 'No failed job to retry' } };
     }
 
-    const result = this.jobService.retry(failedJob.id);
+    const result = await this.jobService.retry(failedJob.id);
     if ('error' in result) {
       return { status: 400, body: { error: result.error } };
     }

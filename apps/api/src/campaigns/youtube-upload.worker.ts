@@ -40,13 +40,13 @@ export class YouTubeUploadWorker {
   }
 
   async processNext(): Promise<PublishJobRecord | null> {
-    const job = this.jobService.pickNext();
+    const job = await this.jobService.pickNext();
     if (!job) return null;
 
     // Find the target for this job
     const target = await this.findTargetForJob(job);
     if (!target) {
-      return this.jobService.markFailed(job.id, 'Target not found');
+      return await this.jobService.markFailed(job.id, 'Target not found');
     }
 
     // Find the campaign to get videoAssetId
@@ -69,7 +69,7 @@ export class YouTubeUploadWorker {
       });
 
       // Mark job completed
-      const completedJob = this.jobService.markCompleted(job.id, result.videoId);
+      const completedJob = await this.jobService.markCompleted(job.id, result.videoId);
 
       // Update target status
       await this.campaignService.updateTargetStatus(target.campaignId, target.id, 'publicado', {
@@ -81,7 +81,7 @@ export class YouTubeUploadWorker {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
       // Mark job failed
-      const failedJob = this.jobService.markFailed(job.id, errorMessage);
+      const failedJob = await this.jobService.markFailed(job.id, errorMessage);
 
       // Update target status
       await this.campaignService.updateTargetStatus(target.campaignId, target.id, 'erro', {

@@ -101,15 +101,15 @@ describe('DashboardService.getStats', () => {
     const { target: t1 } = await campaignService.addTarget(campaign.id, { channelId: 'ch-1', videoTitle: 'V1', videoDescription: 'D1' });
     const { target: t2 } = await campaignService.addTarget(campaign.id, { channelId: 'ch-2', videoTitle: 'V2', videoDescription: 'D2' });
 
-    const jobs = jobService.enqueueForTargets([
+    const jobs = await jobService.enqueueForTargets([
       { id: t1.id, campaignId: campaign.id },
       { id: t2.id, campaignId: campaign.id },
     ]);
 
-    const j1 = jobService.pickNext()!;
-    jobService.markCompleted(j1.id, 'yt-1');
-    const j2 = jobService.pickNext()!;
-    jobService.markFailed(j2.id, 'error');
+    const j1 = await jobService.pickNext()!;
+    await jobService.markCompleted(j1.id, 'yt-1');
+    const j2 = await jobService.pickNext()!;
+    await jobService.markFailed(j2.id, 'error');
 
     const stats = await dashboard.getStats();
 
@@ -124,13 +124,13 @@ describe('DashboardService.getStats', () => {
     const { campaign } = await campaignService.createCampaign({ title: 'Retries', videoAssetId: 'a1' });
     const { target } = await campaignService.addTarget(campaign.id, { channelId: 'ch-1', videoTitle: 'V', videoDescription: 'D' });
 
-    const [job] = jobService.enqueueForTargets([{ id: target.id, campaignId: campaign.id }]);
-    jobService.pickNext();
-    jobService.markFailed(job.id, 'err');
-    jobService.retry(job.id); // attempt 2
-    jobService.pickNext();
-    jobService.markFailed(job.id, 'err');
-    jobService.retry(job.id); // attempt 3
+    const [job] = await jobService.enqueueForTargets([{ id: target.id, campaignId: campaign.id }]);
+    await jobService.pickNext();
+    await jobService.markFailed(job.id, 'err');
+    await jobService.retry(job.id); // attempt 2
+    await jobService.pickNext();
+    await jobService.markFailed(job.id, 'err');
+    await jobService.retry(job.id); // attempt 3
 
     const stats = await dashboard.getStats();
 

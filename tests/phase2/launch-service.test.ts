@@ -37,8 +37,8 @@ describe('launch service', () => {
       expect(result.campaign.status).toBe('launching');
 
       // One job per target
-      const t1Jobs = jobService.getJobsForTarget(result.campaign.targets[0].id);
-      const t2Jobs = jobService.getJobsForTarget(result.campaign.targets[1].id);
+      const t1Jobs = await jobService.getJobsForTarget(result.campaign.targets[0].id);
+      const t2Jobs = await jobService.getJobsForTarget(result.campaign.targets[1].id);
       expect(t1Jobs).toHaveLength(1);
       expect(t2Jobs).toHaveLength(1);
       expect(t1Jobs[0].status).toBe('queued');

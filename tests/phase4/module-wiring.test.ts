@@ -31,7 +31,7 @@ describe('campaigns module wires all services', () => {
 
     // Jobs should have been enqueued via LaunchService
     const target = response.body.campaign!.targets[0];
-    const jobs = mod.jobService.getJobsForTarget(target.id);
+    const jobs = await mod.jobService.getJobsForTarget(target.id);
     expect(jobs).toHaveLength(1);
     expect(jobs[0].status).toBe('queued');
   });

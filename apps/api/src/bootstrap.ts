@@ -34,9 +34,14 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
     _prismaFactory: options._prismaFactory,
   });
 
-  // Extract Prisma repository if available, otherwise server defaults to in-memory
+  // Extract Prisma repositories if available, otherwise server defaults to in-memory
   const campaignsModuleOptions = databaseProvider.campaignRepository
-    ? { repository: databaseProvider.campaignRepository }
+    ? {
+        repository: databaseProvider.campaignRepository,
+        jobServiceOptions: databaseProvider.publishJobRepository
+          ? { repository: databaseProvider.publishJobRepository }
+          : undefined,
+      }
     : undefined;
 
   const server = createServer({ env, sessionResolver, campaignsModuleOptions });

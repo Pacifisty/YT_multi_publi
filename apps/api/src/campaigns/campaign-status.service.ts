@@ -45,8 +45,8 @@ export class CampaignStatusService {
 
     const { campaign } = result;
 
-    const targets: TargetStatusView[] = campaign.targets.map((t) => {
-      const jobs = this.jobService.getJobsForTarget(t.id);
+    const targets: TargetStatusView[] = await Promise.all(campaign.targets.map(async (t) => {
+      const jobs = await this.jobService.getJobsForTarget(t.id);
       const latestJob = jobs.length > 0 ? jobs[jobs.length - 1] : null;
 
       return {
@@ -58,7 +58,7 @@ export class CampaignStatusService {
         errorMessage: t.errorMessage,
         latestJobStatus: latestJob?.status ?? null,
       };
-    });
+    }));
 
     const allTerminal = targets.length > 0 && targets.every((t) => TERMINAL_TARGET_STATUSES.has(t.status));
     const completed = targets.filter((t) => t.status === 'publicado').length;

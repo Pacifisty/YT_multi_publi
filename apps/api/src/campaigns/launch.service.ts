@@ -29,7 +29,7 @@ export class LaunchService {
       campaignId: result.campaign.id,
     }));
 
-    this.jobService.enqueueForTargets(targets);
+    await this.jobService.enqueueForTargets(targets);
 
     return result;
   }

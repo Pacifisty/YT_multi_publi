@@ -90,7 +90,7 @@ export class MediaController {
     };
   }
 
-  listAssets(request: SessionRequestLike): { status: number; body: unknown } {
+  async listAssets(request: SessionRequestLike): Promise<{ status: number; body: unknown }> {
     const guardResult = this.sessionGuard.check(request);
 
     if (!guardResult.allowed) {
@@ -104,7 +104,7 @@ export class MediaController {
 
     return {
       status: 200,
-      body: this.mediaService.listAssets(),
+      body: await this.mediaService.listAssets(),
     };
   }
 
@@ -119,7 +119,7 @@ export class MediaController {
       return { status: 400, body: { error: 'Missing asset id' } };
     }
 
-    const asset = this.mediaService.getAsset(id);
+    const asset = await this.mediaService.getAsset(id);
     if (!asset) {
       return { status: 404, body: { error: 'Asset not found' } };
     }
@@ -138,7 +138,7 @@ export class MediaController {
       return { status: 400, body: { error: 'Missing asset id' } };
     }
 
-    const ok = this.mediaService.deleteAsset(id);
+    const ok = await this.mediaService.deleteAsset(id);
     if (!ok) {
       return { status: 404, body: { error: 'Asset not found' } };
     }
@@ -162,7 +162,7 @@ export class MediaController {
       return { status: 400, body: { error: 'Missing required field: videoAssetId' } };
     }
 
-    const ok = this.mediaService.linkThumbnail(thumbnailId, body.videoAssetId);
+    const ok = await this.mediaService.linkThumbnail(thumbnailId, body.videoAssetId);
     if (!ok) {
       return { status: 404, body: { error: 'Thumbnail or video asset not found' } };
     }

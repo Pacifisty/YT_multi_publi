@@ -8,6 +8,7 @@ import { createHealthCheck, type HealthCheckInstance } from './health';
 import { createDatabaseProvider, type DatabaseProviderInstance } from './config/database-provider';
 import { createAccountRepoAdapter } from './config/account-repo-adapter';
 import { createChannelRepoAdapter } from './config/channel-repo-adapter';
+import { createMediaRepoAdapter } from './config/media-repo-adapter';
 
 export interface BootstrapOptions {
   env: Record<string, string | undefined>;
@@ -60,7 +61,11 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
     ? { ...accountRepoOverrides, ...channelStoreOverride }
     : undefined;
 
-  const server = createServer({ env, sessionResolver, campaignsModuleOptions, accountsModuleOptions });
+  const mediaModuleOptions = databaseProvider.mediaAssetRepository
+    ? { repository: createMediaRepoAdapter(databaseProvider.mediaAssetRepository) }
+    : undefined;
+
+  const server = createServer({ env, sessionResolver, campaignsModuleOptions, accountsModuleOptions, mediaModuleOptions });
 
   // Determine allowed origins
   const allowedOrigins = options.allowedOrigins ??

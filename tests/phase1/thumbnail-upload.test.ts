@@ -102,7 +102,7 @@ describe('thumbnail upload with video', () => {
       },
     });
 
-    const listResponse = mediaModule.mediaController.listAssets({
+    const listResponse = await mediaModule.mediaController.listAssets({
       session: AUTHENTICATED_SESSION,
     });
 
@@ -131,7 +131,7 @@ describe('thumbnail upload with video', () => {
       },
     });
 
-    const listResponse = mediaModule.mediaController.listAssets({
+    const listResponse = await mediaModule.mediaController.listAssets({
       session: AUTHENTICATED_SESSION,
     });
 

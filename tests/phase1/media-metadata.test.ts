@@ -60,7 +60,7 @@ describe('media metadata retrieval', () => {
       },
     });
 
-    const response = mediaModule.mediaController.listAssets({
+    const response = await mediaModule.mediaController.listAssets({
       session: AUTHENTICATED_SESSION,
     });
 

@@ -18,47 +18,48 @@ interface MediaAssetRecord {
 export interface MediaServiceOptions {
   storageRoot?: string;
   now?: () => Date;
+  repository?: MediaRepository;
 }
 
 export interface MediaRepository {
-  create(record: MediaAssetRecord): MediaAssetRecord;
-  findById(id: string): MediaAssetRecord | null;
-  findVideosNewestFirst(): MediaAssetRecord[];
-  findThumbnailByVideoId(videoAssetId: string): MediaAssetRecord | null;
-  delete(id: string): boolean;
-  update(id: string, data: Partial<MediaAssetRecord>): MediaAssetRecord | null;
+  create(record: MediaAssetRecord): Promise<MediaAssetRecord>;
+  findById(id: string): Promise<MediaAssetRecord | null>;
+  findVideosNewestFirst(): Promise<MediaAssetRecord[]>;
+  findThumbnailByVideoId(videoAssetId: string): Promise<MediaAssetRecord | null>;
+  delete(id: string): Promise<boolean>;
+  update(id: string, data: Partial<MediaAssetRecord>): Promise<MediaAssetRecord | null>;
 }
 
 export class InMemoryMediaRepository implements MediaRepository {
   private readonly records: MediaAssetRecord[] = [];
 
-  create(record: MediaAssetRecord): MediaAssetRecord {
+  async create(record: MediaAssetRecord): Promise<MediaAssetRecord> {
     this.records.push(record);
     return record;
   }
 
-  findVideosNewestFirst(): MediaAssetRecord[] {
+  async findVideosNewestFirst(): Promise<MediaAssetRecord[]> {
     return this.records
       .filter((record) => record.asset_type === 'video')
       .sort((left, right) => (left.created_at < right.created_at ? 1 : -1));
   }
 
-  findById(id: string): MediaAssetRecord | null {
+  async findById(id: string): Promise<MediaAssetRecord | null> {
     return this.records.find((record) => record.id === id) ?? null;
   }
 
-  findThumbnailByVideoId(videoAssetId: string): MediaAssetRecord | null {
+  async findThumbnailByVideoId(videoAssetId: string): Promise<MediaAssetRecord | null> {
     return this.records.find((record) => record.asset_type === 'thumbnail' && record.linked_video_asset_id === videoAssetId) ?? null;
   }
 
-  delete(id: string): boolean {
+  async delete(id: string): Promise<boolean> {
     const index = this.records.findIndex((record) => record.id === id);
     if (index === -1) return false;
     this.records.splice(index, 1);
     return true;
   }
 
-  update(id: string, data: Partial<MediaAssetRecord>): MediaAssetRecord | null {
+  async update(id: string, data: Partial<MediaAssetRecord>): Promise<MediaAssetRecord | null> {
     const record = this.records.find((r) => r.id === id);
     if (!record) return null;
     Object.assign(record, data);
@@ -71,13 +72,13 @@ export class MediaService {
   private readonly repository: MediaRepository;
   private readonly now: () => Date;
 
-  constructor(options: MediaServiceOptions = {}, repository: MediaRepository = new InMemoryMediaRepository()) {
+  constructor(options: MediaServiceOptions = {}, repository?: MediaRepository) {
     const storageOptions: LocalStorageServiceOptions = {
       rootDir: options.storageRoot,
     };
 
     this.storage = new LocalStorageService(storageOptions);
-    this.repository = repository;
+    this.repository = repository ?? options.repository ?? new InMemoryMediaRepository();
     this.now = options.now ?? (() => new Date());
   }
 
@@ -85,7 +86,7 @@ export class MediaService {
     const nowIso = this.now().toISOString();
 
     const persistedVideo = await this.storage.save('video', dto.video);
-    const videoRecord = this.repository.create({
+    const videoRecord = await this.repository.create({
       id: randomUUID(),
       asset_type: 'video',
       original_name: persistedVideo.original_name,
@@ -102,7 +103,7 @@ export class MediaService {
     if (dto.thumbnail) {
       const persistedThumbnail = await this.storage.save('thumbnail', dto.thumbnail);
 
-      thumbnailRecord = this.repository.create({
+      thumbnailRecord = await this.repository.create({
         id: randomUUID(),
         asset_type: 'thumbnail',
         original_name: persistedThumbnail.original_name,
@@ -120,30 +121,32 @@ export class MediaService {
     };
   }
 
-  listAssets(): { assets: MediaAssetResponseDto[] } {
-    const assets = this.repository.findVideosNewestFirst().map((video) =>
-      toResponseDto(video, this.repository.findThumbnailByVideoId(video.id) ?? undefined),
+  async listAssets(): Promise<{ assets: MediaAssetResponseDto[] }> {
+    const videos = await this.repository.findVideosNewestFirst();
+    const assets = await Promise.all(
+      videos.map(async (video) => {
+        const thumbnail = await this.repository.findThumbnailByVideoId(video.id);
+        return toResponseDto(video, thumbnail ?? undefined);
+      }),
     );
 
-    return {
-      assets,
-    };
+    return { assets };
   }
 
-  getAsset(id: string): MediaAssetRecord | null {
+  async getAsset(id: string): Promise<MediaAssetRecord | null> {
     return this.repository.findById(id);
   }
 
-  deleteAsset(id: string): boolean {
+  async deleteAsset(id: string): Promise<boolean> {
     return this.repository.delete(id);
   }
 
-  linkThumbnail(thumbnailId: string, videoAssetId: string): boolean {
-    const thumbnail = this.repository.findById(thumbnailId);
+  async linkThumbnail(thumbnailId: string, videoAssetId: string): Promise<boolean> {
+    const thumbnail = await this.repository.findById(thumbnailId);
     if (!thumbnail) return false;
-    const video = this.repository.findById(videoAssetId);
+    const video = await this.repository.findById(videoAssetId);
     if (!video) return false;
-    const updated = this.repository.update(thumbnailId, { linked_video_asset_id: videoAssetId });
+    const updated = await this.repository.update(thumbnailId, { linked_video_asset_id: videoAssetId });
     return updated !== null;
   }
 }

@@ -189,7 +189,7 @@ export class CampaignService {
     return { target };
   }
 
-  listCampaigns(filters?: { status?: string; search?: string }): { campaigns: CampaignRecord[] } {
+  listCampaigns(filters?: { status?: string; search?: string; limit?: number; offset?: number }): { campaigns: CampaignRecord[]; total: number; limit: number; offset: number } {
     let campaigns = this.repository.findAllNewestFirst();
 
     if (filters?.status) {
@@ -201,7 +201,12 @@ export class CampaignService {
       campaigns = campaigns.filter((c) => c.title.toLowerCase().includes(term));
     }
 
-    return { campaigns };
+    const total = campaigns.length;
+    const limit = Math.min(Math.max(filters?.limit ?? 20, 1), 100);
+    const offset = Math.max(filters?.offset ?? 0, 0);
+    campaigns = campaigns.slice(offset, offset + limit);
+
+    return { campaigns, total, limit, offset };
   }
 
   getCampaign(id: string): { campaign: CampaignRecord } | null {

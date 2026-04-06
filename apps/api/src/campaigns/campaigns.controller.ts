@@ -50,15 +50,17 @@ export class CampaignsController {
     return { status: 201, body: result };
   }
 
-  async list(request: SessionRequestLike & { query?: Record<string, string> }): Promise<ControllerResponse<{ campaigns: CampaignRecord[]; error?: string }>> {
+  async list(request: SessionRequestLike & { query?: Record<string, string> }): Promise<ControllerResponse<{ campaigns: CampaignRecord[]; total: number; limit: number; offset: number; error?: string }>> {
     const guardResult = this.sessionGuard.check(request);
     if (!guardResult.allowed) {
-      return { status: guardResult.status, body: { campaigns: [], error: guardResult.reason } };
+      return { status: guardResult.status, body: { campaigns: [], total: 0, limit: 20, offset: 0, error: guardResult.reason } };
     }
 
-    const filters: { status?: string; search?: string } = {};
+    const filters: { status?: string; search?: string; limit?: number; offset?: number } = {};
     if (request.query?.status) filters.status = request.query.status;
     if (request.query?.search) filters.search = request.query.search;
+    if (request.query?.limit) filters.limit = parseInt(request.query.limit, 10);
+    if (request.query?.offset) filters.offset = parseInt(request.query.offset, 10);
 
     const result = this.campaignService.listCampaigns(Object.keys(filters).length > 0 ? filters : undefined);
     return { status: 200, body: result };

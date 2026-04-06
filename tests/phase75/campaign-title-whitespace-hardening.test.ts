@@ -47,6 +47,8 @@ describe('campaign title whitespace hardening', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(response.body.campaign.title).toBe('Updated Title');
+    expect(response.body).toMatchObject({
+      campaign: { title: 'Updated Title' },
+    });
   });
 });

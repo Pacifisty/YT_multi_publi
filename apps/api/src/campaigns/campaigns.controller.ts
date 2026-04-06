@@ -304,8 +304,14 @@ export class CampaignsController {
     }
 
     const body = request.body as { title?: string; scheduledAt?: string } | undefined;
+    if (body?.title !== undefined) {
+      if (typeof body.title !== 'string' || !body.title.trim()) {
+        return { status: 400, body: { error: 'Invalid title: title must not be blank' } };
+      }
+    }
+
     const result = await this.campaignService.updateCampaign(campaignId, {
-      title: body?.title,
+      title: body?.title?.trim(),
       scheduledAt: body?.scheduledAt,
     });
 

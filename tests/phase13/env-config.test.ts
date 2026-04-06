@@ -91,13 +91,21 @@ describe('Environment config — validateEnvConfig', () => {
     expect(errors).toEqual([]);
   });
 
-  test('returns error for missing DATABASE_URL', () => {
-    const config = { ...validConfig, databaseUrl: undefined };
+  test('allows missing DATABASE_URL in development for in-memory mode', () => {
+    const config = { ...validConfig, databaseUrl: undefined, nodeEnv: 'development' };
+
+    const errors = validateEnvConfig(config as any);
+
+    expect(errors.find((e) => e.field === 'DATABASE_URL')).toBeUndefined();
+  });
+
+  test('returns error for missing DATABASE_URL in production', () => {
+    const config = { ...validConfig, databaseUrl: undefined, nodeEnv: 'production' };
 
     const errors = validateEnvConfig(config as any);
 
     expect(errors).toContainEqual(
-      expect.objectContaining({ field: 'DATABASE_URL', message: expect.stringContaining('required') }),
+      expect.objectContaining({ field: 'DATABASE_URL', message: expect.stringContaining('production') }),
     );
   });
 
@@ -208,6 +216,7 @@ describe('Environment config — validateEnvConfig', () => {
       googleClientId: undefined,
       oauthTokenKey: undefined,
       adminEmail: undefined,
+      nodeEnv: 'production',
     };
 
     const errors = validateEnvConfig(config as any);

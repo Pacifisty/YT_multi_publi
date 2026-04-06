@@ -37,8 +37,8 @@ export function loadEnvConfig(env: Record<string, string | undefined>): EnvConfi
 export function validateEnvConfig(config: EnvConfig): EnvValidationError[] {
   const errors: EnvValidationError[] = [];
 
-  if (!config.databaseUrl) {
-    errors.push({ field: 'DATABASE_URL', message: 'DATABASE_URL is required' });
+  if (config.nodeEnv === 'production' && !config.databaseUrl) {
+    errors.push({ field: 'DATABASE_URL', message: 'DATABASE_URL is required in production' });
   }
 
   if (!config.googleClientId) {

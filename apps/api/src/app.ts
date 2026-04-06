@@ -3,11 +3,19 @@ import type { AuthModuleInstance } from './auth/auth.module';
 import { createAuthModule } from './auth/auth.module';
 import type { CampaignsModuleInstance, CampaignsModuleOptions } from './campaigns/campaigns.module';
 import { createCampaignsModule } from './campaigns/campaigns.module';
+import type { AccountsModuleInstance } from './accounts/accounts.module';
+import { createAccountsModule } from './accounts/accounts.module';
+import type { AccountsServiceOptions } from './accounts/accounts.service';
+import type { MediaModuleInstance } from './media/media.module';
+import { createMediaModule } from './media/media.module';
+import type { MediaServiceOptions } from './media/media.service';
 import { createApiRouter, type ApiRouter, type ApiResponse } from './router';
 
 export interface AppConfig {
   env?: Record<string, string | undefined>;
   campaignsModuleOptions?: CampaignsModuleOptions;
+  accountsModuleOptions?: AccountsServiceOptions;
+  mediaModuleOptions?: MediaServiceOptions;
 }
 
 export interface HttpRequest {
@@ -27,15 +35,21 @@ export interface AppInstance {
   handleRequest(request: HttpRequest): Promise<HttpResponse>;
   authModule: AuthModuleInstance;
   campaignsModule: CampaignsModuleInstance;
+  accountsModule: AccountsModuleInstance;
+  mediaModule: MediaModuleInstance;
   router: ApiRouter;
 }
 
 export function createApp(config: AppConfig = {}): AppInstance {
   const authModule = createAuthModule({ env: config.env });
   const campaignsModule = createCampaignsModule(config.campaignsModuleOptions);
+  const accountsModule = createAccountsModule(config.accountsModuleOptions);
+  const mediaModule = createMediaModule(config.mediaModuleOptions);
   const router = createApiRouter({
     campaignsModule,
     authController: authModule.authController,
+    accountsController: accountsModule.accountsController,
+    mediaController: mediaModule.mediaController,
   });
 
   async function handleRequest(request: HttpRequest): Promise<HttpResponse> {
@@ -54,6 +68,8 @@ export function createApp(config: AppConfig = {}): AppInstance {
     handleRequest,
     authModule,
     campaignsModule,
+    accountsModule,
+    mediaModule,
     router,
   };
 }

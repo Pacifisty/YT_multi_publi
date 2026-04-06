@@ -118,9 +118,10 @@ export class PublishJobService {
     });
   }
 
-  async retry(jobId: string): Promise<PublishJobRecord | { error: 'MAX_ATTEMPTS_REACHED' | 'NOT_FOUND' }> {
+  async retry(jobId: string): Promise<PublishJobRecord | { error: 'MAX_ATTEMPTS_REACHED' | 'NOT_FOUND' | 'INVALID_STATUS' }> {
     const job = await this.repository.findById(jobId);
     if (!job) return { error: 'NOT_FOUND' };
+    if (job.status !== 'failed') return { error: 'INVALID_STATUS' };
 
     if (job.attempt >= this.maxAttempts) {
       return { error: 'MAX_ATTEMPTS_REACHED' };

@@ -28,7 +28,9 @@ export interface CampaignStatusServiceOptions {
   jobService: PublishJobService;
 }
 
-const TERMINAL_TARGET_STATUSES = new Set(['publicado', 'erro']);
+function isTerminalTarget(target: Pick<TargetStatusView, 'status' | 'youtubeVideoId'>): boolean {
+  return target.status === 'erro' || (target.status === 'publicado' && Boolean(target.youtubeVideoId));
+}
 
 export class CampaignStatusService {
   private readonly campaignService: CampaignService;
@@ -60,8 +62,8 @@ export class CampaignStatusService {
       };
     }));
 
-    const allTerminal = targets.length > 0 && targets.every((t) => TERMINAL_TARGET_STATUSES.has(t.status));
-    const completed = targets.filter((t) => t.status === 'publicado').length;
+    const allTerminal = targets.length > 0 && targets.every((t) => isTerminalTarget(t));
+    const completed = targets.filter((t) => t.status === 'publicado' && t.youtubeVideoId).length;
     const failed = targets.filter((t) => t.status === 'erro').length;
 
     const shouldPoll = campaign.status === 'launching' && targets.length > 0 && !allTerminal;

@@ -36,7 +36,10 @@ export interface CampaignDetailView {
   };
 }
 
-const TERMINAL_STATUSES = new Set(['publicado', 'erro']);
+function isTerminalTarget(target: Pick<CampaignDetailTarget, 'status' | 'youtubeVideoId'>): boolean {
+  return target.status === 'erro' || (target.status === 'publicado' && Boolean(target.youtubeVideoId));
+}
+
 const POLLING_INTERVAL_MS = 3000;
 const DEFAULT_MAX_RETRIES = 3;
 
@@ -57,8 +60,8 @@ export function buildCampaignDetailView(data: CampaignDetailData): CampaignDetai
     });
   });
 
-  const allTerminal = targets.length > 0 && targets.every((t) => TERMINAL_STATUSES.has(t.status));
-  const completedCount = targets.filter((t) => t.status === 'publicado').length;
+  const allTerminal = targets.length > 0 && targets.every((t) => isTerminalTarget(t));
+  const completedCount = targets.filter((t) => t.status === 'publicado' && t.youtubeVideoId).length;
 
   return {
     header: {

@@ -327,6 +327,19 @@ export class CampaignService {
     const campaign = await this.repository.findById(campaignId);
     if (!campaign) return null;
 
+    const existingTarget = campaign.targets.find((t) => t.id === targetId);
+    if (!existingTarget) return null;
+
+    const nextPublishedVideoId = status === 'publicado'
+      ? (typeof extra?.youtubeVideoId === 'string' && extra.youtubeVideoId.trim()
+          ? extra.youtubeVideoId.trim()
+          : existingTarget.youtubeVideoId)
+      : null;
+
+    if (status === 'publicado' && !nextPublishedVideoId) {
+      return null;
+    }
+
     const updates: Partial<CampaignTargetRecord> = {
       status,
       updatedAt: this.now().toISOString(),
@@ -334,8 +347,8 @@ export class CampaignService {
 
     if (status !== 'publicado') {
       updates.youtubeVideoId = null;
-    } else if (extra?.youtubeVideoId) {
-      updates.youtubeVideoId = extra.youtubeVideoId;
+    } else {
+      updates.youtubeVideoId = nextPublishedVideoId;
     }
 
     if (status !== 'erro') {

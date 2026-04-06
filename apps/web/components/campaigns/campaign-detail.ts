@@ -47,6 +47,7 @@ export function buildCampaignDetailView(data: CampaignDetailData): CampaignDetai
 
     return ({
       ...t,
+      errorMessage: t.status === 'erro' ? t.errorMessage : null,
       youtubeUrl: t.status === 'publicado' && t.youtubeVideoId
         ? `https://www.youtube.com/watch?v=${t.youtubeVideoId}`
         : undefined,

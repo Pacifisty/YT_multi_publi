@@ -338,7 +338,12 @@ export class CampaignService {
       updates.youtubeVideoId = extra.youtubeVideoId;
     }
 
-    if (extra && 'errorMessage' in extra) updates.errorMessage = extra.errorMessage ?? null;
+    if (status !== 'erro') {
+      updates.errorMessage = null;
+    } else if (extra && 'errorMessage' in extra) {
+      updates.errorMessage = extra.errorMessage ?? null;
+    }
+
     if (extra?.retryCount !== undefined) updates.retryCount = extra.retryCount;
 
     const target = await this.repository.updateTarget(campaignId, targetId, updates);

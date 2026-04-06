@@ -124,6 +124,10 @@ export class CampaignService {
     this.now = options.now ?? (() => new Date());
   }
 
+  private canMutateTargets(status: CampaignRecord['status']): boolean {
+    return status === 'draft' || status === 'ready';
+  }
+
   async createCampaign(input: CreateCampaignInput): Promise<{ campaign: CampaignRecord }> {
     const nowIso = this.now().toISOString();
     const record: CampaignRecord = {
@@ -141,6 +145,14 @@ export class CampaignService {
   }
 
   async addTarget(campaignId: string, input: AddTargetInput): Promise<{ target: CampaignTargetRecord }> {
+    const campaign = await this.repository.findById(campaignId);
+    if (!campaign) {
+      throw new Error(`Campaign ${campaignId} not found`);
+    }
+    if (!this.canMutateTargets(campaign.status)) {
+      throw new Error('Cannot add targets to an active campaign');
+    }
+
     const nowIso = this.now().toISOString();
     const target: CampaignTargetRecord = {
       id: randomUUID(),
@@ -168,13 +180,18 @@ export class CampaignService {
   }
 
   async removeTarget(campaignId: string, targetId: string): Promise<boolean> {
+    const campaign = await this.repository.findById(campaignId);
+    if (!campaign || !this.canMutateTargets(campaign.status)) {
+      return false;
+    }
+
     const removed = await this.repository.removeTarget(campaignId, targetId);
     if (!removed) {
       return false;
     }
 
-    const campaign = await this.repository.findById(campaignId);
-    if (campaign && campaign.targets.length === 0 && campaign.status === 'ready') {
+    const refreshedCampaign = await this.repository.findById(campaignId);
+    if (refreshedCampaign && refreshedCampaign.targets.length === 0 && refreshedCampaign.status === 'ready') {
       await this.repository.update(campaignId, {
         status: 'draft',
         updatedAt: this.now().toISOString(),
@@ -188,7 +205,11 @@ export class CampaignService {
     campaignId: string,
     targetId: string,
     updates: { videoTitle?: string; videoDescription?: string; tags?: string[]; privacy?: string; thumbnailAssetId?: string },
-  ): Promise<{ target: CampaignTargetRecord } | { error: 'NOT_FOUND' }> {
+  ): Promise<{ target: CampaignTargetRecord } | { error: 'NOT_FOUND' | 'CAMPAIGN_ACTIVE' }> {
+    const campaign = await this.repository.findById(campaignId);
+    if (!campaign) return { error: 'NOT_FOUND' };
+    if (!this.canMutateTargets(campaign.status)) return { error: 'CAMPAIGN_ACTIVE' };
+
     const filtered: Partial<CampaignTargetRecord> = {};
     if (updates.videoTitle !== undefined) filtered.videoTitle = updates.videoTitle;
     if (updates.videoDescription !== undefined) filtered.videoDescription = updates.videoDescription;

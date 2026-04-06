@@ -32,6 +32,15 @@ function parseQueryInteger(rawValue: string | undefined, options?: { allowNegati
   return Number(normalized);
 }
 
+function normalizeNonEmptyString(rawValue: unknown): string | undefined {
+  if (typeof rawValue !== 'string') {
+    return undefined;
+  }
+
+  const normalized = rawValue.trim();
+  return normalized ? normalized : undefined;
+}
+
 export class CampaignsController {
   constructor(
     private readonly campaignService: CampaignService,
@@ -49,17 +58,20 @@ export class CampaignsController {
     }
 
     const body = request.body as { title?: string; videoAssetId?: string; scheduledAt?: string } | undefined;
-    if (!body?.title || typeof body.title !== 'string' || !body.title.trim()) {
+    const title = normalizeNonEmptyString(body?.title);
+    if (!title) {
       return { status: 400, body: { error: 'Missing required field: title' } };
     }
-    if (!body?.videoAssetId || typeof body.videoAssetId !== 'string') {
+
+    const videoAssetId = normalizeNonEmptyString(body?.videoAssetId);
+    if (!videoAssetId) {
       return { status: 400, body: { error: 'Missing required field: videoAssetId' } };
     }
 
     const result = await this.campaignService.createCampaign({
-      title: body.title.trim(),
-      videoAssetId: body.videoAssetId,
-      scheduledAt: body.scheduledAt,
+      title,
+      videoAssetId,
+      scheduledAt: body?.scheduledAt,
     });
 
     return { status: 201, body: result };
@@ -128,18 +140,22 @@ export class CampaignsController {
       thumbnailAssetId?: string;
     } | undefined;
 
-    if (!body?.channelId || !body?.videoTitle || !body?.videoDescription) {
+    const channelId = normalizeNonEmptyString(body?.channelId);
+    const videoTitle = normalizeNonEmptyString(body?.videoTitle);
+    const videoDescription = normalizeNonEmptyString(body?.videoDescription);
+
+    if (!channelId || !videoTitle || !videoDescription) {
       return { status: 400, body: { error: 'Missing required fields: channelId, videoTitle, videoDescription' } };
     }
 
     try {
       const result = await this.campaignService.addTarget(campaignId, {
-        channelId: body.channelId,
-        videoTitle: body.videoTitle,
-        videoDescription: body.videoDescription,
-        tags: body.tags,
-        privacy: body.privacy,
-        thumbnailAssetId: body.thumbnailAssetId,
+        channelId,
+        videoTitle,
+        videoDescription,
+        tags: body?.tags,
+        privacy: body?.privacy,
+        thumbnailAssetId: body?.thumbnailAssetId,
       });
 
       return { status: 201, body: result };

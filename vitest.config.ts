@@ -691,6 +691,14 @@ export default defineConfig({
           environment: 'node',
         },
       },
+      {
+        test: {
+          name: 'phase86',
+          root: '.',
+          include: ['tests/phase86/**/*.test.ts', 'tests/phase86/**/*.test.tsx'],
+          environment: 'node',
+        },
+      },
     ],
   },
 });

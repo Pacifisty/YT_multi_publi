@@ -249,6 +249,26 @@ export class CampaignsController {
     return { status: 200, body: {} };
   }
 
+  async clone(request: CampaignsRequest): Promise<ControllerResponse<{ campaign?: CampaignRecord; error?: string }>> {
+    const guardResult = this.sessionGuard.check(request);
+    if (!guardResult.allowed) {
+      return { status: guardResult.status, body: { error: guardResult.reason } };
+    }
+
+    const campaignId = request.params?.id;
+    if (!campaignId) {
+      return { status: 400, body: { error: 'Missing campaign id' } };
+    }
+
+    const body = request.body as { title?: string } | undefined;
+    const result = this.campaignService.cloneCampaign(campaignId, body?.title ? { title: body.title } : undefined);
+    if ('error' in result) {
+      return { status: 404, body: { error: 'Campaign not found' } };
+    }
+
+    return { status: 201, body: result };
+  }
+
   async update(request: CampaignsRequest): Promise<ControllerResponse<{ campaign?: CampaignRecord; error?: string }>> {
     const guardResult = this.sessionGuard.check(request);
     if (!guardResult.allowed) {

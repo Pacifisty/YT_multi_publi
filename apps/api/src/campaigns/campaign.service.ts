@@ -215,6 +215,48 @@ export class CampaignService {
     return { campaign };
   }
 
+  cloneCampaign(id: string, options?: { title?: string }): { campaign: CampaignRecord } | { error: 'NOT_FOUND' } {
+    const original = this.repository.findById(id);
+    if (!original) return { error: 'NOT_FOUND' };
+
+    const nowIso = this.now().toISOString();
+    const clonedTargets: CampaignTargetRecord[] = original.targets.map((t) => ({
+      id: randomUUID(),
+      campaignId: '',
+      channelId: t.channelId,
+      videoTitle: t.videoTitle,
+      videoDescription: t.videoDescription,
+      tags: [...t.tags],
+      privacy: t.privacy,
+      thumbnailAssetId: t.thumbnailAssetId,
+      status: 'aguardando' as const,
+      youtubeVideoId: null,
+      errorMessage: null,
+      retryCount: 0,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    }));
+
+    const cloned: CampaignRecord = {
+      id: randomUUID(),
+      title: options?.title ?? `Copy of ${original.title}`,
+      videoAssetId: original.videoAssetId,
+      status: 'draft',
+      scheduledAt: original.scheduledAt,
+      targets: [],
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    const created = this.repository.create(cloned);
+    for (const target of clonedTargets) {
+      target.campaignId = created.id;
+      this.repository.addTarget(created.id, target);
+    }
+
+    return { campaign: this.repository.findById(created.id)! };
+  }
+
   markReady(campaignId: string): { campaign: CampaignRecord } | { error: 'NO_TARGETS' | 'NOT_FOUND' } {
     const campaign = this.repository.findById(campaignId);
     if (!campaign) return { error: 'NOT_FOUND' };

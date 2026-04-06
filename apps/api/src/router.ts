@@ -137,6 +137,12 @@ export function createApiRouter(options: {
     },
     {
       method: 'POST',
+      pattern: /^\/api\/campaigns\/([^/]+)\/clone$/,
+      paramNames: ['id'],
+      handler: (req) => ctrl.clone(req),
+    },
+    {
+      method: 'POST',
       pattern: /^\/api\/campaigns$/,
       paramNames: [],
       handler: (req) => ctrl.create(req),

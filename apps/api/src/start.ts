@@ -4,6 +4,9 @@ import { bootstrap, type BootstrapOptions, type BootstrapResult } from './bootst
 export interface StartServerOptions {
   env: Record<string, string | undefined>;
   _prismaFactory?: () => any;
+  _prismaModule?: {
+    PrismaClient: new (options?: unknown) => any;
+  };
   allowedOrigins?: string[];
   port?: number;
 }
@@ -18,6 +21,7 @@ export async function startServer(options: StartServerOptions): Promise<StartSer
   const bootstrapOptions: BootstrapOptions = {
     env: options.env,
     _prismaFactory: options._prismaFactory,
+    _prismaModule: options._prismaModule,
     allowedOrigins: options.allowedOrigins,
   };
 

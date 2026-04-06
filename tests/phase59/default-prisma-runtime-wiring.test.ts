@@ -63,7 +63,9 @@ function createFakePrismaModule() {
     },
   };
 
-  const PrismaClient = vi.fn(() => prisma);
+  const PrismaClient = vi.fn(function FakePrismaClient() {
+    return prisma;
+  });
 
   return {
     PrismaClient,

@@ -14,6 +14,9 @@ export interface BootstrapOptions {
   env: Record<string, string | undefined>;
   allowedOrigins?: string[];
   _prismaFactory?: () => any;
+  _prismaModule?: {
+    PrismaClient: new (options?: unknown) => any;
+  };
 }
 
 export interface BootstrapResult {
@@ -35,6 +38,7 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
   const databaseProvider = createDatabaseProvider({
     databaseUrl: env.DATABASE_URL,
     _prismaFactory: options._prismaFactory,
+    _prismaModule: options._prismaModule,
   });
 
   // Extract Prisma repositories if available, otherwise server defaults to in-memory

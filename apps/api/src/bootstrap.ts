@@ -10,6 +10,7 @@ import { createDatabaseProvider, type DatabaseProviderInstance } from './config/
 export interface BootstrapOptions {
   env: Record<string, string | undefined>;
   allowedOrigins?: string[];
+  _prismaFactory?: () => any;
 }
 
 export interface BootstrapResult {
@@ -28,9 +29,17 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
   const sessionStore = new SessionStore({ secret: sessionSecret });
   const sessionResolver = sessionStore.createSessionResolver();
 
-  const databaseProvider = createDatabaseProvider({ databaseUrl: env.DATABASE_URL });
+  const databaseProvider = createDatabaseProvider({
+    databaseUrl: env.DATABASE_URL,
+    _prismaFactory: options._prismaFactory,
+  });
 
-  const server = createServer({ env, sessionResolver });
+  // Extract Prisma repository if available, otherwise server defaults to in-memory
+  const campaignsModuleOptions = databaseProvider.campaignRepository
+    ? { repository: databaseProvider.campaignRepository }
+    : undefined;
+
+  const server = createServer({ env, sessionResolver, campaignsModuleOptions });
 
   // Determine allowed origins
   const allowedOrigins = options.allowedOrigins ??

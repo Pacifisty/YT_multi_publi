@@ -204,11 +204,11 @@ describe('End-to-end: bootstrap with Prisma CRUD', () => {
     // Get by ID
     const found = await service.getCampaign(campaign.id);
     expect(found).not.toBeNull();
-    expect(found!.title).toBe('E2E Prisma');
+    expect(found!.campaign.title).toBe('E2E Prisma');
 
     // Delete
     const deleted = await service.deleteCampaign(campaign.id);
-    expect(deleted).toBe(true);
+    expect(deleted).toEqual({ deleted: true });
   });
 
   it('handles routes through bootstrap with Prisma repo', async () => {

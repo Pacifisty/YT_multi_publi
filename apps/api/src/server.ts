@@ -3,12 +3,14 @@ import { createApp, type AppInstance } from './app';
 import { createRequestHandler } from './http-adapter';
 import { loadEnvConfig, validateEnvConfig, type EnvConfig } from './config/env.config';
 import type { AdminSession } from './auth/session.guard';
+import type { CampaignsModuleOptions } from './campaigns/campaigns.module';
 
 export interface ServerConfig extends EnvConfig {}
 
 export interface ServerOptions {
   env: Record<string, string | undefined>;
   sessionResolver?: (cookieHeader: string | undefined) => AdminSession | null;
+  campaignsModuleOptions?: CampaignsModuleOptions;
 }
 
 export interface ServerInstance {
@@ -26,7 +28,7 @@ export function createServer(options: ServerOptions): ServerInstance {
     throw new Error(`Invalid environment configuration:\n${messages}`);
   }
 
-  const app = createApp({ env: options.env });
+  const app = createApp({ env: options.env, campaignsModuleOptions: options.campaignsModuleOptions });
 
   const requestHandler = createRequestHandler({
     app,

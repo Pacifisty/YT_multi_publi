@@ -22,8 +22,8 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
   if (databaseUrl) {
     if (_prismaFactory) {
       prismaClient = _prismaFactory();
+      campaignRepository = new PrismaCampaignRepository(prismaClient);
     }
-    campaignRepository = prismaClient ? new PrismaCampaignRepository(prismaClient) : new PrismaCampaignRepository({} as any);
   }
 
   return {

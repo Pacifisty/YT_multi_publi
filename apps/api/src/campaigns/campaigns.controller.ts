@@ -93,6 +93,10 @@ function normalizeScheduledAt(rawValue: unknown): string | undefined | null {
   return Number.isNaN(Date.parse(normalized)) ? null : normalized;
 }
 
+function canMutateTargets(status: CampaignRecord['status']): boolean {
+  return status === 'draft' || status === 'ready';
+}
+
 export class CampaignsController {
   constructor(
     private readonly campaignService: CampaignService,
@@ -186,6 +190,15 @@ export class CampaignsController {
     const campaignId = request.params?.id;
     if (!campaignId) {
       return { status: 400, body: { error: 'Missing campaign id' } };
+    }
+
+    const campaignResult = await this.campaignService.getCampaign(campaignId);
+    if (!campaignResult) {
+      return { status: 404, body: { error: 'Campaign not found' } };
+    }
+
+    if (!canMutateTargets(campaignResult.campaign.status)) {
+      return { status: 400, body: { error: 'Cannot add targets to an active campaign' } };
     }
 
     const body = request.body as {
@@ -296,6 +309,15 @@ export class CampaignsController {
       return { status: 400, body: { error: 'Missing campaign or target id' } };
     }
 
+    const campaignResult = await this.campaignService.getCampaign(campaignId);
+    if (!campaignResult) {
+      return { status: 404, body: { error: 'Campaign not found' } };
+    }
+
+    if (!canMutateTargets(campaignResult.campaign.status)) {
+      return { status: 400, body: { error: 'Cannot remove targets from an active campaign' } };
+    }
+
     const removed = await this.campaignService.removeTarget(campaignId, targetId);
     if (!removed) {
       return { status: 404, body: { error: 'Target not found' } };
@@ -314,6 +336,15 @@ export class CampaignsController {
     const targetId = request.params?.targetId;
     if (!campaignId || !targetId) {
       return { status: 400, body: { error: 'Missing campaign or target id' } };
+    }
+
+    const campaignResult = await this.campaignService.getCampaign(campaignId);
+    if (!campaignResult) {
+      return { status: 404, body: { error: 'Campaign not found' } };
+    }
+
+    if (!canMutateTargets(campaignResult.campaign.status)) {
+      return { status: 400, body: { error: 'Cannot update targets on an active campaign' } };
     }
 
     const body = request.body as {

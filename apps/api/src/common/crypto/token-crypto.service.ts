@@ -48,13 +48,23 @@ export class TokenCryptoService {
   }
 }
 
+export function isValidTokenKey(rawKey?: string): boolean {
+  try {
+    resolveTokenKey(rawKey);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function resolveTokenKey(rawKey?: string): Buffer {
   if (!rawKey) {
     throw new Error('OAUTH_TOKEN_KEY must be configured with a 32-byte value.');
   }
 
-  if (rawKey.length === 32) {
-    return Buffer.from(rawKey, 'utf8');
+  const utf8Key = Buffer.from(rawKey, 'utf8');
+  if (utf8Key.length === 32) {
+    return utf8Key;
   }
 
   if (rawKey.length === 64 && /^[0-9a-fA-F]+$/.test(rawKey)) {

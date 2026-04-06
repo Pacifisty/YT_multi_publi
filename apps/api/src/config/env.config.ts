@@ -1,3 +1,5 @@
+import { isValidTokenKey } from '../common/crypto/token-crypto.service';
+
 export interface EnvConfig {
   databaseUrl: string | undefined;
   googleClientId: string | undefined;
@@ -67,8 +69,8 @@ export function validateEnvConfig(config: EnvConfig): EnvValidationError[] {
 
   if (!config.oauthTokenKey) {
     errors.push({ field: 'OAUTH_TOKEN_KEY', message: 'OAUTH_TOKEN_KEY is required' });
-  } else if (config.oauthTokenKey.length !== 32) {
-    errors.push({ field: 'OAUTH_TOKEN_KEY', message: 'OAUTH_TOKEN_KEY must be exactly 32 bytes' });
+  } else if (!isValidTokenKey(config.oauthTokenKey)) {
+    errors.push({ field: 'OAUTH_TOKEN_KEY', message: 'OAUTH_TOKEN_KEY must resolve to exactly 32 bytes' });
   }
 
   if (!config.adminEmail) {

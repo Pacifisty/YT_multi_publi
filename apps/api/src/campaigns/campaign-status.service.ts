@@ -64,11 +64,13 @@ export class CampaignStatusService {
     const completed = targets.filter((t) => t.status === 'publicado').length;
     const failed = targets.filter((t) => t.status === 'erro').length;
 
+    const shouldPoll = campaign.status === 'launching' && !allTerminal;
+
     return {
       campaignId: campaign.id,
       campaignStatus: campaign.status,
       targets,
-      shouldPoll: !allTerminal,
+      shouldPoll,
       progress: {
         completed,
         failed,

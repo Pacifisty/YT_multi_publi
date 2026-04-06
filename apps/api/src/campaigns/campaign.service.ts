@@ -322,7 +322,7 @@ export class CampaignService {
     campaignId: string,
     targetId: string,
     status: CampaignTargetRecord['status'],
-    extra?: { youtubeVideoId?: string; errorMessage?: string | null },
+    extra?: { youtubeVideoId?: string; errorMessage?: string | null; retryCount?: number },
   ): Promise<{ target: CampaignTargetRecord } | null> {
     const campaign = await this.repository.findById(campaignId);
     if (!campaign) return null;
@@ -334,6 +334,7 @@ export class CampaignService {
 
     if (extra?.youtubeVideoId) updates.youtubeVideoId = extra.youtubeVideoId;
     if (extra && 'errorMessage' in extra) updates.errorMessage = extra.errorMessage ?? null;
+    if (extra?.retryCount !== undefined) updates.retryCount = extra.retryCount;
 
     const target = await this.repository.updateTarget(campaignId, targetId, updates);
     if (!target) return null;

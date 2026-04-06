@@ -531,9 +531,10 @@ export class CampaignsController {
       return { status: 400, body: { error: result.error } };
     }
 
-    // Reset target status back to aguardando
+    // Reset target status back to aguardando and track the retry count
     await this.campaignService.updateTargetStatus(campaignId, targetId, 'aguardando', {
       errorMessage: null,
+      retryCount: result.attempt - 1,
     });
 
     return { status: 200, body: { job: result } };

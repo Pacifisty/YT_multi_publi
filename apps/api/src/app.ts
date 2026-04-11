@@ -23,6 +23,7 @@ export interface HttpRequest {
   path: string;
   session: AdminSession | null;
   body?: unknown;
+  query?: Record<string, string>;
 }
 
 export interface HttpResponse {
@@ -59,6 +60,7 @@ export function createApp(config: AppConfig = {}): AppInstance {
       path: request.path,
       session: request.session,
       body: request.body,
+      query: request.query,
     });
 
     return { status: apiResult.status, body: apiResult.body, cookies: apiResult.cookies };

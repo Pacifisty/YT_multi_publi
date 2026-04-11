@@ -37,3 +37,14 @@ Default health endpoints:
 
 - `GET /health`
 - `GET /ready`
+
+Frontend routes served by the same process:
+
+- `GET /` (SPA shell)
+- `GET /login`
+- `GET /workspace/dashboard`
+- `GET /workspace/campanhas`
+- `GET /workspace/campanhas/nova`
+- `GET /workspace/campanhas/:campaignId`
+- `GET /workspace/accounts`
+- `GET /workspace/media`

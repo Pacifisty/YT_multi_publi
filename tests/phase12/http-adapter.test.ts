@@ -221,6 +221,53 @@ describe('HTTP adapter — createRequestHandler', () => {
     );
   });
 
+  test('forwards query params for API requests', async () => {
+    const app = mockApp();
+    const handler = createRequestHandler({ app });
+    const req = mockReq({ url: '/api/campaigns?status=ready&limit=10' });
+    const res = mockRes();
+
+    await handler(req, res as any);
+
+    expect(app.handleRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: '/api/campaigns',
+        query: {
+          status: 'ready',
+          limit: '10',
+        },
+      }),
+    );
+  });
+
+  test('serves frontend html for root route', async () => {
+    const app = mockApp();
+    const handler = createRequestHandler({ app });
+    const req = mockReq({ method: 'GET', url: '/' });
+    const res = mockRes();
+
+    await handler(req, res as any);
+
+    expect(res._status).toBe(200);
+    expect(res._headers['content-type']).toBe('text/html; charset=utf-8');
+    expect(res._body).toContain('<!doctype html>');
+    expect(app.handleRequest).not.toHaveBeenCalled();
+  });
+
+  test('serves frontend script asset', async () => {
+    const app = mockApp();
+    const handler = createRequestHandler({ app });
+    const req = mockReq({ method: 'GET', url: '/app.js' });
+    const res = mockRes();
+
+    await handler(req, res as any);
+
+    expect(res._status).toBe(200);
+    expect(res._headers['content-type']).toBe('application/javascript; charset=utf-8');
+    expect(res._body).toContain('renderRoute');
+    expect(app.handleRequest).not.toHaveBeenCalled();
+  });
+
   test('handles PATCH method with body', async () => {
     const app = mockApp();
     const handler = createRequestHandler({ app });

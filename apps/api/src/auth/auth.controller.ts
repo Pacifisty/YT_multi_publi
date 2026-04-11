@@ -3,6 +3,7 @@ import type { LoginDto } from './dto/login.dto';
 import { validateLoginDto } from './dto/login.dto';
 import { AuthService } from './auth.service';
 import { SessionGuard, type SessionRequestLike } from './session.guard';
+import { SessionStore } from './session-store';
 
 export interface AuthRequest extends SessionRequestLike {
   body?: Partial<LoginDto>;
@@ -20,13 +21,16 @@ export interface ControllerResponse<TBody> {
 
 export class AuthController {
   private readonly sessionGuard: SessionGuard;
+  private readonly sessionStore?: SessionStore;
 
   constructor(
     private readonly authService: AuthService,
     private readonly cookieOptions: SessionCookieOptions = createSessionCookieOptions(),
     sessionGuard?: SessionGuard,
+    sessionStore?: SessionStore,
   ) {
     this.sessionGuard = sessionGuard ?? new SessionGuard();
+    this.sessionStore = sessionStore;
   }
 
   async login(request: AuthRequest): Promise<ControllerResponse<{ error?: string; user?: { email: string } }>> {
@@ -54,6 +58,10 @@ export class AuthController {
       };
     }
 
+    const sessionToken = this.sessionStore
+      ? this.sessionStore.createToken({ email: result.user.email })
+      : result.sessionId;
+
     return {
       status: 200,
       body: {
@@ -65,7 +73,7 @@ export class AuthController {
         {
           ...this.cookieOptions,
           name: SESSION_COOKIE_NAME,
-          value: result.sessionId,
+          value: sessionToken,
         },
       ],
     };

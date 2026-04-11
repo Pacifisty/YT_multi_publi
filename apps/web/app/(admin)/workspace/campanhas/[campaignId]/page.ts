@@ -1,5 +1,5 @@
 import type { AuthFetch } from '../../../../../lib/auth-client';
-import { buildCampaignDetailPage, type CampaignDetailAuditSummary, type CampaignDetailAuditTimelineEntry, type CampaignDetailPageView } from '../detail-page';
+import { buildCampaignDetailPage, type CampaignDetailActivityEntry, type CampaignDetailAuditSummary, type CampaignDetailAuditTimelineEntry, type CampaignDetailPageView } from '../detail-page';
 
 export interface CampaignDetailRouteView {
   route: string;
@@ -115,6 +115,10 @@ export interface CampaignDetailRouteView {
   auditTimeline?: Array<CampaignDetailAuditTimelineEntry & {
     targetHistoryHref?: string;
   }>;
+  activitySummary?: CampaignDetailPageView['activitySummary'];
+  activityTimeline?: Array<CampaignDetailActivityEntry & {
+    targetHistoryHref?: string;
+  }>;
   page?: CampaignDetailPageView;
   errorState?: {
     heading: string;
@@ -160,6 +164,13 @@ export async function buildCampaignDetailRoute(options: {
     ...event,
     targetHistoryHref: event.targetId
       ? `/api/campaigns/${options.params.campaignId}/targets/${event.targetId}/jobs`
+      : undefined,
+  }));
+  view.activitySummary = result.page?.activitySummary;
+  view.activityTimeline = result.page?.activityTimeline?.map((entry) => ({
+    ...entry,
+    targetHistoryHref: entry.targetId
+      ? `/api/campaigns/${options.params.campaignId}/targets/${entry.targetId}/jobs`
       : undefined,
   }));
   view.actions.cloneHref = `/api/campaigns/${options.params.campaignId}/clone`;

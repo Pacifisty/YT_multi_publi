@@ -2288,6 +2288,38 @@ describe('campanhas page integration with API shapes', () => {
         createdAt: '2026-04-01T00:00:30Z',
       },
     ]);
+    expect(view.page!.activitySummary).toEqual({
+      totalEvents: 3,
+      jobEvents: 1,
+      auditEvents: 2,
+      latestEventAt: '2026-04-01T00:03:30Z',
+    });
+    expect(view.page!.activityTimeline).toEqual([
+      {
+        kind: 'audit',
+        timestamp: '2026-04-01T00:03:30Z',
+        targetId: 't1',
+        eventId: 'audit-1',
+        eventType: 'publish_partial_failure',
+        actorEmail: 'system@internal',
+      },
+      {
+        kind: 'job',
+        timestamp: '2026-04-01T00:01:00Z',
+        targetId: 't1',
+        jobId: 'job-1',
+        jobStatus: 'failed',
+        attempt: 1,
+      },
+      {
+        kind: 'audit',
+        timestamp: '2026-04-01T00:00:30Z',
+        targetId: null,
+        eventId: 'audit-2',
+        eventType: 'launch_campaign',
+        actorEmail: 'ops@test.com',
+      },
+    ]);
   });
 
   test('buildCampaignDetailPage returns an error state when the campaign fetch fails', async () => {
@@ -2871,6 +2903,59 @@ describe('campanhas page integration with API shapes', () => {
         actorEmail: 'ops@test.com',
         targetId: null,
         createdAt: '2026-04-01T00:00:30Z',
+        targetHistoryHref: undefined,
+      },
+    ]);
+    expect(view.activitySummary).toEqual({
+      totalEvents: 5,
+      jobEvents: 2,
+      auditEvents: 3,
+      latestEventAt: '2026-04-01T00:03:30Z',
+    });
+    expect(view.activityTimeline).toEqual([
+      {
+        kind: 'audit',
+        timestamp: '2026-04-01T00:03:30Z',
+        targetId: 't2',
+        eventId: 'audit-1',
+        eventType: 'publish_partial_failure',
+        actorEmail: 'system@internal',
+        targetHistoryHref: '/api/campaigns/c1/targets/t2/jobs',
+      },
+      {
+        kind: 'audit',
+        timestamp: '2026-04-01T00:03:00Z',
+        targetId: 't1',
+        eventId: 'audit-2',
+        eventType: 'retry_target',
+        actorEmail: 'ops@test.com',
+        targetHistoryHref: '/api/campaigns/c1/targets/t1/jobs',
+      },
+      {
+        kind: 'job',
+        timestamp: '2026-04-01T00:03:00Z',
+        targetId: 't2',
+        jobId: 'job-2',
+        jobStatus: 'completed',
+        attempt: 1,
+        targetHistoryHref: '/api/campaigns/c1/targets/t2/jobs',
+      },
+      {
+        kind: 'job',
+        timestamp: '2026-04-01T00:01:00Z',
+        targetId: 't1',
+        jobId: 'job-1',
+        jobStatus: 'failed',
+        attempt: 1,
+        targetHistoryHref: '/api/campaigns/c1/targets/t1/jobs',
+      },
+      {
+        kind: 'audit',
+        timestamp: '2026-04-01T00:00:30Z',
+        targetId: null,
+        eventId: 'audit-3',
+        eventType: 'launch_campaign',
+        actorEmail: 'ops@test.com',
         targetHistoryHref: undefined,
       },
     ]);

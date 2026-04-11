@@ -21,6 +21,18 @@ export interface CampaignDetailAuditTimelineEntry {
   createdAt: string;
 }
 
+export interface CampaignDetailActivityEntry {
+  kind: 'job' | 'audit';
+  timestamp: string;
+  targetId: string | null;
+  jobId?: string;
+  jobStatus?: CampaignTargetJob['status'];
+  attempt?: number;
+  eventId?: string;
+  eventType?: CampaignAuditEventType;
+  actorEmail?: string;
+}
+
 export interface CampaignDetailPageData {
   campaign: CampaignDetailData;
   liveStatus?: CampaignStatusData;
@@ -53,6 +65,13 @@ export interface CampaignDetailPageView {
   };
   auditSummary?: CampaignDetailAuditSummary;
   auditTimeline?: CampaignDetailAuditTimelineEntry[];
+  activitySummary?: {
+    totalEvents: number;
+    jobEvents: number;
+    auditEvents: number;
+    latestEventAt: string;
+  };
+  activityTimeline?: CampaignDetailActivityEntry[];
 }
 
 export interface CampaignDetailPageLoadResult {
@@ -151,6 +170,38 @@ export function buildCampaignDetailPageView(
       targetId: event.targetId,
       createdAt: event.createdAt,
     }));
+  }
+
+  const jobActivityEntries: CampaignDetailActivityEntry[] = Object.entries(data.targetJobs ?? {})
+    .flatMap(([targetId, jobs]) =>
+      jobs.map((job) => ({
+        kind: 'job' as const,
+        timestamp: job.completedAt ?? job.startedAt ?? job.createdAt,
+        targetId,
+        jobId: job.id,
+        jobStatus: job.status,
+        attempt: job.attempt,
+      })),
+    )
+    .filter((entry) => Boolean(entry.timestamp));
+  const auditActivityEntries: CampaignDetailActivityEntry[] = (data.auditEvents ?? []).map((event) => ({
+    kind: 'audit',
+    timestamp: event.createdAt,
+    targetId: event.targetId,
+    eventId: event.id,
+    eventType: event.eventType,
+    actorEmail: event.actorEmail,
+  }));
+  const activityTimeline = [...jobActivityEntries, ...auditActivityEntries]
+    .sort((left, right) => (left.timestamp < right.timestamp ? 1 : -1));
+  if (activityTimeline.length > 0) {
+    view.activitySummary = {
+      totalEvents: activityTimeline.length,
+      jobEvents: jobActivityEntries.length,
+      auditEvents: auditActivityEntries.length,
+      latestEventAt: activityTimeline[0].timestamp,
+    };
+    view.activityTimeline = activityTimeline;
   }
 
   return view;

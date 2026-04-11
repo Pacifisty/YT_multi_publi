@@ -40,6 +40,10 @@ describe('API Router — accounts routes', () => {
       tokenCryptoService: crypto,
       listConnectedAccounts: async () => [account],
       getConnectedAccount: async (id: string) => (id === account.id ? account : null),
+      createAuthorizationRedirect: async () => 'https://accounts.google.com/o/oauth2/v2/auth?state=state-123',
+      handleOauthCallback: async (input) => (input.state === 'ok-state'
+        ? { ok: true, account }
+        : { ok: false, reason: 'INVALID_STATE' }),
     });
     const accountsController = new AccountsController(accountsService, new SessionGuard());
 
@@ -88,6 +92,27 @@ describe('API Router — accounts routes', () => {
     expect(res.body.channels).toBeDefined();
   });
 
+  it('GET /api/accounts/oauth/google/start returns redirect URL', async () => {
+    const res = await router.handle({
+      method: 'GET',
+      path: '/api/accounts/oauth/google/start',
+      session: authedSession,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.redirectUrl).toContain('accounts.google.com');
+  });
+
+  it('GET /api/accounts/oauth/google/callback returns account on valid code/state', async () => {
+    const res = await router.handle({
+      method: 'GET',
+      path: '/api/accounts/oauth/google/callback',
+      session: authedSession,
+      query: { code: 'abc', state: 'ok-state' },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.account.id).toBe('acct-1');
+  });
+
   it('DELETE /api/accounts/:accountId disconnects with confirmation', async () => {
     const res = await router.handle({
       method: 'DELETE',
@@ -132,6 +157,27 @@ describe('API Router — media routes', () => {
     });
     expect(res.status).toBe(200);
     expect(res.body.assets).toBeDefined();
+  });
+
+  it('POST /api/media creates an asset from JSON payload', async () => {
+    const videoBytes = Buffer.from('fake-video-bytes');
+    const res = await router.handle({
+      method: 'POST',
+      path: '/api/media',
+      session: authedSession,
+      body: {
+        video: {
+          originalName: 'demo.mp4',
+          mimeType: 'video/mp4',
+          base64Data: videoBytes.toString('base64'),
+          sizeBytes: videoBytes.byteLength,
+        },
+      },
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.asset.original_name).toBe('demo.mp4');
+    expect(res.body.asset.asset_type).toBe('video');
   });
 
   it('GET /api/media/:id returns 404 for unknown', async () => {

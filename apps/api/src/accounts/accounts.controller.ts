@@ -70,14 +70,24 @@ export class AccountsController {
       };
     }
 
-    const redirectUrl = await this.accountsService.createAuthorizationRedirect(request.session);
+    try {
+      const redirectUrl = await this.accountsService.createAuthorizationRedirect(request.session);
 
-    return {
-      status: 302,
-      body: {
-        redirectUrl,
-      },
-    };
+      return {
+        status: 200,
+        body: {
+          redirectUrl,
+        },
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Google OAuth start failed.';
+      return {
+        status: 500,
+        body: {
+          error: message,
+        },
+      };
+    }
   }
 
   async handleGoogleOauthCallback(
@@ -106,11 +116,22 @@ export class AccountsController {
       };
     }
 
-    const result = await this.accountsService.handleOauthCallback({
-      code,
-      state,
-      session: request.session,
-    });
+    let result;
+    try {
+      result = await this.accountsService.handleOauthCallback({
+        code,
+        state,
+        session: request.session,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Google OAuth callback failed.';
+      return {
+        status: 500,
+        body: {
+          error: message,
+        },
+      };
+    }
 
     if (!result.ok) {
       return {

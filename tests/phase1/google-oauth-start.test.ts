@@ -20,7 +20,7 @@ describe('google oauth start endpoint', () => {
       },
     });
 
-    expect(response.status).toBe(302);
+    expect(response.status).toBe(200);
     expect(response.body.redirectUrl).toContain('access_type=offline');
     expect(response.body.redirectUrl).toContain('include_granted_scopes=true');
     expect(response.body.redirectUrl).toContain('youtube.readonly');

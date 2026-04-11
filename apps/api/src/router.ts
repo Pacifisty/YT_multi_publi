@@ -183,6 +183,18 @@ export function createApiRouter(options: {
   if (accountsController) {
     routes.push(
       {
+        method: 'GET',
+        pattern: /^\/api\/accounts\/oauth\/google\/start$/,
+        paramNames: [],
+        handler: (req: AccountsRequest) => accountsController.startGoogleOauth(req),
+      },
+      {
+        method: 'GET',
+        pattern: /^\/api\/accounts\/oauth\/google\/callback$/,
+        paramNames: [],
+        handler: (req: AccountsRequest) => accountsController.handleGoogleOauthCallback(req),
+      },
+      {
         method: 'PATCH',
         pattern: /^\/api\/accounts\/([^/]+)\/channels\/([^/]+)$/,
         paramNames: ['accountId', 'channelId'],
@@ -218,6 +230,12 @@ export function createApiRouter(options: {
   // Media routes
   if (mediaController) {
     routes.push(
+      {
+        method: 'POST',
+        pattern: /^\/api\/media$/,
+        paramNames: [],
+        handler: (req: MediaRequest) => mediaController.createAsset(req),
+      },
       {
         method: 'POST',
         pattern: /^\/api\/media\/([^/]+)\/link-thumbnail$/,

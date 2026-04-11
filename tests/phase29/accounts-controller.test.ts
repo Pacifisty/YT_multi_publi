@@ -267,7 +267,7 @@ describe('AccountsController', () => {
       expect(res.status).toBe(401);
     });
 
-    it('returns 302 with redirect URL', async () => {
+    it('returns 200 with redirect URL', async () => {
       const service = new AccountsService({
         tokenCryptoService: crypto,
         createAuthorizationRedirect: async () => 'https://accounts.google.com/o/oauth2/auth?client_id=test',
@@ -275,8 +275,22 @@ describe('AccountsController', () => {
       const controller = new AccountsController(service, new SessionGuard());
 
       const res = await controller.startGoogleOauth(authedRequest());
-      expect(res.status).toBe(302);
+      expect(res.status).toBe(200);
       expect(res.body.redirectUrl).toContain('google');
+    });
+
+    it('returns 500 when oauth start throws', async () => {
+      const service = new AccountsService({
+        tokenCryptoService: crypto,
+        createAuthorizationRedirect: async () => {
+          throw new Error('Google OAuth env is incomplete');
+        },
+      });
+      const controller = new AccountsController(service, new SessionGuard());
+
+      const res = await controller.startGoogleOauth(authedRequest());
+      expect(res.status).toBe(500);
+      expect(res.body.error).toContain('Google OAuth env is incomplete');
     });
   });
 
@@ -323,6 +337,22 @@ describe('AccountsController', () => {
       );
       expect(res.status).toBe(200);
       expect(res.body.account!.id).toBe(account.id);
+    });
+
+    it('returns 500 when oauth callback throws', async () => {
+      const service = new AccountsService({
+        tokenCryptoService: crypto,
+        handleOauthCallback: async () => {
+          throw new Error('token exchange failed');
+        },
+      });
+      const controller = new AccountsController(service, new SessionGuard());
+
+      const res = await controller.handleGoogleOauthCallback(
+        authedRequest({ query: { code: 'valid', state: 'valid' } }),
+      );
+      expect(res.status).toBe(500);
+      expect(res.body.error).toContain('token exchange failed');
     });
   });
 });

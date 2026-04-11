@@ -21,6 +21,14 @@ cp .env.example .env
 Fill any real credentials you need.  
 `DATABASE_URL` can stay empty for in-memory mode.
 
+For YouTube account connection (Google OAuth), set:
+
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_REDIRECT_URI=http://127.0.0.1:3000/workspace/accounts/callback`
+
+In Google Cloud Console, the same URI must be added as an authorized redirect URI.
+
 ## 3. Start API
 
 ```bash
@@ -47,4 +55,5 @@ Frontend routes served by the same process:
 - `GET /workspace/campanhas/nova`
 - `GET /workspace/campanhas/:campaignId`
 - `GET /workspace/accounts`
+- `GET /workspace/accounts/callback` (Google OAuth return route)
 - `GET /workspace/media`

@@ -13,6 +13,93 @@ export interface MediaRequest extends SessionRequestLike {
   body?: unknown;
 }
 
+interface JsonUploadFilePayload {
+  originalName?: string;
+  mimeType?: string;
+  base64Data?: string;
+  sizeBytes?: number;
+  durationSeconds?: number;
+}
+
+interface JsonUploadBody {
+  video?: JsonUploadFilePayload;
+  thumbnail?: JsonUploadFilePayload;
+}
+
+function normalizeBase64Payload(rawValue: string): string {
+  const trimmed = rawValue.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  if (trimmed.startsWith('data:')) {
+    const separatorIndex = trimmed.indexOf(',');
+    if (separatorIndex >= 0) {
+      return trimmed.slice(separatorIndex + 1);
+    }
+  }
+
+  return trimmed;
+}
+
+function parseUploadedFileFromJson(
+  payload: JsonUploadFilePayload | undefined,
+  fieldName: 'video' | 'thumbnail',
+): UploadedMediaFile | null {
+  if (!payload) {
+    return null;
+  }
+
+  const originalName = typeof payload.originalName === 'string' ? payload.originalName.trim() : '';
+  if (!originalName) {
+    throw new Error(`Invalid ${fieldName}.originalName: value must be a non-empty string.`);
+  }
+
+  const rawBase64Data = typeof payload.base64Data === 'string' ? normalizeBase64Payload(payload.base64Data) : '';
+  if (!rawBase64Data) {
+    throw new Error(`Invalid ${fieldName}.base64Data: value must be a non-empty base64 string.`);
+  }
+
+  const buffer = Buffer.from(rawBase64Data, 'base64');
+  if (buffer.byteLength === 0) {
+    throw new Error(`Invalid ${fieldName}.base64Data: decoded payload is empty.`);
+  }
+
+  const sizeBytes = typeof payload.sizeBytes === 'number' && Number.isFinite(payload.sizeBytes) && payload.sizeBytes >= 0
+    ? Math.round(payload.sizeBytes)
+    : buffer.byteLength;
+
+  const durationSeconds = typeof payload.durationSeconds === 'number' && Number.isFinite(payload.durationSeconds) && payload.durationSeconds >= 0
+    ? payload.durationSeconds
+    : undefined;
+
+  return {
+    originalname: originalName,
+    mimetype: typeof payload.mimeType === 'string' && payload.mimeType.trim() ? payload.mimeType.trim() : undefined,
+    buffer,
+    size: sizeBytes,
+    durationSeconds,
+  };
+}
+
+function parseUploadedFilesFromBody(body: unknown): { video: UploadedMediaFile; thumbnail?: UploadedMediaFile } | null {
+  if (!body || typeof body !== 'object' || !('video' in body)) {
+    return null;
+  }
+
+  const payload = body as JsonUploadBody;
+  const videoFile = parseUploadedFileFromJson(payload.video, 'video');
+  if (!videoFile) {
+    throw new Error('Missing required field: video.');
+  }
+
+  const thumbnailFile = parseUploadedFileFromJson(payload.thumbnail, 'thumbnail') ?? undefined;
+  return {
+    video: videoFile,
+    thumbnail: thumbnailFile,
+  };
+}
+
 export class MediaController {
   private readonly sessionGuard: SessionGuard;
   private readonly validationService: MediaValidationService;
@@ -38,8 +125,23 @@ export class MediaController {
       };
     }
 
-    const videoFiles = request.files?.video ?? [];
-    const thumbnailFiles = request.files?.thumbnail ?? [];
+    let videoFiles = request.files?.video ?? [];
+    let thumbnailFiles = request.files?.thumbnail ?? [];
+
+    try {
+      const parsedBodyUpload = parseUploadedFilesFromBody(request.body);
+      if (parsedBodyUpload) {
+        videoFiles = [parsedBodyUpload.video];
+        thumbnailFiles = parsedBodyUpload.thumbnail ? [parsedBodyUpload.thumbnail] : [];
+      }
+    } catch (error) {
+      return {
+        status: 400,
+        body: {
+          error: error instanceof Error ? error.message : 'Invalid upload payload.',
+        },
+      };
+    }
 
     if (videoFiles.length !== 1 || thumbnailFiles.length > 1) {
       return {

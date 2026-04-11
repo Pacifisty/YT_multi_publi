@@ -103,11 +103,14 @@ export interface ChannelStore {
 }
 
 export class AccountsService {
+  private static readonly OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+
   private tokenCryptoService?: TokenCryptoService;
   private googleOauthService?: GoogleOauthService;
   private readonly connectedAccountStore: ConnectedAccountStore;
   private readonly channelStore: ChannelStore;
   private readonly now: () => Date;
+  private readonly oauthStateStore = new Map<string, { createdAtMs: number; adminEmail?: string }>();
 
   constructor(private readonly options: AccountsServiceOptions = {}) {
     this.tokenCryptoService = options.tokenCryptoService;
@@ -118,11 +121,16 @@ export class AccountsService {
   }
 
   async createAuthorizationRedirect(session?: GoogleOauthSession | null): Promise<string> {
-    if (this.options.createAuthorizationRedirect) {
-      return this.options.createAuthorizationRedirect(session);
+    const redirectUrl = this.options.createAuthorizationRedirect
+      ? await this.options.createAuthorizationRedirect(session)
+      : await this.getGoogleOauthService().createAuthorizationRedirect(session);
+
+    const state = extractStateFromAuthorizationRedirect(redirectUrl);
+    if (state) {
+      this.rememberOauthState(state, (session as { adminUser?: { email?: string } } | null | undefined)?.adminUser?.email);
     }
 
-    return this.getGoogleOauthService().createAuthorizationRedirect(session);
+    return redirectUrl;
   }
 
   async handleOauthCallback(input: OAuthCallbackInput): Promise<OAuthCallbackResult> {
@@ -130,7 +138,10 @@ export class AccountsService {
       return this.options.handleOauthCallback(input);
     }
 
-    const stateValid = this.getGoogleOauthService().validateCallbackState(input.session, input.state);
+    const adminEmail = (input.session as { adminUser?: { email?: string } } | null | undefined)?.adminUser?.email;
+    const sessionStateValid = this.getGoogleOauthService().validateCallbackState(input.session, input.state);
+    const storedStateValid = this.consumeOauthState(input.state, adminEmail);
+    const stateValid = sessionStateValid || storedStateValid;
 
     if (!stateValid) {
       return {
@@ -372,6 +383,48 @@ export class AccountsService {
   private getGoogleOauthService(): GoogleOauthService {
     this.googleOauthService = this.googleOauthService ?? new GoogleOauthService();
     return this.googleOauthService;
+  }
+
+  private rememberOauthState(state: string, adminEmail?: string): void {
+    this.cleanupExpiredOauthStates();
+    this.oauthStateStore.set(state, {
+      createdAtMs: this.now().getTime(),
+      adminEmail,
+    });
+  }
+
+  private consumeOauthState(state: string, adminEmail?: string): boolean {
+    this.cleanupExpiredOauthStates();
+    const record = this.oauthStateStore.get(state);
+    if (!record) {
+      return false;
+    }
+
+    if (record.adminEmail && adminEmail && record.adminEmail !== adminEmail) {
+      return false;
+    }
+
+    this.oauthStateStore.delete(state);
+    return true;
+  }
+
+  private cleanupExpiredOauthStates(): void {
+    const expiresBefore = this.now().getTime() - AccountsService.OAUTH_STATE_TTL_MS;
+    for (const [state, record] of this.oauthStateStore.entries()) {
+      if (record.createdAtMs < expiresBefore) {
+        this.oauthStateStore.delete(state);
+      }
+    }
+  }
+}
+
+function extractStateFromAuthorizationRedirect(redirectUrl: string): string | null {
+  try {
+    const url = new URL(redirectUrl, 'http://localhost');
+    const state = url.searchParams.get('state');
+    return state && state.trim() ? state.trim() : null;
+  } catch {
+    return null;
   }
 }
 

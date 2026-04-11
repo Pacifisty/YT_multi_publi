@@ -2959,6 +2959,187 @@ describe('campanhas page integration with API shapes', () => {
         targetHistoryHref: undefined,
       },
     ]);
+    expect(view.activityFilters).toEqual({
+      selected: {
+        key: 'all',
+        kind: 'all',
+        label: 'All activity',
+        count: 5,
+        href: '/workspace/campanhas/c1',
+        active: true,
+      },
+      options: [
+        {
+          key: 'all',
+          kind: 'all',
+          label: 'All activity',
+          count: 5,
+          href: '/workspace/campanhas/c1',
+          active: true,
+        },
+        {
+          key: 'jobs',
+          kind: 'jobs',
+          label: 'Jobs',
+          count: 2,
+          href: '/workspace/campanhas/c1?activity=jobs',
+          active: false,
+        },
+        {
+          key: 'audit',
+          kind: 'audit',
+          label: 'Audit',
+          count: 3,
+          href: '/workspace/campanhas/c1?activity=audit',
+          active: false,
+        },
+        {
+          key: 'target:t2',
+          kind: 'target',
+          label: 'Target t2',
+          count: 2,
+          href: '/workspace/campanhas/c1?targetId=t2',
+          active: false,
+          targetId: 't2',
+        },
+        {
+          key: 'target:t1',
+          kind: 'target',
+          label: 'Target t1',
+          count: 2,
+          href: '/workspace/campanhas/c1?targetId=t1',
+          active: false,
+          targetId: 't1',
+        },
+      ],
+      filteredSummary: {
+        totalEvents: 5,
+        jobEvents: 2,
+        auditEvents: 3,
+        latestEventAt: '2026-04-01T00:03:30Z',
+      },
+      filteredTimeline: [
+        {
+          kind: 'audit',
+          timestamp: '2026-04-01T00:03:30Z',
+          targetId: 't2',
+          eventId: 'audit-1',
+          eventType: 'publish_partial_failure',
+          actorEmail: 'system@internal',
+          targetHistoryHref: '/api/campaigns/c1/targets/t2/jobs',
+        },
+        {
+          kind: 'audit',
+          timestamp: '2026-04-01T00:03:00Z',
+          targetId: 't1',
+          eventId: 'audit-2',
+          eventType: 'retry_target',
+          actorEmail: 'ops@test.com',
+          targetHistoryHref: '/api/campaigns/c1/targets/t1/jobs',
+        },
+        {
+          kind: 'job',
+          timestamp: '2026-04-01T00:03:00Z',
+          targetId: 't2',
+          jobId: 'job-2',
+          jobStatus: 'completed',
+          attempt: 1,
+          targetHistoryHref: '/api/campaigns/c1/targets/t2/jobs',
+        },
+        {
+          kind: 'job',
+          timestamp: '2026-04-01T00:01:00Z',
+          targetId: 't1',
+          jobId: 'job-1',
+          jobStatus: 'failed',
+          attempt: 1,
+          targetHistoryHref: '/api/campaigns/c1/targets/t1/jobs',
+        },
+        {
+          kind: 'audit',
+          timestamp: '2026-04-01T00:00:30Z',
+          targetId: null,
+          eventId: 'audit-3',
+          eventType: 'launch_campaign',
+          actorEmail: 'ops@test.com',
+          targetHistoryHref: undefined,
+        },
+      ],
+    });
+
+    const jobsFilteredView = await buildCampaignDetailRoute({
+      params: { campaignId: 'c1' },
+      fetcher,
+      searchParams: { activity: 'jobs' },
+    });
+    expect(jobsFilteredView.activityFilters?.selected).toEqual({
+      key: 'jobs',
+      kind: 'jobs',
+      label: 'Jobs',
+      count: 2,
+      href: '/workspace/campanhas/c1?activity=jobs',
+      active: true,
+    });
+    expect(jobsFilteredView.activityFilters?.filteredSummary).toEqual({
+      totalEvents: 2,
+      jobEvents: 2,
+      auditEvents: 0,
+      latestEventAt: '2026-04-01T00:03:00Z',
+    });
+    expect(jobsFilteredView.activityFilters?.filteredTimeline.map((entry) => entry.kind)).toEqual([
+      'job',
+      'job',
+    ]);
+
+    const auditFilteredView = await buildCampaignDetailRoute({
+      params: { campaignId: 'c1' },
+      fetcher,
+      searchParams: { activity: 'audit' },
+    });
+    expect(auditFilteredView.activityFilters?.selected).toEqual({
+      key: 'audit',
+      kind: 'audit',
+      label: 'Audit',
+      count: 3,
+      href: '/workspace/campanhas/c1?activity=audit',
+      active: true,
+    });
+    expect(auditFilteredView.activityFilters?.filteredSummary).toEqual({
+      totalEvents: 3,
+      jobEvents: 0,
+      auditEvents: 3,
+      latestEventAt: '2026-04-01T00:03:30Z',
+    });
+    expect(auditFilteredView.activityFilters?.filteredTimeline.map((entry) => entry.kind)).toEqual([
+      'audit',
+      'audit',
+      'audit',
+    ]);
+
+    const targetFilteredView = await buildCampaignDetailRoute({
+      params: { campaignId: 'c1' },
+      fetcher,
+      searchParams: { targetId: 't2' },
+    });
+    expect(targetFilteredView.activityFilters?.selected).toEqual({
+      key: 'target:t2',
+      kind: 'target',
+      label: 'Target t2',
+      count: 2,
+      href: '/workspace/campanhas/c1?targetId=t2',
+      active: true,
+      targetId: 't2',
+    });
+    expect(targetFilteredView.activityFilters?.filteredSummary).toEqual({
+      totalEvents: 2,
+      jobEvents: 1,
+      auditEvents: 1,
+      latestEventAt: '2026-04-01T00:03:30Z',
+    });
+    expect(targetFilteredView.activityFilters?.filteredTimeline.map((entry) => entry.targetId)).toEqual([
+      't2',
+      't2',
+    ]);
     expect(view.operationalOverview).toEqual({
       lifecycleState: 'launching',
       latestExecution: {

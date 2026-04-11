@@ -1,6 +1,36 @@
 import type { AuthFetch } from '../../../../../lib/auth-client';
 import { buildCampaignDetailPage, type CampaignDetailActivityEntry, type CampaignDetailAuditSummary, type CampaignDetailAuditTimelineEntry, type CampaignDetailPageView } from '../detail-page';
 
+type CampaignDetailRouteSearchParams = Record<string, string | string[] | undefined>;
+
+type CampaignDetailRouteActivityEntry = CampaignDetailActivityEntry & {
+  targetHistoryHref?: string;
+};
+
+type CampaignDetailActivityFilterKind = 'all' | 'jobs' | 'audit' | 'target';
+
+export interface CampaignDetailActivityFilterOption {
+  key: string;
+  kind: CampaignDetailActivityFilterKind;
+  label: string;
+  count: number;
+  href: string;
+  active: boolean;
+  targetId?: string;
+}
+
+export interface CampaignDetailActivityFiltersView {
+  selected: CampaignDetailActivityFilterOption;
+  options: CampaignDetailActivityFilterOption[];
+  filteredSummary: {
+    totalEvents: number;
+    jobEvents: number;
+    auditEvents: number;
+    latestEventAt: string;
+  };
+  filteredTimeline: CampaignDetailRouteActivityEntry[];
+}
+
 export interface CampaignDetailRouteView {
   route: string;
   backHref: '/workspace/campanhas';
@@ -116,9 +146,8 @@ export interface CampaignDetailRouteView {
     targetHistoryHref?: string;
   }>;
   activitySummary?: CampaignDetailPageView['activitySummary'];
-  activityTimeline?: Array<CampaignDetailActivityEntry & {
-    targetHistoryHref?: string;
-  }>;
+  activityTimeline?: CampaignDetailRouteActivityEntry[];
+  activityFilters?: CampaignDetailActivityFiltersView;
   page?: CampaignDetailPageView;
   errorState?: {
     heading: string;
@@ -127,8 +156,130 @@ export interface CampaignDetailRouteView {
   };
 }
 
+function readCampaignDetailSearchParam(searchParams: CampaignDetailRouteSearchParams | undefined, key: string): string | undefined {
+  const value = searchParams?.[key];
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  return value;
+}
+
+function buildCampaignDetailActivityFilterHref(
+  route: string,
+  filter: { activity?: 'jobs' | 'audit'; targetId?: string },
+): string {
+  const params = new URLSearchParams();
+  if (filter.activity) {
+    params.set('activity', filter.activity);
+  }
+  if (filter.targetId) {
+    params.set('targetId', filter.targetId);
+  }
+  const query = params.toString();
+  return query ? `${route}?${query}` : route;
+}
+
+function buildCampaignDetailActivityFiltersView(options: {
+  route: string;
+  timeline: CampaignDetailRouteActivityEntry[];
+  searchParams?: CampaignDetailRouteSearchParams;
+}): CampaignDetailActivityFiltersView | undefined {
+  if (options.timeline.length === 0) {
+    return undefined;
+  }
+
+  const jobEventCount = options.timeline.filter((entry) => entry.kind === 'job').length;
+  const auditEventCount = options.timeline.length - jobEventCount;
+  const targetEventCounts = new Map<string, number>();
+  for (const entry of options.timeline) {
+    if (!entry.targetId) {
+      continue;
+    }
+
+    targetEventCounts.set(entry.targetId, (targetEventCounts.get(entry.targetId) ?? 0) + 1);
+  }
+
+  const requestedTargetId = readCampaignDetailSearchParam(options.searchParams, 'targetId');
+  const requestedActivity = readCampaignDetailSearchParam(options.searchParams, 'activity')?.toLowerCase();
+
+  let selectedFilterKind: CampaignDetailActivityFilterKind = 'all';
+  let selectedTargetId: string | undefined;
+  if (requestedTargetId && targetEventCounts.has(requestedTargetId)) {
+    selectedFilterKind = 'target';
+    selectedTargetId = requestedTargetId;
+  } else if (requestedActivity === 'jobs' && jobEventCount > 0) {
+    selectedFilterKind = 'jobs';
+  } else if (requestedActivity === 'audit' && auditEventCount > 0) {
+    selectedFilterKind = 'audit';
+  }
+
+  const activityFilters: CampaignDetailActivityFilterOption[] = [
+    {
+      key: 'all',
+      kind: 'all',
+      label: 'All activity',
+      count: options.timeline.length,
+      href: buildCampaignDetailActivityFilterHref(options.route, {}),
+      active: selectedFilterKind === 'all',
+    },
+    {
+      key: 'jobs',
+      kind: 'jobs',
+      label: 'Jobs',
+      count: jobEventCount,
+      href: buildCampaignDetailActivityFilterHref(options.route, { activity: 'jobs' }),
+      active: selectedFilterKind === 'jobs',
+    },
+    {
+      key: 'audit',
+      kind: 'audit',
+      label: 'Audit',
+      count: auditEventCount,
+      href: buildCampaignDetailActivityFilterHref(options.route, { activity: 'audit' }),
+      active: selectedFilterKind === 'audit',
+    },
+    ...Array.from(targetEventCounts.entries()).map(([targetId, count]) => ({
+      key: `target:${targetId}`,
+      kind: 'target' as const,
+      label: `Target ${targetId}`,
+      count,
+      href: buildCampaignDetailActivityFilterHref(options.route, { targetId }),
+      active: selectedFilterKind === 'target' && selectedTargetId === targetId,
+      targetId,
+    })),
+  ];
+
+  const filteredTimeline = selectedFilterKind === 'jobs'
+    ? options.timeline.filter((entry) => entry.kind === 'job')
+    : selectedFilterKind === 'audit'
+      ? options.timeline.filter((entry) => entry.kind === 'audit')
+      : selectedFilterKind === 'target'
+        ? options.timeline.filter((entry) => entry.targetId === selectedTargetId)
+        : options.timeline;
+  const filteredJobEvents = filteredTimeline.filter((entry) => entry.kind === 'job').length;
+  const filteredAuditEvents = filteredTimeline.length - filteredJobEvents;
+  const selectedFilter = activityFilters.find((filter) => filter.active) ?? activityFilters[0];
+  const [latestFilteredEvent] = filteredTimeline;
+  if (!latestFilteredEvent) {
+    return undefined;
+  }
+
+  return {
+    selected: selectedFilter,
+    options: activityFilters,
+    filteredSummary: {
+      totalEvents: filteredTimeline.length,
+      jobEvents: filteredJobEvents,
+      auditEvents: filteredAuditEvents,
+      latestEventAt: latestFilteredEvent.timestamp,
+    },
+    filteredTimeline,
+  };
+}
+
 export async function buildCampaignDetailRoute(options: {
   params: { campaignId: string };
+  searchParams?: CampaignDetailRouteSearchParams;
   fetcher?: AuthFetch;
   now?: () => Date;
 }): Promise<CampaignDetailRouteView> {
@@ -173,6 +324,11 @@ export async function buildCampaignDetailRoute(options: {
       ? `/api/campaigns/${options.params.campaignId}/targets/${entry.targetId}/jobs`
       : undefined,
   }));
+  view.activityFilters = buildCampaignDetailActivityFiltersView({
+    route: view.route,
+    timeline: view.activityTimeline ?? [],
+    searchParams: options.searchParams,
+  });
   view.actions.cloneHref = `/api/campaigns/${options.params.campaignId}/clone`;
   if (result.page?.polling.nextScheduledAt) {
     view.actions.nextRefreshAt = result.page.polling.nextScheduledAt;

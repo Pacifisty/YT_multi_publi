@@ -104,8 +104,13 @@ export function buildCampaignDetailView(data: CampaignDetailData, options: Campa
 
   const allTerminal = targets.length > 0 && targets.every((t) => isTerminalTarget(t));
   const completedCount = targets.filter((t) => t.status === 'publicado' && t.youtubeVideoId).length;
-  const hasActivePendingTargets = targets.some((target) =>
-    target.status === 'enviando' || (target.status === 'aguardando' && !target.scheduledPending));
+  const hasActivePendingTargets = targets.some((target) => {
+    if (target.scheduledPending) {
+      return false;
+    }
+
+    return !isTerminalTarget(target);
+  });
   const nextScheduledAt = targets
     .filter((target) => target.scheduledPending && typeof target.publishAt === 'string')
     .sort((left, right) => new Date(left.publishAt!).getTime() - new Date(right.publishAt!).getTime())[0]

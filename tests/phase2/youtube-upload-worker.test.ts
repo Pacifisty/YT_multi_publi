@@ -2,12 +2,12 @@ import { describe, expect, test, vi } from 'vitest';
 
 import {
   YouTubeUploadWorker,
+  YouTubeUploadPartialFailureError,
   type YouTubeUploadFn,
-  type UploadContext,
-  type UploadResult,
 } from '../../apps/api/src/campaigns/youtube-upload.worker';
 import { PublishJobService, InMemoryPublishJobRepository } from '../../apps/api/src/campaigns/publish-job.service';
 import { CampaignService, InMemoryCampaignRepository } from '../../apps/api/src/campaigns/campaign.service';
+import { AuditEventService, InMemoryAuditEventRepository } from '../../apps/api/src/campaigns/audit-event.service';
 
 async function createReadyTargetScenario() {
   const campaignRepo = new InMemoryCampaignRepository();
@@ -25,6 +25,8 @@ async function createReadyTargetScenario() {
     videoTitle: 'My Video',
     videoDescription: 'Description here',
     tags: ['test'],
+    playlistId: 'playlist-123',
+    thumbnailAssetId: 'thumb-123',
     privacy: 'public',
   });
 
@@ -50,6 +52,7 @@ describe('YouTube upload worker', () => {
       uploadFn: mockUpload,
       getAccessToken: async () => 'mock-access-token',
       getVideoFilePath: async () => '/storage/videos/test.mp4',
+      getThumbnailFilePath: async () => '/storage/thumbnails/thumb.jpg',
     });
 
     const result = await worker.processNext();
@@ -62,9 +65,11 @@ describe('YouTube upload worker', () => {
       expect.objectContaining({
         accessToken: 'mock-access-token',
         filePath: '/storage/videos/test.mp4',
+        thumbnailFilePath: '/storage/thumbnails/thumb.jpg',
         title: 'My Video',
         description: 'Description here',
         tags: ['test'],
+        playlistId: 'playlist-123',
         privacy: 'public',
       }),
     );
@@ -81,6 +86,7 @@ describe('YouTube upload worker', () => {
       uploadFn: mockUpload,
       getAccessToken: async () => 'mock-access-token',
       getVideoFilePath: async () => '/storage/videos/test.mp4',
+      getThumbnailFilePath: async () => '/storage/thumbnails/thumb.jpg',
     });
 
     const result = await worker.processNext();
@@ -101,6 +107,7 @@ describe('YouTube upload worker', () => {
       uploadFn: mockUpload,
       getAccessToken: async () => 'token',
       getVideoFilePath: async () => '/path/video.mp4',
+      getThumbnailFilePath: async () => '/path/thumb.jpg',
     });
 
     await worker.processNext();
@@ -109,6 +116,32 @@ describe('YouTube upload worker', () => {
     const targetRecord = updated!.campaign.targets.find((t) => t.id === target.id);
     expect(targetRecord!.status).toBe('publicado');
     expect(targetRecord!.youtubeVideoId).toBe('yt-999');
+  });
+
+  test('records a publish_completed audit event on success when audit service is available', async () => {
+    const { jobService, campaignService, campaign, target } = await createReadyTargetScenario();
+    const auditService = new AuditEventService({ repository: new InMemoryAuditEventRepository() });
+
+    const worker = new YouTubeUploadWorker({
+      jobService,
+      campaignService,
+      auditService,
+      uploadFn: vi.fn().mockResolvedValue({ videoId: 'yt-audit-success' }),
+      getAccessToken: async () => 'token',
+      getVideoFilePath: async () => '/path/video.mp4',
+      getThumbnailFilePath: async () => '/path/thumb.jpg',
+    });
+
+    await worker.processNext();
+
+    await expect(auditService.listEvents()).resolves.toEqual([
+      expect.objectContaining({
+        eventType: 'publish_completed',
+        actorEmail: 'system@internal',
+        campaignId: campaign.id,
+        targetId: target.id,
+      }),
+    ]);
   });
 
   test('updates campaign target status to erro on failure', async () => {
@@ -122,6 +155,7 @@ describe('YouTube upload worker', () => {
       uploadFn: mockUpload,
       getAccessToken: async () => 'token',
       getVideoFilePath: async () => '/path/video.mp4',
+      getThumbnailFilePath: async () => '/path/thumb.jpg',
     });
 
     await worker.processNext();
@@ -129,6 +163,94 @@ describe('YouTube upload worker', () => {
     const updated = await campaignService.getCampaign(campaign.id);
     const targetRecord = updated!.campaign.targets.find((t) => t.id === target.id);
     expect(targetRecord!.status).toBe('erro');
+  });
+
+  test('records a publish_failed audit event on failure when audit service is available', async () => {
+    const { jobService, campaignService, campaign, target } = await createReadyTargetScenario();
+    const auditService = new AuditEventService({ repository: new InMemoryAuditEventRepository() });
+
+    const worker = new YouTubeUploadWorker({
+      jobService,
+      campaignService,
+      auditService,
+      uploadFn: vi.fn().mockRejectedValue(new Error('networkError')),
+      getAccessToken: async () => 'token',
+      getVideoFilePath: async () => '/path/video.mp4',
+      getThumbnailFilePath: async () => '/path/thumb.jpg',
+    });
+
+    await worker.processNext();
+
+    await expect(auditService.listEvents()).resolves.toEqual([
+      expect.objectContaining({
+        eventType: 'publish_failed',
+        actorEmail: 'system@internal',
+        campaignId: campaign.id,
+        targetId: target.id,
+      }),
+    ]);
+  });
+
+  test('preserves uploaded youtubeVideoId when upload fails after the video was already created', async () => {
+    const { jobService, campaignService, campaign, target } = await createReadyTargetScenario();
+
+    const mockUpload: YouTubeUploadFn = vi.fn().mockRejectedValue(
+      new YouTubeUploadPartialFailureError('Video uploaded as yt-partial-999, but applying the thumbnail failed: forbidden', 'yt-partial-999'),
+    );
+
+    const worker = new YouTubeUploadWorker({
+      jobService,
+      campaignService,
+      uploadFn: mockUpload,
+      getAccessToken: async () => 'token',
+      getVideoFilePath: async () => '/path/video.mp4',
+      getThumbnailFilePath: async () => '/path/thumb.jpg',
+    });
+
+    const result = await worker.processNext();
+
+    expect(result).not.toBeNull();
+    expect(result!.status).toBe('failed');
+    expect(result!.youtubeVideoId).toBe('yt-partial-999');
+
+    const updated = await campaignService.getCampaign(campaign.id);
+    const targetRecord = updated!.campaign.targets.find((t) => t.id === target.id);
+    expect(targetRecord).toMatchObject({
+      status: 'erro',
+      youtubeVideoId: 'yt-partial-999',
+      errorMessage: 'Video uploaded as yt-partial-999, but applying the thumbnail failed: forbidden',
+    });
+  });
+
+  test('records a publish_partial_failure audit event when the video upload succeeded before a downstream step failed', async () => {
+    const { jobService, campaignService, campaign, target } = await createReadyTargetScenario();
+    const auditService = new AuditEventService({ repository: new InMemoryAuditEventRepository() });
+
+    const worker = new YouTubeUploadWorker({
+      jobService,
+      campaignService,
+      auditService,
+      uploadFn: vi.fn().mockRejectedValue(
+        new YouTubeUploadPartialFailureError(
+          'Video uploaded as yt-partial-999, but applying the thumbnail failed: forbidden',
+          'yt-partial-999',
+        ),
+      ),
+      getAccessToken: async () => 'token',
+      getVideoFilePath: async () => '/path/video.mp4',
+      getThumbnailFilePath: async () => '/path/thumb.jpg',
+    });
+
+    await worker.processNext();
+
+    await expect(auditService.listEvents()).resolves.toEqual([
+      expect.objectContaining({
+        eventType: 'publish_partial_failure',
+        actorEmail: 'system@internal',
+        campaignId: campaign.id,
+        targetId: target.id,
+      }),
+    ]);
   });
 
   test('returns null when no queued jobs', async () => {
@@ -143,6 +265,7 @@ describe('YouTube upload worker', () => {
       uploadFn: vi.fn(),
       getAccessToken: async () => 'token',
       getVideoFilePath: async () => '/path.mp4',
+      getThumbnailFilePath: async () => '/thumb.jpg',
     });
 
     const result = await worker.processNext();
@@ -191,6 +314,7 @@ describe('YouTube upload worker', () => {
       uploadFn: mockUpload,
       getAccessToken: async () => 'token',
       getVideoFilePath: async () => '/path.mp4',
+      getThumbnailFilePath: async () => '/thumb.jpg',
     });
 
     await worker.processNext();

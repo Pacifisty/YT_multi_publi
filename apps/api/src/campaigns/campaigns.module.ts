@@ -1,4 +1,5 @@
 import { SessionGuard } from '../auth/session.guard';
+import { AuditEventService, InMemoryAuditEventRepository } from './audit-event.service';
 import { CampaignService, type CampaignServiceOptions } from './campaign.service';
 import { CampaignStatusService } from './campaign-status.service';
 import { CampaignsController } from './campaigns.controller';
@@ -14,6 +15,7 @@ export interface CampaignsModuleInstance {
   launchService: LaunchService;
   statusService: CampaignStatusService;
   dashboardService: DashboardService;
+  auditService: AuditEventService;
 }
 
 export interface CampaignsModuleOptions extends CampaignServiceOptions {
@@ -24,10 +26,14 @@ export function createCampaignsModule(options: CampaignsModuleOptions = {}): Cam
   const campaignService = new CampaignService(options);
   const sessionGuard = new SessionGuard();
   const jobService = new PublishJobService(options.jobServiceOptions);
-  const launchService = new LaunchService({ campaignService, jobService });
-  const statusService = new CampaignStatusService({ campaignService, jobService });
-  const dashboardService = new DashboardService({ campaignService, jobService });
-  const campaignsController = new CampaignsController(campaignService, sessionGuard, launchService, statusService, jobService, dashboardService);
+  const auditService = new AuditEventService({
+    repository: new InMemoryAuditEventRepository(),
+    now: options.now,
+  });
+  const launchService = new LaunchService({ campaignService, jobService, now: options.now });
+  const statusService = new CampaignStatusService({ campaignService, jobService, now: options.now });
+  const dashboardService = new DashboardService({ campaignService, jobService, auditService });
+  const campaignsController = new CampaignsController(campaignService, sessionGuard, launchService, statusService, jobService, dashboardService, auditService);
 
   return {
     campaignService,
@@ -37,5 +43,6 @@ export function createCampaignsModule(options: CampaignsModuleOptions = {}): Cam
     launchService,
     statusService,
     dashboardService,
+    auditService,
   };
 }

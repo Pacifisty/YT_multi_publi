@@ -1,12 +1,16 @@
 import type { PublishJobRecord, PublishJobService } from './publish-job.service';
 import type { CampaignService, CampaignTargetRecord } from './campaign.service';
+import type { AuditEventService } from './audit-event.service';
+import { isChannelTokenResolverError } from '../integrations/youtube/channel-token-resolver';
 
 export interface UploadContext {
   accessToken: string;
   filePath: string;
+  thumbnailFilePath: string | null;
   title: string;
   description: string;
   tags: string[];
+  playlistId: string | null;
   privacy: string;
 }
 
@@ -16,15 +20,33 @@ export interface UploadResult {
 
 export type YouTubeUploadFn = (context: UploadContext) => Promise<UploadResult>;
 
+export class YouTubeUploadPartialFailureError extends Error {
+  readonly videoId: string;
+
+  constructor(message: string, videoId: string) {
+    super(message);
+    this.name = 'YouTubeUploadPartialFailureError';
+    this.videoId = videoId;
+  }
+}
+
 export interface YouTubeUploadWorkerOptions {
   jobService: PublishJobService;
   campaignService: CampaignService;
+  auditService?: AuditEventService;
   uploadFn: YouTubeUploadFn;
   getAccessToken: (channelId: string) => Promise<string>;
   getVideoFilePath: (videoAssetId: string) => Promise<string>;
+  getThumbnailFilePath?: (thumbnailAssetId: string) => Promise<string>;
 }
 
+const SYSTEM_AUDIT_ACTOR_EMAIL = 'system@internal';
+
 function normalizeUploadErrorMessage(error: unknown): string {
+  if (isChannelTokenResolverError(error) && error.code === 'REAUTH_REQUIRED') {
+    return 'REAUTH_REQUIRED';
+  }
+
   const message = error instanceof Error
     ? error.message
     : typeof error === 'string'
@@ -37,16 +59,20 @@ function normalizeUploadErrorMessage(error: unknown): string {
 export class YouTubeUploadWorker {
   private readonly jobService: PublishJobService;
   private readonly campaignService: CampaignService;
+  private readonly auditService?: AuditEventService;
   private readonly uploadFn: YouTubeUploadFn;
   private readonly getAccessToken: (channelId: string) => Promise<string>;
   private readonly getVideoFilePath: (videoAssetId: string) => Promise<string>;
+  private readonly getThumbnailFilePath?: (thumbnailAssetId: string) => Promise<string>;
 
   constructor(options: YouTubeUploadWorkerOptions) {
     this.jobService = options.jobService;
     this.campaignService = options.campaignService;
+    this.auditService = options.auditService;
     this.uploadFn = options.uploadFn;
     this.getAccessToken = options.getAccessToken;
     this.getVideoFilePath = options.getVideoFilePath;
+    this.getThumbnailFilePath = options.getThumbnailFilePath;
   }
 
   async processNext(): Promise<PublishJobRecord | null> {
@@ -68,13 +94,18 @@ export class YouTubeUploadWorker {
     try {
       const accessToken = await this.getAccessToken(target.channelId);
       const filePath = await this.getVideoFilePath(campaignResult.campaign.videoAssetId);
+      const thumbnailFilePath = target.thumbnailAssetId && this.getThumbnailFilePath
+        ? await this.getThumbnailFilePath(target.thumbnailAssetId)
+        : null;
 
       const result = await this.uploadFn({
         accessToken,
         filePath,
+        thumbnailFilePath,
         title: target.videoTitle,
         description: target.videoDescription,
         tags: target.tags,
+        playlistId: target.playlistId,
         privacy: target.privacy,
       });
 
@@ -86,17 +117,39 @@ export class YouTubeUploadWorker {
         youtubeVideoId: result.videoId,
       });
 
+      if (this.auditService) {
+        await this.auditService.record({
+          eventType: 'publish_completed',
+          actorEmail: SYSTEM_AUDIT_ACTOR_EMAIL,
+          campaignId: target.campaignId,
+          targetId: target.id,
+        });
+      }
+
       return completedJob;
     } catch (error) {
       const errorMessage = normalizeUploadErrorMessage(error);
+      const uploadedVideoId = error instanceof YouTubeUploadPartialFailureError
+        ? error.videoId
+        : undefined;
 
       // Mark job failed
-      const failedJob = await this.jobService.markFailed(job.id, errorMessage);
+      const failedJob = await this.jobService.markFailed(job.id, errorMessage, uploadedVideoId);
 
       // Update target status
       await this.campaignService.updateTargetStatus(target.campaignId, target.id, 'erro', {
         errorMessage,
+        youtubeVideoId: uploadedVideoId,
       });
+
+      if (this.auditService) {
+        await this.auditService.record({
+          eventType: error instanceof YouTubeUploadPartialFailureError ? 'publish_partial_failure' : 'publish_failed',
+          actorEmail: SYSTEM_AUDIT_ACTOR_EMAIL,
+          campaignId: target.campaignId,
+          targetId: target.id,
+        });
+      }
 
       return failedJob;
     }
@@ -145,6 +198,46 @@ export async function youtubeResumableUpload(context: UploadContext): Promise<Up
 
   if (!response.data.id) {
     throw new Error('YouTube API did not return a video ID');
+  }
+
+  if (context.playlistId) {
+    try {
+      await youtube.playlistItems.insert({
+        part: ['snippet'],
+        requestBody: {
+          snippet: {
+            playlistId: context.playlistId,
+            resourceId: {
+              kind: 'youtube#video',
+              videoId: response.data.id,
+            },
+          },
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      throw new YouTubeUploadPartialFailureError(
+        `Video uploaded as ${response.data.id}, but adding it to playlist failed: ${message}`,
+        response.data.id,
+      );
+    }
+  }
+
+  if (context.thumbnailFilePath) {
+    try {
+      await youtube.thumbnails.set({
+        videoId: response.data.id,
+        media: {
+          body: createReadStream(context.thumbnailFilePath),
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      throw new YouTubeUploadPartialFailureError(
+        `Video uploaded as ${response.data.id}, but applying the thumbnail failed: ${message}`,
+        response.data.id,
+      );
+    }
   }
 
   return { videoId: response.data.id };

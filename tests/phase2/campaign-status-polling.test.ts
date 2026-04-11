@@ -115,4 +115,89 @@ describe('campaign status polling', () => {
       total: 2,
     });
   });
+
+  test('surfaces explicit post-upload warning details for partial failures', async () => {
+    const { campaignService, jobService, campaign, t1, jobs } = await setupWithLaunchedCampaign();
+    const statusService = new CampaignStatusService({ campaignService, jobService });
+
+    await jobService.pickNext();
+    await jobService.markFailed(
+      jobs[0].id,
+      'Video uploaded as yt-partial-123, but applying the thumbnail failed: forbidden',
+      'yt-partial-123',
+    );
+    await campaignService.updateTargetStatus(campaign.id, t1.id, 'erro', {
+      youtubeVideoId: 'yt-partial-123',
+      errorMessage: 'Video uploaded as yt-partial-123, but applying the thumbnail failed: forbidden',
+    });
+
+    const result = await statusService.getStatus(campaign.id);
+    const t1Status = result!.targets.find((t) => t.targetId === t1.id);
+
+    expect(t1Status).toMatchObject({
+      status: 'erro',
+      youtubeVideoId: 'yt-partial-123',
+      hasPostUploadWarning: true,
+      reviewYoutubeUrl: 'https://www.youtube.com/watch?v=yt-partial-123',
+    });
+  });
+
+  test('marks future publishAt targets as scheduledPending and disables polling when nothing is actively running', async () => {
+    const campaignRepo = new InMemoryCampaignRepository();
+    const campaignService = new CampaignService({ repository: campaignRepo });
+    const jobRepo = new InMemoryPublishJobRepository();
+    const jobService = new PublishJobService({ repository: jobRepo });
+    const statusService = new CampaignStatusService({
+      campaignService,
+      jobService,
+      now: () => new Date('2026-04-10T16:00:00Z'),
+    });
+
+    const { campaign } = await campaignService.createCampaign({
+      title: 'Scheduled Status',
+      videoAssetId: 'asset-1',
+    });
+    await campaignService.addTarget(campaign.id, {
+      channelId: 'ch-1',
+      videoTitle: 'Scheduled Target',
+      videoDescription: 'Wait for publishAt',
+      publishAt: '2026-04-10T18:00:00Z',
+    });
+    await campaignService.markReady(campaign.id);
+    await campaignService.launch(campaign.id);
+
+    const result = await statusService.getStatus(campaign.id);
+
+    expect(result).not.toBeNull();
+    expect(result!.shouldPoll).toBe(false);
+    expect(result!.nextScheduledAt).toBe('2026-04-10T18:00:00Z');
+    expect(result!.targets[0]).toMatchObject({
+      status: 'aguardando',
+      publishAt: '2026-04-10T18:00:00Z',
+      scheduledPending: true,
+      latestJobStatus: null,
+    });
+  });
+
+  test('marks REAUTH_REQUIRED failures explicitly in target status metadata', async () => {
+    const { campaignService, jobService, campaign, t1, jobs } = await setupWithLaunchedCampaign();
+    const statusService = new CampaignStatusService({ campaignService, jobService });
+
+    await jobService.pickNext();
+    await jobService.markFailed(jobs[0].id, 'REAUTH_REQUIRED');
+    await campaignService.updateTargetStatus(campaign.id, t1.id, 'erro', {
+      errorMessage: 'REAUTH_REQUIRED',
+    });
+
+    const result = await statusService.getStatus(campaign.id);
+    const t1Status = result!.targets.find((t) => t.targetId === t1.id);
+
+    expect(t1Status).toMatchObject({
+      status: 'erro',
+      errorMessage: 'REAUTH_REQUIRED',
+      reauthRequired: true,
+      hasPostUploadWarning: false,
+      reviewYoutubeUrl: null,
+    });
+  });
 });

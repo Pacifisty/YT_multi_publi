@@ -49,5 +49,31 @@ describe('campaign stale youtube id hardening', () => {
     const view = buildCampaignDetailView(data);
 
     expect(view.targets[0].youtubeUrl).toBeUndefined();
+    expect(view.targets[0].partialFailureYoutubeUrl).toBeUndefined();
+  });
+
+  test('updateTargetStatus preserves youtubeVideoId on erro when a real uploaded video id is provided', async () => {
+    const service = new CampaignService({ repository: new InMemoryCampaignRepository() });
+
+    const { campaign } = await service.createCampaign({ title: 'Partial Failure', videoAssetId: 'asset-1' });
+    const { target } = await service.addTarget(campaign.id, {
+      channelId: 'ch-1',
+      videoTitle: 'Video',
+      videoDescription: 'Desc',
+    });
+
+    await service.markReady(campaign.id);
+    await service.launch(campaign.id);
+    await service.updateTargetStatus(campaign.id, target.id, 'erro', {
+      youtubeVideoId: 'yt-real-123',
+      errorMessage: 'Video uploaded as yt-real-123, but adding it to playlist failed: forbidden',
+    });
+
+    const persisted = await service.getCampaign(campaign.id);
+    expect(persisted!.campaign.targets[0]).toMatchObject({
+      status: 'erro',
+      youtubeVideoId: 'yt-real-123',
+      errorMessage: 'Video uploaded as yt-real-123, but adding it to playlist failed: forbidden',
+    });
   });
 });

@@ -12,6 +12,7 @@ describe('campaigns module wires all services', () => {
     expect(mod.jobService).toBeDefined();
     expect(mod.launchService).toBeDefined();
     expect(mod.statusService).toBeDefined();
+    expect(mod.auditService).toBeDefined();
   });
 
   test('controller launch uses LaunchService (enqueues jobs)', async () => {
@@ -34,6 +35,15 @@ describe('campaigns module wires all services', () => {
     const jobs = await mod.jobService.getJobsForTarget(target.id);
     expect(jobs).toHaveLength(1);
     expect(jobs[0].status).toBe('queued');
+
+    const auditEvents = await mod.auditService.listEvents();
+    expect(auditEvents).toHaveLength(1);
+    expect(auditEvents[0]).toMatchObject({
+      eventType: 'launch_campaign',
+      actorEmail: 'admin@test.com',
+      campaignId: campaign.id,
+      targetId: null,
+    });
   });
 
   test('controller getStatus returns live data', async () => {

@@ -8,8 +8,11 @@ import {
 import { CampaignService, InMemoryCampaignRepository } from '../../apps/api/src/campaigns/campaign.service';
 import { PublishJobService } from '../../apps/api/src/campaigns/publish-job.service';
 import { LaunchService } from '../../apps/api/src/campaigns/launch.service';
+import { AuditEventService, InMemoryAuditEventRepository } from '../../apps/api/src/campaigns/audit-event.service';
 import type { YouTubeUploadFn, UploadContext } from '../../apps/api/src/campaigns/youtube-upload.worker';
+import { YouTubeUploadPartialFailureError } from '../../apps/api/src/campaigns/youtube-upload.worker';
 import type { ChannelTokenResolver, VideoFileResolver } from '../../apps/api/src/integrations/youtube/youtube-upload.service';
+import { ChannelTokenResolverError } from '../../apps/api/src/integrations/youtube/channel-token-resolver';
 
 function buildTestDeps() {
   const campaignService = new CampaignService();
@@ -183,6 +186,41 @@ describe('Integrated worker — createIntegratedWorker', () => {
     expect(result!.errorMessage).toBe('Token expired and refresh failed');
   });
 
+  test('normalizes reauth-required token resolution failures into deterministic job errors', async () => {
+    const deps = buildTestDeps();
+    const { campaign, target } = await createCampaignWithTarget(deps.campaignService);
+
+    await deps.launchService.launchCampaign(campaign.id);
+
+    (deps.channelTokenResolver.resolve as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new ChannelTokenResolverError('REAUTH_REQUIRED', {
+        channelId: 'channel-001',
+        accountId: 'acc-reauth',
+      }),
+    );
+
+    const instance = createIntegratedWorker({
+      campaignService: deps.campaignService,
+      jobService: deps.jobService,
+      uploadFn: deps.uploadFn,
+      channelTokenResolver: deps.channelTokenResolver,
+      videoFileResolver: deps.videoFileResolver,
+    });
+
+    const result = await instance.worker.processNext();
+
+    expect(result).not.toBeNull();
+    expect(result!.status).toBe('failed');
+    expect(result!.errorMessage).toBe('REAUTH_REQUIRED');
+
+    const updated = await deps.campaignService.getCampaign(campaign.id);
+    const updatedTarget = updated!.campaign.targets.find((t) => t.id === target.id);
+    expect(updatedTarget).toMatchObject({
+      status: 'erro',
+      errorMessage: 'REAUTH_REQUIRED',
+    });
+  });
+
   test('handles file resolution failure', async () => {
     const deps = buildTestDeps();
     const { campaign } = await createCampaignWithTarget(deps.campaignService);
@@ -227,5 +265,67 @@ describe('Integrated worker — createIntegratedWorker', () => {
     const updated = await deps.campaignService.getCampaign(campaign.id);
     const updatedTarget = updated!.campaign.targets.find(t => t.id === target.id);
     expect(updatedTarget!.status).toBe('publicado');
+  });
+
+  test('wires audit service through the integrated worker for publish completion events', async () => {
+    const deps = buildTestDeps();
+    const auditService = new AuditEventService({ repository: new InMemoryAuditEventRepository() });
+    const { campaign, target } = await createCampaignWithTarget(deps.campaignService);
+
+    await deps.launchService.launchCampaign(campaign.id);
+
+    const instance = createIntegratedWorker({
+      campaignService: deps.campaignService,
+      jobService: deps.jobService,
+      auditService,
+      uploadFn: deps.uploadFn,
+      channelTokenResolver: deps.channelTokenResolver,
+      videoFileResolver: deps.videoFileResolver,
+    });
+
+    await instance.worker.processNext();
+
+    await expect(auditService.listEvents()).resolves.toEqual([
+      expect.objectContaining({
+        eventType: 'publish_completed',
+        actorEmail: 'system@internal',
+        campaignId: campaign.id,
+        targetId: target.id,
+      }),
+    ]);
+  });
+
+  test('wires audit service through the integrated worker for publish partial failures', async () => {
+    const deps = buildTestDeps();
+    const auditService = new AuditEventService({ repository: new InMemoryAuditEventRepository() });
+    const { campaign, target } = await createCampaignWithTarget(deps.campaignService);
+
+    await deps.launchService.launchCampaign(campaign.id);
+    (deps.uploadFn as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new YouTubeUploadPartialFailureError(
+        'Video uploaded as yt-partial-999, but applying the thumbnail failed: forbidden',
+        'yt-partial-999',
+      ),
+    );
+
+    const instance = createIntegratedWorker({
+      campaignService: deps.campaignService,
+      jobService: deps.jobService,
+      auditService,
+      uploadFn: deps.uploadFn,
+      channelTokenResolver: deps.channelTokenResolver,
+      videoFileResolver: deps.videoFileResolver,
+    });
+
+    await instance.worker.processNext();
+
+    await expect(auditService.listEvents()).resolves.toEqual([
+      expect.objectContaining({
+        eventType: 'publish_partial_failure',
+        actorEmail: 'system@internal',
+        campaignId: campaign.id,
+        targetId: target.id,
+      }),
+    ]);
   });
 });

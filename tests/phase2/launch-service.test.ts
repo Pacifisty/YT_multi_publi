@@ -71,4 +71,44 @@ describe('launch service', () => {
 
     expect('error' in result).toBe(true);
   });
+
+  test('enqueues only targets that are due at launch time', async () => {
+    const now = new Date('2026-04-10T16:00:00Z');
+    const campaignRepo = new InMemoryCampaignRepository();
+    const campaignService = new CampaignService({ repository: campaignRepo });
+    const jobRepo = new InMemoryPublishJobRepository();
+    const jobService = new PublishJobService({ repository: jobRepo });
+
+    const { campaign } = await campaignService.createCampaign({
+      title: 'Scheduled Fan-Out',
+      videoAssetId: 'asset-1',
+    });
+
+    const { target: immediateTarget } = await campaignService.addTarget(campaign.id, {
+      channelId: 'ch-1',
+      videoTitle: 'Immediate',
+      videoDescription: 'Run now',
+    });
+    const { target: futureTarget } = await campaignService.addTarget(campaign.id, {
+      channelId: 'ch-2',
+      videoTitle: 'Future',
+      videoDescription: 'Run later',
+      publishAt: '2026-04-10T17:00:00Z',
+    });
+
+    await campaignService.markReady(campaign.id);
+
+    const launchService = new LaunchService({ campaignService, jobService, now: () => now });
+    const result = await launchService.launchCampaign(campaign.id);
+
+    expect('campaign' in result).toBe(true);
+    if ('campaign' in result) {
+      expect(result.campaign.status).toBe('launching');
+
+      const immediateJobs = await jobService.getJobsForTarget(immediateTarget.id);
+      const futureJobs = await jobService.getJobsForTarget(futureTarget.id);
+      expect(immediateJobs).toHaveLength(1);
+      expect(futureJobs).toHaveLength(0);
+    }
+  });
 });

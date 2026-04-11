@@ -9,7 +9,7 @@ function setup() {
   const campaignsModule = createCampaignsModule();
   const { campaignService } = campaignsModule;
   const router = createApiRouter({ campaignsModule });
-  return { campaignService, router };
+  return { campaignService, router, campaignsModule };
 }
 
 async function seedWithTargets(campaignService: ReturnType<typeof setup>['campaignService']) {
@@ -189,6 +189,28 @@ describe('Campaign Clone', () => {
 
       const response = await router.handle(request);
       expect(response.body.campaign.title).toBe('My Custom Clone');
+    });
+
+    it('records an audit event when a campaign is cloned', async () => {
+      const { campaignService, router, campaignsModule } = setup();
+      const original = await seedWithTargets(campaignService);
+
+      const request: ApiRequest = {
+        method: 'POST',
+        path: `/api/campaigns/${original.id}/clone`,
+        session: authedSession(),
+      };
+
+      const response = await router.handle(request);
+      expect(response.status).toBe(201);
+      const auditEvents = await campaignsModule.auditService.listEvents();
+      expect(auditEvents).toHaveLength(1);
+      expect(auditEvents[0]).toMatchObject({
+        eventType: 'clone_campaign',
+        actorEmail: 'admin@test.com',
+        campaignId: original.id,
+        targetId: null,
+      });
     });
   });
 });

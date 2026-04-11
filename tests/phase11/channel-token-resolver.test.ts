@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from 'vitest';
 
 import {
   InMemoryChannelTokenResolver,
+  ChannelTokenResolverError,
 } from '../../apps/api/src/integrations/youtube/channel-token-resolver';
 import type { ConnectedAccountRecord } from '../../apps/api/src/accounts/accounts.service';
 
@@ -44,7 +45,11 @@ describe('InMemoryChannelTokenResolver', () => {
       decryptToken,
     });
 
-    await expect(resolver.resolve('ch-bad')).rejects.toThrow('No connected account found');
+    await expect(resolver.resolve('ch-bad')).rejects.toMatchObject({
+      name: 'ChannelTokenResolverError',
+      code: 'CHANNEL_NOT_FOUND',
+      channelId: 'ch-bad',
+    } satisfies Partial<ChannelTokenResolverError>);
   });
 
   test('throws when account requires reauthorization', async () => {
@@ -70,6 +75,11 @@ describe('InMemoryChannelTokenResolver', () => {
       decryptToken,
     });
 
-    await expect(resolver.resolve('ch-1')).rejects.toThrow('reauthorization');
+    await expect(resolver.resolve('ch-1')).rejects.toMatchObject({
+      name: 'ChannelTokenResolverError',
+      code: 'REAUTH_REQUIRED',
+      channelId: 'ch-1',
+      accountId: 'acc-1',
+    } satisfies Partial<ChannelTokenResolverError>);
   });
 });

@@ -7,6 +7,8 @@ export interface CampaignTargetRecord {
   videoTitle: string;
   videoDescription: string;
   tags: string[];
+  publishAt: string | null;
+  playlistId: string | null;
   privacy: string;
   thumbnailAssetId: string | null;
   status: 'aguardando' | 'enviando' | 'publicado' | 'erro';
@@ -39,6 +41,8 @@ export interface AddTargetInput {
   videoTitle: string;
   videoDescription: string;
   tags?: string[];
+  publishAt?: string;
+  playlistId?: string;
   privacy?: string;
   thumbnailAssetId?: string;
 }
@@ -115,6 +119,8 @@ export interface CampaignServiceOptions {
   now?: () => Date;
 }
 
+export const DUPLICATE_CAMPAIGN_TARGET_CHANNEL_ERROR = 'Target for this channel already exists in the campaign';
+
 export class CampaignService {
   private readonly repository: CampaignRepository;
   private readonly now: () => Date;
@@ -152,6 +158,9 @@ export class CampaignService {
     if (!this.canMutateTargets(campaign.status)) {
       throw new Error('Cannot add targets to an active campaign');
     }
+    if (campaign.targets.some((target) => target.channelId === input.channelId)) {
+      throw new Error(DUPLICATE_CAMPAIGN_TARGET_CHANNEL_ERROR);
+    }
 
     const nowIso = this.now().toISOString();
     const target: CampaignTargetRecord = {
@@ -161,6 +170,8 @@ export class CampaignService {
       videoTitle: input.videoTitle,
       videoDescription: input.videoDescription,
       tags: input.tags ?? [],
+      publishAt: input.publishAt ?? null,
+      playlistId: input.playlistId ?? null,
       privacy: input.privacy ?? 'private',
       thumbnailAssetId: input.thumbnailAssetId ?? null,
       status: 'aguardando',
@@ -204,7 +215,7 @@ export class CampaignService {
   async updateTarget(
     campaignId: string,
     targetId: string,
-    updates: { videoTitle?: string; videoDescription?: string; tags?: string[]; privacy?: string; thumbnailAssetId?: string },
+    updates: { videoTitle?: string; videoDescription?: string; tags?: string[]; publishAt?: string; playlistId?: string; privacy?: string; thumbnailAssetId?: string },
   ): Promise<{ target: CampaignTargetRecord } | { error: 'NOT_FOUND' | 'CAMPAIGN_ACTIVE' }> {
     const campaign = await this.repository.findById(campaignId);
     if (!campaign) return { error: 'NOT_FOUND' };
@@ -214,6 +225,8 @@ export class CampaignService {
     if (updates.videoTitle !== undefined) filtered.videoTitle = updates.videoTitle;
     if (updates.videoDescription !== undefined) filtered.videoDescription = updates.videoDescription;
     if (updates.tags !== undefined) filtered.tags = updates.tags;
+    if (updates.publishAt !== undefined) filtered.publishAt = updates.publishAt;
+    if (updates.playlistId !== undefined) filtered.playlistId = updates.playlistId;
     if (updates.privacy !== undefined) filtered.privacy = updates.privacy;
     if (updates.thumbnailAssetId !== undefined) filtered.thumbnailAssetId = updates.thumbnailAssetId;
     filtered.updatedAt = this.now().toISOString();
@@ -261,6 +274,8 @@ export class CampaignService {
       videoTitle: t.videoTitle,
       videoDescription: t.videoDescription,
       tags: [...t.tags],
+      publishAt: t.publishAt,
+      playlistId: t.playlistId,
       privacy: t.privacy,
       thumbnailAssetId: t.thumbnailAssetId,
       status: 'aguardando' as const,
@@ -355,10 +370,14 @@ export class CampaignService {
       updatedAt: this.now().toISOString(),
     };
 
-    if (status !== 'publicado') {
-      updates.youtubeVideoId = null;
-    } else {
+    if (status === 'publicado') {
       updates.youtubeVideoId = nextPublishedVideoId;
+    } else if (status === 'erro') {
+      updates.youtubeVideoId = typeof extra?.youtubeVideoId === 'string' && extra.youtubeVideoId.trim()
+        ? extra.youtubeVideoId.trim()
+        : null;
+    } else {
+      updates.youtubeVideoId = null;
     }
 
     if (status !== 'erro') {

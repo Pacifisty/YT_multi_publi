@@ -1,7 +1,8 @@
 import type { SessionRequestLike } from '../auth/session.guard';
 import { SessionGuard } from '../auth/session.guard';
+import type { AuditEventRecord, AuditEventService } from './audit-event.service';
 import type { CampaignRecord, CampaignTargetRecord } from './campaign.service';
-import { CampaignService } from './campaign.service';
+import { CampaignService, DUPLICATE_CAMPAIGN_TARGET_CHANNEL_ERROR } from './campaign.service';
 import type { LaunchService } from './launch.service';
 import type { CampaignStatusService } from './campaign-status.service';
 import type { PublishJobService, PublishJobRecord } from './publish-job.service';
@@ -97,6 +98,84 @@ function canMutateTargets(status: CampaignRecord['status']): boolean {
   return status === 'draft' || status === 'ready';
 }
 
+interface TargetCreateRequestBody {
+  channelId?: string;
+  videoTitle?: string;
+  videoDescription?: string;
+  tags?: string[];
+  publishAt?: string;
+  playlistId?: string;
+  privacy?: string;
+  thumbnailAssetId?: string;
+}
+
+function normalizeTargetCreateBody(body: TargetCreateRequestBody | undefined):
+  | {
+    ok: true;
+    value: {
+      channelId: string;
+      videoTitle: string;
+      videoDescription: string;
+      tags?: string[];
+      publishAt?: string;
+      playlistId?: string;
+      privacy?: string;
+      thumbnailAssetId?: string;
+    };
+  }
+  | { ok: false; error: string } {
+  const channelId = normalizeNonEmptyString(body?.channelId);
+  const videoTitle = normalizeNonEmptyString(body?.videoTitle);
+  const videoDescription = normalizeNonEmptyString(body?.videoDescription);
+  const publishAt = normalizeScheduledAt(body?.publishAt);
+  const playlistId = body?.playlistId === undefined ? undefined : normalizeNonEmptyString(body.playlistId);
+  const thumbnailAssetId = body?.thumbnailAssetId === undefined ? undefined : normalizeNonEmptyString(body.thumbnailAssetId);
+
+  if (!channelId || !videoTitle || !videoDescription) {
+    return { ok: false, error: 'Missing required fields: channelId, videoTitle, videoDescription' };
+  }
+
+  if (body?.thumbnailAssetId !== undefined && !thumbnailAssetId) {
+    return { ok: false, error: 'Invalid thumbnailAssetId: value must not be blank' };
+  }
+
+  if (body?.publishAt !== undefined && !publishAt) {
+    return { ok: false, error: 'Invalid publishAt: use a valid date-time string' };
+  }
+
+  if (body?.playlistId !== undefined && !playlistId) {
+    return { ok: false, error: 'Invalid playlistId: value must not be blank' };
+  }
+
+  const privacy = body?.privacy === undefined ? undefined : normalizePrivacyValue(body.privacy);
+  if (body?.privacy !== undefined && !privacy) {
+    return { ok: false, error: 'Invalid privacy value. Use public, unlisted, or private.' };
+  }
+
+  const tags = normalizeTags(body?.tags);
+  if (body?.tags !== undefined && tags === null) {
+    return { ok: false, error: 'Invalid tags payload. Use an array of strings.' };
+  }
+
+  return {
+    ok: true,
+    value: {
+      channelId,
+      videoTitle,
+      videoDescription,
+      tags: tags ?? undefined,
+      publishAt: publishAt ?? undefined,
+      playlistId,
+      privacy,
+      thumbnailAssetId,
+    },
+  };
+}
+
+function isDuplicateTargetChannelError(error: unknown): boolean {
+  return error instanceof Error && error.message === DUPLICATE_CAMPAIGN_TARGET_CHANNEL_ERROR;
+}
+
 export class CampaignsController {
   constructor(
     private readonly campaignService: CampaignService,
@@ -105,6 +184,7 @@ export class CampaignsController {
     private readonly statusService?: CampaignStatusService,
     private readonly jobService?: PublishJobService,
     private readonly dashboardService?: DashboardService,
+    private readonly auditService?: AuditEventService,
   ) {}
 
   async create(request: CampaignsRequest): Promise<ControllerResponse<{ campaign?: CampaignRecord; error?: string }>> {
@@ -201,50 +281,95 @@ export class CampaignsController {
       return { status: 400, body: { error: 'Cannot add targets to an active campaign' } };
     }
 
-    const body = request.body as {
-      channelId?: string;
-      videoTitle?: string;
-      videoDescription?: string;
-      tags?: string[];
-      privacy?: string;
-      thumbnailAssetId?: string;
-    } | undefined;
-
-    const channelId = normalizeNonEmptyString(body?.channelId);
-    const videoTitle = normalizeNonEmptyString(body?.videoTitle);
-    const videoDescription = normalizeNonEmptyString(body?.videoDescription);
-    const thumbnailAssetId = body?.thumbnailAssetId === undefined ? undefined : normalizeNonEmptyString(body.thumbnailAssetId);
-
-    if (!channelId || !videoTitle || !videoDescription) {
-      return { status: 400, body: { error: 'Missing required fields: channelId, videoTitle, videoDescription' } };
-    }
-
-    if (body?.thumbnailAssetId !== undefined && !thumbnailAssetId) {
-      return { status: 400, body: { error: 'Invalid thumbnailAssetId: value must not be blank' } };
-    }
-
-    const privacy = body?.privacy === undefined ? undefined : normalizePrivacyValue(body.privacy);
-    if (body?.privacy !== undefined && !privacy) {
-      return { status: 400, body: { error: 'Invalid privacy value. Use public, unlisted, or private.' } };
-    }
-
-    const tags = normalizeTags(body?.tags);
-    if (body?.tags !== undefined && tags === null) {
-      return { status: 400, body: { error: 'Invalid tags payload. Use an array of strings.' } };
+    const normalizedBody = normalizeTargetCreateBody(request.body as TargetCreateRequestBody | undefined);
+    if (!normalizedBody.ok) {
+      return { status: 400, body: { error: normalizedBody.error } };
     }
 
     try {
-      const result = await this.campaignService.addTarget(campaignId, {
-        channelId,
-        videoTitle,
-        videoDescription,
-        tags: tags ?? undefined,
-        privacy,
-        thumbnailAssetId,
-      });
+      const result = await this.campaignService.addTarget(campaignId, normalizedBody.value);
+
+      if (request.session?.adminUser?.email && this.auditService) {
+        await this.auditService.record({
+          eventType: 'add_target',
+          actorEmail: request.session.adminUser.email,
+          campaignId,
+          targetId: result.target.id,
+        });
+      }
 
       return { status: 201, body: result };
-    } catch {
+    } catch (error) {
+      if (isDuplicateTargetChannelError(error)) {
+        return { status: 400, body: { error: DUPLICATE_CAMPAIGN_TARGET_CHANNEL_ERROR } };
+      }
+      return { status: 404, body: { error: 'Campaign not found' } };
+    }
+  }
+
+  async addTargetsBulk(request: CampaignsRequest): Promise<ControllerResponse<{ targets?: CampaignTargetRecord[]; error?: string }>> {
+    const guardResult = this.sessionGuard.check(request);
+    if (!guardResult.allowed) {
+      return { status: guardResult.status, body: { error: guardResult.reason } };
+    }
+
+    const campaignId = request.params?.id;
+    if (!campaignId) {
+      return { status: 400, body: { error: 'Missing campaign id' } };
+    }
+
+    const campaignResult = await this.campaignService.getCampaign(campaignId);
+    if (!campaignResult) {
+      return { status: 404, body: { error: 'Campaign not found' } };
+    }
+
+    if (!canMutateTargets(campaignResult.campaign.status)) {
+      return { status: 400, body: { error: 'Cannot add targets to an active campaign' } };
+    }
+
+    const body = request.body as { targets?: TargetCreateRequestBody[] } | undefined;
+    if (!Array.isArray(body?.targets) || body.targets.length === 0) {
+      return { status: 400, body: { error: 'Invalid targets payload. Use a non-empty array.' } };
+    }
+
+    const normalizedTargets = [];
+    const seenChannelIds = new Set<string>();
+    const existingChannelIds = new Set(campaignResult.campaign.targets.map((target) => target.channelId));
+    for (let index = 0; index < body.targets.length; index += 1) {
+      const normalizedTarget = normalizeTargetCreateBody(body.targets[index]);
+      if (!normalizedTarget.ok) {
+        return { status: 400, body: { error: `Invalid target at index ${index}: ${normalizedTarget.error}` } };
+      }
+      if (seenChannelIds.has(normalizedTarget.value.channelId)) {
+        return { status: 400, body: { error: `Duplicate channelId in targets payload: ${normalizedTarget.value.channelId}` } };
+      }
+      if (existingChannelIds.has(normalizedTarget.value.channelId)) {
+        return { status: 400, body: { error: `Target for channel already exists in campaign: ${normalizedTarget.value.channelId}` } };
+      }
+      seenChannelIds.add(normalizedTarget.value.channelId);
+      normalizedTargets.push(normalizedTarget.value);
+    }
+
+    try {
+      const createdTargets: CampaignTargetRecord[] = [];
+      for (const normalizedTarget of normalizedTargets) {
+        const result = await this.campaignService.addTarget(campaignId, normalizedTarget);
+        createdTargets.push(result.target);
+      }
+
+      if (request.session?.adminUser?.email && this.auditService) {
+        await this.auditService.record({
+          eventType: 'add_targets_bulk',
+          actorEmail: request.session.adminUser.email,
+          campaignId,
+        });
+      }
+
+      return { status: 201, body: { targets: createdTargets } };
+    } catch (error) {
+      if (isDuplicateTargetChannelError(error)) {
+        return { status: 400, body: { error: DUPLICATE_CAMPAIGN_TARGET_CHANNEL_ERROR } };
+      }
       return { status: 404, body: { error: 'Campaign not found' } };
     }
   }
@@ -269,6 +394,14 @@ export class CampaignsController {
         return { status: 404, body: { error: 'Campaign not found' } };
       }
       return { status: 400, body: { error: `Cannot launch: campaign is not ready (${result.error})` } };
+    }
+
+    if (request.session?.adminUser?.email && this.auditService) {
+      await this.auditService.record({
+        eventType: 'launch_campaign',
+        actorEmail: request.session.adminUser.email,
+        campaignId,
+      });
     }
 
     return { status: 200, body: result };
@@ -323,6 +456,15 @@ export class CampaignsController {
       return { status: 404, body: { error: 'Target not found' } };
     }
 
+    if (request.session?.adminUser?.email && this.auditService) {
+      await this.auditService.record({
+        eventType: 'remove_target',
+        actorEmail: request.session.adminUser.email,
+        campaignId,
+        targetId,
+      });
+    }
+
     return { status: 200, body: {} };
   }
 
@@ -351,6 +493,8 @@ export class CampaignsController {
       videoTitle?: string;
       videoDescription?: string;
       tags?: string[];
+      publishAt?: string;
+      playlistId?: string;
       privacy?: string;
       thumbnailAssetId?: string;
     } | undefined;
@@ -361,6 +505,16 @@ export class CampaignsController {
 
     if (body?.videoDescription !== undefined && !normalizeNonEmptyString(body.videoDescription)) {
       return { status: 400, body: { error: 'Invalid target update: text fields must not be blank' } };
+    }
+
+    const playlistId = body?.playlistId === undefined ? undefined : normalizeNonEmptyString(body.playlistId);
+    if (body?.playlistId !== undefined && !playlistId) {
+      return { status: 400, body: { error: 'Invalid playlistId: value must not be blank' } };
+    }
+
+    const publishAt = normalizeScheduledAt(body?.publishAt);
+    if (body?.publishAt !== undefined && !publishAt) {
+      return { status: 400, body: { error: 'Invalid publishAt: use a valid date-time string' } };
     }
 
     const thumbnailAssetId = body?.thumbnailAssetId === undefined ? undefined : normalizeNonEmptyString(body.thumbnailAssetId);
@@ -379,7 +533,7 @@ export class CampaignsController {
     }
 
     const hasUpdates = body && (body.videoTitle !== undefined || body.videoDescription !== undefined ||
-      body.tags !== undefined || body.privacy !== undefined || body.thumbnailAssetId !== undefined);
+      body.tags !== undefined || body.publishAt !== undefined || body.playlistId !== undefined || body.privacy !== undefined || body.thumbnailAssetId !== undefined);
     if (!hasUpdates) {
       return { status: 400, body: { error: 'No updatable fields provided' } };
     }
@@ -389,11 +543,22 @@ export class CampaignsController {
       videoTitle: body?.videoTitle !== undefined ? normalizeNonEmptyString(body.videoTitle) : undefined,
       videoDescription: body?.videoDescription !== undefined ? normalizeNonEmptyString(body.videoDescription) : undefined,
       tags: body?.tags !== undefined ? (tags ?? undefined) : undefined,
+      publishAt: body?.publishAt !== undefined ? (publishAt ?? undefined) : undefined,
+      playlistId,
       privacy,
       thumbnailAssetId,
     });
     if ('error' in result) {
       return { status: 404, body: { error: 'Target not found' } };
+    }
+
+    if (request.session?.adminUser?.email && this.auditService) {
+      await this.auditService.record({
+        eventType: 'update_target',
+        actorEmail: request.session.adminUser.email,
+        campaignId,
+        targetId,
+      });
     }
 
     return { status: 200, body: result };
@@ -416,6 +581,14 @@ export class CampaignsController {
         return { status: 404, body: { error: 'Campaign not found' } };
       }
       return { status: 400, body: { error: 'Cannot delete an active campaign' } };
+    }
+
+    if (request.session?.adminUser?.email && this.auditService) {
+      await this.auditService.record({
+        eventType: 'delete_campaign',
+        actorEmail: request.session.adminUser.email,
+        campaignId,
+      });
     }
 
     return { status: 200, body: {} };
@@ -441,6 +614,14 @@ export class CampaignsController {
     const result = await this.campaignService.cloneCampaign(campaignId, title ? { title } : undefined);
     if ('error' in result) {
       return { status: 404, body: { error: 'Campaign not found' } };
+    }
+
+    if (request.session?.adminUser?.email && this.auditService) {
+      await this.auditService.record({
+        eventType: 'clone_campaign',
+        actorEmail: request.session.adminUser.email,
+        campaignId,
+      });
     }
 
     return { status: 201, body: result };
@@ -484,6 +665,14 @@ export class CampaignsController {
         return { status: 404, body: { error: 'Campaign not found' } };
       }
       return { status: 400, body: { error: 'Cannot update an active campaign' } };
+    }
+
+    if (request.session?.adminUser?.email && this.auditService) {
+      await this.auditService.record({
+        eventType: 'update_campaign',
+        actorEmail: request.session.adminUser.email,
+        campaignId,
+      });
     }
 
     return { status: 200, body: result };
@@ -537,7 +726,110 @@ export class CampaignsController {
       retryCount: result.attempt - 1,
     });
 
+    if (request.session?.adminUser?.email && this.auditService) {
+      await this.auditService.record({
+        eventType: 'retry_target',
+        actorEmail: request.session.adminUser.email,
+        campaignId,
+        targetId,
+      });
+    }
+
     return { status: 200, body: { job: result } };
+  }
+
+  async getTargetJobs(request: CampaignsRequest): Promise<ControllerResponse<{ jobs?: PublishJobRecord[]; error?: string }>> {
+    const guardResult = this.sessionGuard.check(request);
+    if (!guardResult.allowed) {
+      return { status: guardResult.status, body: { error: guardResult.reason } };
+    }
+
+    const campaignId = request.params?.id;
+    const targetId = request.params?.targetId;
+    if (!campaignId || !targetId) {
+      return { status: 400, body: { error: 'Missing campaign or target id' } };
+    }
+
+    if (!this.jobService) {
+      return { status: 501, body: { error: 'Job service not available' } };
+    }
+
+    const campaignResult = await this.campaignService.getCampaign(campaignId);
+    if (!campaignResult) {
+      return { status: 404, body: { error: 'Campaign not found' } };
+    }
+
+    const target = campaignResult.campaign.targets.find((t) => t.id === targetId);
+    if (!target) {
+      return { status: 404, body: { error: 'Target not found' } };
+    }
+
+    return {
+      status: 200,
+      body: {
+        jobs: await this.jobService.getJobsForTarget(targetId),
+      },
+    };
+  }
+
+  async getCampaignJobs(request: CampaignsRequest): Promise<ControllerResponse<{ jobsByTarget?: Record<string, PublishJobRecord[]>; error?: string }>> {
+    const guardResult = this.sessionGuard.check(request);
+    if (!guardResult.allowed) {
+      return { status: guardResult.status, body: { error: guardResult.reason } };
+    }
+
+    const campaignId = request.params?.id;
+    if (!campaignId) {
+      return { status: 400, body: { error: 'Missing campaign id' } };
+    }
+
+    if (!this.jobService) {
+      return { status: 501, body: { error: 'Job service not available' } };
+    }
+
+    const campaignResult = await this.campaignService.getCampaign(campaignId);
+    if (!campaignResult) {
+      return { status: 404, body: { error: 'Campaign not found' } };
+    }
+
+    const jobsByTargetEntries = await Promise.all(
+      campaignResult.campaign.targets.map(async (target) => [target.id, await this.jobService!.getJobsForTarget(target.id)] as const),
+    );
+
+    return {
+      status: 200,
+      body: {
+        jobsByTarget: Object.fromEntries(jobsByTargetEntries),
+      },
+    };
+  }
+
+  async getCampaignAudit(request: CampaignsRequest): Promise<ControllerResponse<{ events?: AuditEventRecord[]; error?: string }>> {
+    const guardResult = this.sessionGuard.check(request);
+    if (!guardResult.allowed) {
+      return { status: guardResult.status, body: { error: guardResult.reason } };
+    }
+
+    const campaignId = request.params?.id;
+    if (!campaignId) {
+      return { status: 400, body: { error: 'Missing campaign id' } };
+    }
+
+    if (!this.auditService) {
+      return { status: 501, body: { error: 'Audit service not available' } };
+    }
+
+    const campaignResult = await this.campaignService.getCampaign(campaignId);
+    if (!campaignResult) {
+      return { status: 404, body: { error: 'Campaign not found' } };
+    }
+
+    return {
+      status: 200,
+      body: {
+        events: await this.auditService.listEventsForCampaign(campaignId),
+      },
+    };
   }
 
   async markReady(request: CampaignsRequest): Promise<ControllerResponse<{ campaign?: CampaignRecord; error?: string }>> {
@@ -557,6 +849,14 @@ export class CampaignsController {
         return { status: 404, body: { error: 'Campaign not found' } };
       }
       return { status: 400, body: { error: `Cannot mark ready: ${result.error}` } };
+    }
+
+    if (request.session?.adminUser?.email && this.auditService) {
+      await this.auditService.record({
+        eventType: 'mark_ready',
+        actorEmail: request.session.adminUser.email,
+        campaignId,
+      });
     }
 
     return { status: 200, body: result };

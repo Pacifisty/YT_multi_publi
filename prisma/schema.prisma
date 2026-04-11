@@ -120,6 +120,8 @@ model CampaignTarget {
   videoTitle           String       @map("video_title")
   videoDescription     String       @map("video_description")
   tags                 String[]     @default([])
+  publishAt            DateTime?    @map("publish_at")
+  playlistId           String?      @map("playlist_id")
   privacy              String       @default("private")
   thumbnailAssetId     String?      @map("thumbnail_asset_id")
   thumbnailAsset       MediaAsset?  @relation(fields: [thumbnailAssetId], references: [id])
@@ -146,7 +148,7 @@ enum PublishJobStatus {
 
 model PublishJob {
   id                 String           @id @default(cuid())
-  campaignTargetId   String           @map("campaign_target_id")
+  campaignTargetId   String           @unique @map("campaign_target_id")
   campaignTarget     CampaignTarget   @relation(fields: [campaignTargetId], references: [id])
   status             PublishJobStatus @default(queued)
   attempt            Int              @default(1)
@@ -157,6 +159,5 @@ model PublishJob {
   completedAt        DateTime?        @map("completed_at")
   createdAt          DateTime         @default(now()) @map("created_at")
 
-  @@index([campaignTargetId])
   @@map("publish_jobs")
 }

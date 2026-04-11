@@ -14,13 +14,13 @@ function createAuthenticatedRequest(overrides: Partial<{ params: Record<string, 
   };
 }
 
-function createFullStack() {
+function createFullStack(now?: Date) {
   const campaignRepo = new InMemoryCampaignRepository();
-  const campaignService = new CampaignService({ repository: campaignRepo });
+  const campaignService = new CampaignService({ repository: campaignRepo, now: now ? () => now : undefined });
   const jobRepo = new InMemoryPublishJobRepository();
-  const jobService = new PublishJobService({ repository: jobRepo });
-  const launchService = new LaunchService({ campaignService, jobService });
-  const statusService = new CampaignStatusService({ campaignService, jobService });
+  const jobService = new PublishJobService({ repository: jobRepo, now: now ? () => now : undefined });
+  const launchService = new LaunchService({ campaignService, jobService, now: now ? () => now : undefined });
+  const statusService = new CampaignStatusService({ campaignService, jobService, now: now ? () => now : undefined });
   const controller = new CampaignsController(
     campaignService,
     new SessionGuard(),
@@ -72,6 +72,88 @@ describe('controller status polling endpoint', () => {
     expect(response.body.shouldPoll).toBe(true);
     expect(response.body.targets).toHaveLength(1);
     expect(response.body.progress).toMatchObject({ completed: 0, failed: 0, total: 1 });
+  });
+
+  test('GET /campaigns/:id/status includes explicit review metadata for partial post-upload failures', async () => {
+    const { controller, campaignService, jobService } = createFullStack();
+
+    const { campaign } = await campaignService.createCampaign({ title: 'Partial Failure', videoAssetId: 'a1' });
+    const { target } = await campaignService.addTarget(campaign.id, {
+      channelId: 'ch-1', videoTitle: 'V1', videoDescription: 'D1',
+    });
+    await campaignService.markReady(campaign.id);
+    await campaignService.launch(campaign.id);
+    const [job] = await jobService.enqueueForTargets([{ id: target.id, campaignId: campaign.id }]);
+    await jobService.pickNext();
+    await jobService.markFailed(
+      job.id,
+      'Video uploaded as yt-partial-123, but adding it to playlist failed: forbidden',
+      'yt-partial-123',
+    );
+    await campaignService.updateTargetStatus(campaign.id, target.id, 'erro', {
+      youtubeVideoId: 'yt-partial-123',
+      errorMessage: 'Video uploaded as yt-partial-123, but adding it to playlist failed: forbidden',
+    });
+
+    const response = await controller.getStatus(createAuthenticatedRequest({ params: { id: campaign.id } }));
+
+    expect(response.status).toBe(200);
+    expect(response.body.targets[0]).toMatchObject({
+      hasPostUploadWarning: true,
+      reviewYoutubeUrl: 'https://www.youtube.com/watch?v=yt-partial-123',
+    });
+  });
+
+  test('GET /campaigns/:id/status includes explicit scheduling metadata for future publishAt targets', async () => {
+    const { controller, campaignService } = createFullStack(new Date('2026-04-10T16:00:00Z'));
+
+    const { campaign } = await campaignService.createCampaign({ title: 'Scheduled Pending', videoAssetId: 'a1' });
+    await campaignService.addTarget(campaign.id, {
+      channelId: 'ch-1',
+      videoTitle: 'Scheduled Target',
+      videoDescription: 'Wait for publishAt',
+      publishAt: '2026-04-10T18:00:00Z',
+    });
+    await campaignService.markReady(campaign.id);
+
+    const launchResponse = await controller.launch(createAuthenticatedRequest({ params: { id: campaign.id } }));
+    expect(launchResponse.status).toBe(200);
+
+    const response = await controller.getStatus(createAuthenticatedRequest({ params: { id: campaign.id } }));
+
+    expect(response.status).toBe(200);
+    expect(response.body.shouldPoll).toBe(false);
+    expect(response.body.nextScheduledAt).toBe('2026-04-10T18:00:00Z');
+    expect(response.body.targets[0]).toMatchObject({
+      publishAt: '2026-04-10T18:00:00Z',
+      scheduledPending: true,
+      latestJobStatus: null,
+    });
+  });
+
+  test('GET /campaigns/:id/status includes explicit reauth metadata for auth failures', async () => {
+    const { controller, campaignService, jobService } = createFullStack();
+
+    const { campaign } = await campaignService.createCampaign({ title: 'Reauth Needed', videoAssetId: 'a1' });
+    const { target } = await campaignService.addTarget(campaign.id, {
+      channelId: 'ch-1', videoTitle: 'V1', videoDescription: 'D1',
+    });
+    await campaignService.markReady(campaign.id);
+    await campaignService.launch(campaign.id);
+    const [job] = await jobService.enqueueForTargets([{ id: target.id, campaignId: campaign.id }]);
+    await jobService.pickNext();
+    await jobService.markFailed(job.id, 'REAUTH_REQUIRED');
+    await campaignService.updateTargetStatus(campaign.id, target.id, 'erro', {
+      errorMessage: 'REAUTH_REQUIRED',
+    });
+
+    const response = await controller.getStatus(createAuthenticatedRequest({ params: { id: campaign.id } }));
+
+    expect(response.status).toBe(200);
+    expect(response.body.targets[0]).toMatchObject({
+      errorMessage: 'REAUTH_REQUIRED',
+      reauthRequired: true,
+    });
   });
 
   test('GET /campaigns/:id/status returns 404 for missing campaign', async () => {

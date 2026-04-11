@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 
 import { CampaignService, InMemoryCampaignRepository } from '../../apps/api/src/campaigns/campaign.service';
 import { PublishJobService, InMemoryPublishJobRepository } from '../../apps/api/src/campaigns/publish-job.service';
+import { AuditEventService, InMemoryAuditEventRepository } from '../../apps/api/src/campaigns/audit-event.service';
 import { DashboardService } from '../../apps/api/src/campaigns/dashboard.service';
 
 function createDashboard() {
@@ -9,9 +10,11 @@ function createDashboard() {
   const campaignService = new CampaignService({ repository: campaignRepo });
   const jobRepo = new InMemoryPublishJobRepository();
   const jobService = new PublishJobService({ repository: jobRepo });
-  const dashboard = new DashboardService({ campaignService, jobService });
+  const auditRepo = new InMemoryAuditEventRepository();
+  const auditService = new AuditEventService({ repository: auditRepo });
+  const dashboard = new DashboardService({ campaignService, jobService, auditService });
 
-  return { campaignService, jobService, dashboard };
+  return { campaignService, jobService, auditService, dashboard };
 }
 
 describe('DashboardService.getStats', () => {
@@ -24,6 +27,35 @@ describe('DashboardService.getStats', () => {
     expect(stats.targets.total).toBe(0);
     expect(stats.targets.successRate).toBe(0);
     expect(stats.targets.byStatus).toEqual({ aguardando: 0, enviando: 0, publicado: 0, erro: 0 });
+    expect(stats.quota).toEqual({
+      dailyLimitUnits: 10000,
+      estimatedConsumedUnits: 0,
+      estimatedQueuedUnits: 0,
+      estimatedProjectedUnits: 0,
+      estimatedRemainingUnits: 10000,
+      usagePercent: 0,
+      projectedPercent: 0,
+      warningState: 'healthy',
+    });
+    expect(stats.failures).toEqual({
+      failedCampaigns: 0,
+      failedTargets: 0,
+      topReason: null,
+      reasons: [],
+    });
+    expect(stats.retries).toEqual({
+      retriedTargets: 0,
+      highestAttempt: 0,
+      hotspotChannelId: null,
+      hotspotRetryCount: 0,
+    });
+    expect(stats.audit).toEqual({
+      totalEvents: 0,
+      byType: { launch_campaign: 0, retry_target: 0, mark_ready: 0, clone_campaign: 0, delete_campaign: 0, update_campaign: 0, remove_target: 0, update_target: 0, add_target: 0, add_targets_bulk: 0, publish_completed: 0, publish_failed: 0, publish_partial_failure: 0 },
+      lastEventAt: null,
+      lastEventType: null,
+      lastActorEmail: null,
+    });
     expect(stats.channels).toHaveLength(0);
   });
 
@@ -135,5 +167,257 @@ describe('DashboardService.getStats', () => {
     const stats = await dashboard.getStats();
 
     expect(stats.jobs.totalRetries).toBe(2);
+    expect(stats.retries).toEqual({
+      retriedTargets: 1,
+      highestAttempt: 3,
+      hotspotChannelId: 'ch-1',
+      hotspotRetryCount: 2,
+    });
+  });
+
+  test('aggregates reauth-required targets into dedicated dashboard stats', async () => {
+    const { campaignService, dashboard } = createDashboard();
+
+    const { campaign: c1 } = await campaignService.createCampaign({ title: 'Needs Reauth 1', videoAssetId: 'a1' });
+    const { target: t1 } = await campaignService.addTarget(c1.id, { channelId: 'ch-reauth-1', videoTitle: 'V1', videoDescription: 'D1' });
+    const { target: t2 } = await campaignService.addTarget(c1.id, { channelId: 'ch-ok', videoTitle: 'V2', videoDescription: 'D2' });
+    await campaignService.updateTargetStatus(c1.id, t1.id, 'erro', { errorMessage: 'REAUTH_REQUIRED' });
+    await campaignService.updateTargetStatus(c1.id, t2.id, 'publicado', { youtubeVideoId: 'yt-2' });
+
+    const { campaign: c2 } = await campaignService.createCampaign({ title: 'Needs Reauth 2', videoAssetId: 'a2' });
+    const { target: t3 } = await campaignService.addTarget(c2.id, { channelId: 'ch-reauth-2', videoTitle: 'V3', videoDescription: 'D3' });
+    const { target: t4 } = await campaignService.addTarget(c2.id, { channelId: 'ch-fail', videoTitle: 'V4', videoDescription: 'D4' });
+    await campaignService.updateTargetStatus(c2.id, t3.id, 'erro', { errorMessage: 'REAUTH_REQUIRED' });
+    await campaignService.updateTargetStatus(c2.id, t4.id, 'erro', { errorMessage: 'quotaExceeded' });
+
+    const stats = await dashboard.getStats();
+
+    expect(stats.reauth).toEqual({
+      blockedCampaigns: 2,
+      blockedTargets: 2,
+      blockedChannelCount: 2,
+      blockedChannelIds: ['ch-reauth-1', 'ch-reauth-2'],
+    });
+  });
+
+  test('estimates quota consumption from started uploads, queued uploads, and post-upload operations', async () => {
+    const { campaignService, jobService, dashboard } = createDashboard();
+
+    const { campaign } = await campaignService.createCampaign({ title: 'Quota', videoAssetId: 'a1' });
+    const { target: startedTarget } = await campaignService.addTarget(campaign.id, {
+      channelId: 'ch-started',
+      videoTitle: 'V1',
+      videoDescription: 'D1',
+      playlistId: 'playlist-1',
+      thumbnailAssetId: 'thumb-1',
+    });
+    const { target: queuedTarget } = await campaignService.addTarget(campaign.id, {
+      channelId: 'ch-queued',
+      videoTitle: 'V2',
+      videoDescription: 'D2',
+    });
+
+    const jobs = await jobService.enqueueForTargets([
+      { id: startedTarget.id, campaignId: campaign.id },
+      { id: queuedTarget.id, campaignId: campaign.id },
+    ]);
+
+    await jobService.pickNext();
+    await jobService.markCompleted(jobs[0].id, 'yt-1');
+    await campaignService.updateTargetStatus(campaign.id, startedTarget.id, 'publicado', { youtubeVideoId: 'yt-1' });
+
+    const stats = await dashboard.getStats();
+
+    expect(stats.quota).toEqual({
+      dailyLimitUnits: 10000,
+      estimatedConsumedUnits: 200,
+      estimatedQueuedUnits: 100,
+      estimatedProjectedUnits: 300,
+      estimatedRemainingUnits: 9800,
+      usagePercent: 2,
+      projectedPercent: 3,
+      warningState: 'healthy',
+    });
+  });
+
+  test('raises a warning when projected quota approaches the daily limit', async () => {
+    const { campaignService, jobService, dashboard } = createDashboard();
+
+    const { campaign } = await campaignService.createCampaign({ title: 'Quota Warning', videoAssetId: 'a1' });
+
+    const targets: { id: string; campaignId: string }[] = [];
+    for (let index = 0; index < 80; index += 1) {
+      const { target } = await campaignService.addTarget(campaign.id, {
+        channelId: `ch-${index}`,
+        videoTitle: `Video ${index}`,
+        videoDescription: `Description ${index}`,
+      });
+      targets.push({ id: target.id, campaignId: campaign.id });
+    }
+
+    await jobService.enqueueForTargets(targets);
+
+    const stats = await dashboard.getStats();
+
+    expect(stats.quota.dailyLimitUnits).toBe(10000);
+    expect(stats.quota.estimatedConsumedUnits).toBe(0);
+    expect(stats.quota.estimatedQueuedUnits).toBe(8000);
+    expect(stats.quota.estimatedProjectedUnits).toBe(8000);
+    expect(stats.quota.estimatedRemainingUnits).toBe(10000);
+    expect(stats.quota.usagePercent).toBe(0);
+    expect(stats.quota.projectedPercent).toBe(80);
+    expect(stats.quota.warningState).toBe('warning');
+  });
+
+  test('aggregates non-reauth failure reasons for dashboard review', async () => {
+    const { campaignService, dashboard } = createDashboard();
+
+    const { campaign: c1 } = await campaignService.createCampaign({ title: 'Failures 1', videoAssetId: 'a1' });
+    const { target: t1 } = await campaignService.addTarget(c1.id, {
+      channelId: 'ch-quota-1',
+      videoTitle: 'V1',
+      videoDescription: 'D1',
+    });
+    const { target: t2 } = await campaignService.addTarget(c1.id, {
+      channelId: 'ch-partial',
+      videoTitle: 'V2',
+      videoDescription: 'D2',
+      playlistId: 'playlist-1',
+    });
+    await campaignService.updateTargetStatus(c1.id, t1.id, 'erro', { errorMessage: 'quotaExceeded' });
+    await campaignService.updateTargetStatus(c1.id, t2.id, 'erro', {
+      errorMessage: 'Video uploaded as yt-123, but adding it to playlist failed: forbidden',
+    });
+
+    const { campaign: c2 } = await campaignService.createCampaign({ title: 'Failures 2', videoAssetId: 'a2' });
+    const { target: t3 } = await campaignService.addTarget(c2.id, {
+      channelId: 'ch-quota-2',
+      videoTitle: 'V3',
+      videoDescription: 'D3',
+    });
+    const { target: t4 } = await campaignService.addTarget(c2.id, {
+      channelId: 'ch-reauth',
+      videoTitle: 'V4',
+      videoDescription: 'D4',
+    });
+    await campaignService.updateTargetStatus(c2.id, t3.id, 'erro', { errorMessage: 'quotaExceeded' });
+    await campaignService.updateTargetStatus(c2.id, t4.id, 'erro', { errorMessage: 'REAUTH_REQUIRED' });
+
+    const stats = await dashboard.getStats();
+
+    expect(stats.failures).toEqual({
+      failedCampaigns: 2,
+      failedTargets: 3,
+      topReason: 'quota_exceeded',
+      reasons: [
+        { reason: 'quota_exceeded', count: 2 },
+        { reason: 'post_upload_step_failed', count: 1 },
+      ],
+    });
+  });
+
+  test('aggregates audit activity for launch and retry actions', async () => {
+    const { auditService, dashboard } = createDashboard();
+
+    await auditService.record({
+      eventType: 'mark_ready',
+      actorEmail: 'admin@test.com',
+      campaignId: 'c1',
+      targetId: null,
+    });
+    await auditService.record({
+      eventType: 'add_target',
+      actorEmail: 'admin@test.com',
+      campaignId: 'c1',
+      targetId: 't0',
+    });
+    await auditService.record({
+      eventType: 'add_targets_bulk',
+      actorEmail: 'admin@test.com',
+      campaignId: 'c1',
+      targetId: null,
+    });
+    await auditService.record({
+      eventType: 'publish_completed',
+      actorEmail: 'system@internal',
+      campaignId: 'c1',
+      targetId: 't-published',
+    });
+    await auditService.record({
+      eventType: 'publish_failed',
+      actorEmail: 'system@internal',
+      campaignId: 'c1',
+      targetId: 't-failed',
+    });
+    await auditService.record({
+      eventType: 'publish_partial_failure',
+      actorEmail: 'system@internal',
+      campaignId: 'c1',
+      targetId: 't-partial',
+    });
+    await auditService.record({
+      eventType: 'launch_campaign',
+      actorEmail: 'admin@test.com',
+      campaignId: 'c1',
+      targetId: null,
+    });
+    await auditService.record({
+      eventType: 'clone_campaign',
+      actorEmail: 'admin@test.com',
+      campaignId: 'c1',
+      targetId: null,
+    });
+    await auditService.record({
+      eventType: 'update_campaign',
+      actorEmail: 'admin@test.com',
+      campaignId: 'c1',
+      targetId: null,
+    });
+    await auditService.record({
+      eventType: 'retry_target',
+      actorEmail: 'admin@test.com',
+      campaignId: 'c1',
+      targetId: 't1',
+    });
+    await auditService.record({
+      eventType: 'remove_target',
+      actorEmail: 'admin@test.com',
+      campaignId: 'c1',
+      targetId: 't2',
+    });
+    await auditService.record({
+      eventType: 'update_target',
+      actorEmail: 'admin@test.com',
+      campaignId: 'c1',
+      targetId: 't3',
+    });
+    await auditService.record({
+      eventType: 'delete_campaign',
+      actorEmail: 'admin@test.com',
+      campaignId: 'c2',
+      targetId: null,
+    });
+
+    const stats = await dashboard.getStats();
+
+    expect(stats.audit.totalEvents).toBe(13);
+    expect(stats.audit.byType).toEqual({
+      launch_campaign: 1,
+      retry_target: 1,
+      mark_ready: 1,
+      clone_campaign: 1,
+      delete_campaign: 1,
+      update_campaign: 1,
+      remove_target: 1,
+      update_target: 1,
+      add_target: 1,
+      add_targets_bulk: 1,
+      publish_completed: 1,
+      publish_failed: 1,
+      publish_partial_failure: 1,
+    });
+    expect(stats.audit.lastEventType).toBe('delete_campaign');
+    expect(stats.audit.lastActorEmail).toBe('admin@test.com');
+    expect(stats.audit.lastEventAt).toBeTruthy();
   });
 });

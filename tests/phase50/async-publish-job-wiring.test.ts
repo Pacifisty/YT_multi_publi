@@ -131,6 +131,18 @@ describe('PublishJobService with async repository', () => {
     const all = await service.getAllJobs();
     expect(all).toHaveLength(2);
   });
+
+  it('enqueueForTargets skips duplicate jobs for targets that already have history', async () => {
+    const repo = new AsyncMockJobRepository();
+    const service = new PublishJobService({ repository: repo });
+
+    const first = await service.enqueueForTargets([{ id: 't1', campaignId: 'c1' }]);
+    const second = await service.enqueueForTargets([{ id: 't1', campaignId: 'c1' }]);
+
+    expect(first).toHaveLength(1);
+    expect(second).toHaveLength(0);
+    expect(await service.getJobsForTarget('t1')).toHaveLength(1);
+  });
 });
 
 // Minimal mock Prisma for publish jobs

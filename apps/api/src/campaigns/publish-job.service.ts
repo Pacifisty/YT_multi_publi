@@ -71,23 +71,44 @@ export class PublishJobService {
     this.now = options.now ?? (() => new Date());
   }
 
+  private isDuplicateTargetJobError(error: unknown): boolean {
+    return typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: string }).code === 'P2002';
+  }
+
   async enqueueForTargets(targets: { id: string; campaignId: string }[]): Promise<PublishJobRecord[]> {
     const nowIso = this.now().toISOString();
 
     const jobs: PublishJobRecord[] = [];
     for (const t of targets) {
-      const job = await this.repository.create({
-        id: randomUUID(),
-        campaignTargetId: t.id,
-        status: 'queued',
-        attempt: 1,
-        progressPercent: 0,
-        youtubeVideoId: null,
-        errorMessage: null,
-        startedAt: null,
-        completedAt: null,
-        createdAt: nowIso,
-      });
+      const existingJobs = await this.repository.findByTargetId(t.id);
+      if (existingJobs.length > 0) {
+        continue;
+      }
+
+      let job: PublishJobRecord;
+      try {
+        job = await this.repository.create({
+          id: randomUUID(),
+          campaignTargetId: t.id,
+          status: 'queued',
+          attempt: 1,
+          progressPercent: 0,
+          youtubeVideoId: null,
+          errorMessage: null,
+          startedAt: null,
+          completedAt: null,
+          createdAt: nowIso,
+        });
+      } catch (error) {
+        if (this.isDuplicateTargetJobError(error)) {
+          continue;
+        }
+        throw error;
+      }
+
       jobs.push(job);
     }
     return jobs;
@@ -111,10 +132,11 @@ export class PublishJobService {
     });
   }
 
-  async markFailed(jobId: string, errorMessage: string): Promise<PublishJobRecord | null> {
+  async markFailed(jobId: string, errorMessage: string, youtubeVideoId?: string): Promise<PublishJobRecord | null> {
     return await this.repository.update(jobId, {
       status: 'failed',
       errorMessage,
+      youtubeVideoId: typeof youtubeVideoId === 'string' && youtubeVideoId.trim() ? youtubeVideoId.trim() : null,
     });
   }
 
@@ -131,6 +153,7 @@ export class PublishJobService {
       status: 'queued',
       attempt: job.attempt + 1,
       errorMessage: null,
+      youtubeVideoId: null,
       startedAt: null,
       completedAt: null,
     }))!;

@@ -28,6 +28,11 @@ export class ScheduledLaunchChecker {
     const launched: string[] = [];
 
     for (const campaign of campaigns) {
+      if (campaign.status === 'launching') {
+        await this.launchService.enqueueDueTargets(campaign.id);
+        continue;
+      }
+
       if (campaign.status !== 'ready') continue;
       if (!campaign.scheduledAt) continue;
 

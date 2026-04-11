@@ -99,4 +99,39 @@ describe('ScheduledLaunchChecker', () => {
     const launched = await checker.checkAndLaunch();
     expect(launched).toHaveLength(0);
   });
+
+  test('enqueues future scheduled targets only when their publishAt time arrives', async () => {
+    let now = new Date('2026-04-10T16:00:00Z');
+    const campaignRepo = new InMemoryCampaignRepository();
+    const campaignService = new CampaignService({ repository: campaignRepo, now: () => now });
+    const jobRepo = new InMemoryPublishJobRepository();
+    const jobService = new PublishJobService({ repository: jobRepo, now: () => now });
+    const launchService = new LaunchService({ campaignService, jobService, now: () => now });
+    const checker = new ScheduledLaunchChecker({ campaignService, launchService, now: () => now });
+
+    const { campaign } = await campaignService.createCampaign({
+      title: 'Per-target schedule',
+      videoAssetId: 'a1',
+    });
+    const { target } = await campaignService.addTarget(campaign.id, {
+      channelId: 'ch-1',
+      videoTitle: 'Future video',
+      videoDescription: 'Wait until publishAt',
+      publishAt: '2026-04-10T17:00:00Z',
+    });
+    await campaignService.markReady(campaign.id);
+
+    await launchService.launchCampaign(campaign.id);
+
+    expect(await jobService.getJobsForTarget(target.id)).toHaveLength(0);
+
+    now = new Date('2026-04-10T17:00:00Z');
+    const launched = await checker.checkAndLaunch();
+
+    expect(launched).toHaveLength(0);
+    expect(await jobService.getJobsForTarget(target.id)).toHaveLength(1);
+
+    await checker.checkAndLaunch();
+    expect(await jobService.getJobsForTarget(target.id)).toHaveLength(1);
+  });
 });

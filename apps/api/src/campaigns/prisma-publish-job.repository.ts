@@ -55,6 +55,7 @@ export class PrismaPublishJobRepository {
   async findByTargetId(targetId: string): Promise<PublishJobRecord[]> {
     const rows = await this.prisma.publishJob.findMany({
       where: { campaignTargetId: targetId },
+      orderBy: { createdAt: 'asc' },
     });
     return rows.map(toJobRecord);
   }

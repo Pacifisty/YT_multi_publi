@@ -1,5 +1,6 @@
 import type { CampaignService } from './campaign.service';
 import type { PublishJobService } from './publish-job.service';
+import type { AuditEventService } from './audit-event.service';
 import { YouTubeUploadWorker, type YouTubeUploadFn } from './youtube-upload.worker';
 import { JobRunner } from './job-runner';
 import { YouTubeUploadService, type ChannelTokenResolver, type VideoFileResolver } from '../integrations/youtube/youtube-upload.service';
@@ -7,6 +8,7 @@ import { YouTubeUploadService, type ChannelTokenResolver, type VideoFileResolver
 export interface IntegratedWorkerOptions {
   campaignService: CampaignService;
   jobService: PublishJobService;
+  auditService?: AuditEventService;
   uploadFn: YouTubeUploadFn;
   channelTokenResolver: ChannelTokenResolver;
   videoFileResolver: VideoFileResolver;
@@ -28,6 +30,7 @@ export function createIntegratedWorker(options: IntegratedWorkerOptions): Integr
   const worker = new YouTubeUploadWorker({
     jobService: options.jobService,
     campaignService: options.campaignService,
+    auditService: options.auditService,
     uploadFn: options.uploadFn,
     getAccessToken: (channelId) => uploadService.getAccessToken(channelId),
     getVideoFilePath: (videoAssetId) => uploadService.getVideoFilePath(videoAssetId),

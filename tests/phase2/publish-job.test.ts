@@ -4,6 +4,7 @@ import {
   PublishJobService,
   InMemoryPublishJobRepository,
   type PublishJobRecord,
+  type PublishJobRepository,
 } from '../../apps/api/src/campaigns/publish-job.service';
 
 describe('publish job service', () => {
@@ -70,6 +71,19 @@ describe('publish job service', () => {
     expect(failed!.errorMessage).toBe('quotaExceeded');
   });
 
+  test('marks job failed with error and preserves uploaded youtubeVideoId for partial failures', async () => {
+    const repository = new InMemoryPublishJobRepository();
+    const service = new PublishJobService({ repository });
+
+    const [job] = await service.enqueueForTargets([{ id: 'target-1', campaignId: 'camp-1' }]);
+    await service.pickNext();
+
+    const failed = await service.markFailed(job.id, 'thumbnail failed after upload', 'yt-partial-123');
+    expect(failed!.status).toBe('failed');
+    expect(failed!.errorMessage).toBe('thumbnail failed after upload');
+    expect(failed!.youtubeVideoId).toBe('yt-partial-123');
+  });
+
   test('retry re-queues a failed job with incremented attempt', async () => {
     const repository = new InMemoryPublishJobRepository();
     const service = new PublishJobService({ repository });
@@ -82,6 +96,7 @@ describe('publish job service', () => {
     expect(retried!.status).toBe('queued');
     expect(retried!.attempt).toBe(2);
     expect(retried!.errorMessage).toBeNull();
+    expect(retried!.youtubeVideoId).toBeNull();
   });
 
   test('rejects retry beyond max attempts', async () => {
@@ -116,5 +131,71 @@ describe('publish job service', () => {
     const jobs = await service.getJobsForTarget('target-1');
     expect(jobs).toHaveLength(1);
     expect(jobs[0].campaignTargetId).toBe('target-1');
+  });
+
+  test('does not enqueue duplicate jobs for a target that already has job history', async () => {
+    const repository = new InMemoryPublishJobRepository();
+    const service = new PublishJobService({ repository });
+
+    const first = await service.enqueueForTargets([{ id: 'target-1', campaignId: 'camp-1' }]);
+    const second = await service.enqueueForTargets([{ id: 'target-1', campaignId: 'camp-1' }]);
+
+    expect(first).toHaveLength(1);
+    expect(second).toHaveLength(0);
+
+    const jobs = await service.getJobsForTarget('target-1');
+    expect(jobs).toHaveLength(1);
+  });
+
+  test('tolerates duplicate create races by skipping unique-constraint collisions', async () => {
+    class RaceyDuplicateRepository implements PublishJobRepository {
+      private readonly jobs: PublishJobRecord[] = [];
+
+      create(record: PublishJobRecord): PublishJobRecord {
+        if (record.campaignTargetId === 'target-2') {
+          const error = new Error('Unique constraint failed');
+          (error as Error & { code?: string }).code = 'P2002';
+          throw error;
+        }
+
+        this.jobs.push(record);
+        return record;
+      }
+
+      findById(id: string): PublishJobRecord | null {
+        return this.jobs.find((job) => job.id === id) ?? null;
+      }
+
+      findByTargetId(targetId: string): PublishJobRecord[] {
+        return this.jobs.filter((job) => job.campaignTargetId === targetId);
+      }
+
+      findAll(): PublishJobRecord[] {
+        return [...this.jobs];
+      }
+
+      findNextQueued(): PublishJobRecord | null {
+        return this.jobs.find((job) => job.status === 'queued') ?? null;
+      }
+
+      update(id: string, updates: Partial<PublishJobRecord>): PublishJobRecord | null {
+        const job = this.findById(id);
+        if (!job) return null;
+        Object.assign(job, updates);
+        return job;
+      }
+    }
+
+    const repository = new RaceyDuplicateRepository();
+    const service = new PublishJobService({ repository });
+
+    const jobs = await service.enqueueForTargets([
+      { id: 'target-1', campaignId: 'camp-1' },
+      { id: 'target-2', campaignId: 'camp-1' },
+    ]);
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].campaignTargetId).toBe('target-1');
+    expect(await service.getJobsForTarget('target-2')).toHaveLength(0);
   });
 });

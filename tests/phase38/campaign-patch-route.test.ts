@@ -33,6 +33,14 @@ describe('API Router — campaign PATCH route', () => {
     expect(res.status).toBe(200);
     expect(res.body.campaign.title).toBe('Updated Title');
     expect(res.body.campaign.id).toBe(campaign.id);
+    await expect(campaignsModule.auditService.listEvents()).resolves.toEqual([
+      expect.objectContaining({
+        eventType: 'update_campaign',
+        actorEmail: 'admin@test.com',
+        campaignId: campaign.id,
+        targetId: null,
+      }),
+    ]);
   });
 
   it('PATCH /api/campaigns/:id updates scheduledAt', async () => {

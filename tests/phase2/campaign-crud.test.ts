@@ -51,6 +51,7 @@ describe('campaign CRUD', () => {
       videoTitle: 'My First Video',
       videoDescription: 'A great video about coding',
       tags: ['coding', 'tutorial'],
+      playlistId: 'playlist-123',
       privacy: 'public',
     });
 
@@ -60,9 +61,78 @@ describe('campaign CRUD', () => {
       videoTitle: 'My First Video',
       videoDescription: 'A great video about coding',
       tags: ['coding', 'tutorial'],
+      playlistId: 'playlist-123',
       privacy: 'public',
       status: 'aguardando',
     });
+  });
+
+  test('rejects adding a duplicate target for the same channel in one campaign', async () => {
+    const repository = new InMemoryCampaignRepository();
+    const service = new CampaignService({ repository });
+
+    const { campaign } = await service.createCampaign({
+      title: 'No duplicates campaign',
+      videoAssetId: 'asset-video-1',
+    });
+
+    await service.addTarget(campaign.id, {
+      channelId: 'channel-1',
+      videoTitle: 'First Title',
+      videoDescription: 'First Description',
+    });
+
+    await expect(
+      service.addTarget(campaign.id, {
+        channelId: 'channel-1',
+        videoTitle: 'Second Title',
+        videoDescription: 'Second Description',
+      }),
+    ).rejects.toThrow('Target for this channel already exists in the campaign');
+  });
+
+  test('stores playlistId as part of per-target metadata', async () => {
+    const repository = new InMemoryCampaignRepository();
+    const service = new CampaignService({ repository });
+
+    const { campaign } = await service.createCampaign({
+      title: 'Playlist campaign',
+      videoAssetId: 'asset-video-1',
+    });
+
+    const result = await service.addTarget(campaign.id, {
+      channelId: 'channel-1',
+      videoTitle: 'Playlist Video',
+      videoDescription: 'Video with playlist',
+      playlistId: 'playlist-xyz',
+    });
+
+    expect(result.target.playlistId).toBe('playlist-xyz');
+
+    const persisted = await service.getCampaign(campaign.id);
+    expect(persisted!.campaign.targets[0].playlistId).toBe('playlist-xyz');
+  });
+
+  test('stores publishAt as part of per-target scheduling metadata', async () => {
+    const repository = new InMemoryCampaignRepository();
+    const service = new CampaignService({ repository });
+
+    const { campaign } = await service.createCampaign({
+      title: 'Scheduled target campaign',
+      videoAssetId: 'asset-video-1',
+    });
+
+    const result = await service.addTarget(campaign.id, {
+      channelId: 'channel-1',
+      videoTitle: 'Scheduled Video',
+      videoDescription: 'Video with per-target scheduling',
+      publishAt: '2026-05-01T15:00:00.000Z',
+    });
+
+    expect(result.target.publishAt).toBe('2026-05-01T15:00:00.000Z');
+
+    const persisted = await service.getCampaign(campaign.id);
+    expect(persisted!.campaign.targets[0].publishAt).toBe('2026-05-01T15:00:00.000Z');
   });
 
   test('lists campaigns newest-first', async () => {

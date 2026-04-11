@@ -121,6 +121,28 @@ describe('PrismaPublishJobRepository', () => {
     expect(result[0].id).toBe('j1');
   });
 
+  test('findByTargetId returns jobs ordered by createdAt ascending', async () => {
+    const prisma = makeMockPrisma();
+    const repo = new PrismaPublishJobRepository(prisma as any);
+
+    await repo.create({
+      id: 'j-newer', campaignTargetId: 't1', status: 'failed',
+      attempt: 2, progressPercent: 100, youtubeVideoId: null,
+      errorMessage: 'quotaExceeded', startedAt: '2026-04-01T00:03:00Z', completedAt: null,
+      createdAt: '2026-04-01T00:02:00Z',
+    });
+    await repo.create({
+      id: 'j-older', campaignTargetId: 't1', status: 'completed',
+      attempt: 1, progressPercent: 100, youtubeVideoId: 'yt-1',
+      errorMessage: null, startedAt: '2026-04-01T00:01:00Z', completedAt: '2026-04-01T00:02:00Z',
+      createdAt: '2026-04-01T00:00:00Z',
+    });
+
+    const result = await repo.findByTargetId('t1');
+
+    expect(result.map((job) => job.id)).toEqual(['j-older', 'j-newer']);
+  });
+
   test('findAll returns all jobs', async () => {
     const prisma = makeMockPrisma();
     const repo = new PrismaPublishJobRepository(prisma as any);

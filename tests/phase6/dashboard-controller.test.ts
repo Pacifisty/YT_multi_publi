@@ -25,6 +25,7 @@ describe('dashboard controller endpoint', () => {
     expect(response.body.campaigns.byStatus.launching).toBe(1);
     expect(response.body.targets.total).toBe(1);
     expect(response.body.jobs.total).toBe(1);
+    expect(response.body.quota.dailyLimitUnits).toBe(10000);
   });
 
   test('GET /dashboard returns 401 without session', async () => {

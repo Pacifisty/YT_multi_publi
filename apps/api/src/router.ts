@@ -94,10 +94,22 @@ export function createApiRouter(options: {
       handler: (req) => ctrl.retryTarget(req),
     },
     {
+      method: 'GET',
+      pattern: /^\/api\/campaigns\/([^/]+)\/targets\/([^/]+)\/jobs$/,
+      paramNames: ['id', 'targetId'],
+      handler: (req) => ctrl.getTargetJobs(req),
+    },
+    {
       method: 'POST',
       pattern: /^\/api\/campaigns\/([^/]+)\/targets$/,
       paramNames: ['id'],
       handler: (req) => ctrl.addTarget(req),
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/campaigns\/([^/]+)\/targets\/bulk$/,
+      paramNames: ['id'],
+      handler: (req) => ctrl.addTargetsBulk(req),
     },
     {
       method: 'POST',
@@ -116,6 +128,18 @@ export function createApiRouter(options: {
       pattern: /^\/api\/campaigns\/([^/]+)\/status$/,
       paramNames: ['id'],
       handler: (req) => ctrl.getStatus(req),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/api\/campaigns\/([^/]+)\/jobs$/,
+      paramNames: ['id'],
+      handler: (req) => ctrl.getCampaignJobs(req),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/api\/campaigns\/([^/]+)\/audit$/,
+      paramNames: ['id'],
+      handler: (req) => ctrl.getCampaignAudit(req),
     },
     {
       method: 'GET',

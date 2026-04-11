@@ -35,13 +35,17 @@ vi.mock('./prompt-builder.js', () => ({
 }));
 
 vi.mock('./event-stream.js', () => {
-  return {
-    GSDEventStream: vi.fn().mockImplementation(() => ({
+  const GSDEventStream = vi.fn(function GSDEventStreamMock() {
+    return {
       emitEvent: vi.fn(),
       on: vi.fn(),
       emit: vi.fn(),
       addTransport: vi.fn(),
-    })),
+    };
+  });
+
+  return {
+    GSDEventStream,
   };
 });
 
@@ -64,15 +68,21 @@ vi.mock('./phase-prompt.js', () => ({
   PHASE_WORKFLOW_MAP: {},
 }));
 
-vi.mock('./gsd-tools.js', () => ({
-  GSDTools: vi.fn().mockImplementation(() => ({
-    roadmapAnalyze: vi.fn(),
-  })),
-  GSDToolsError: class extends Error {
-    name = 'GSDToolsError';
-  },
-  resolveGsdToolsPath: vi.fn().mockReturnValue('/mock/gsd-tools.cjs'),
-}));
+vi.mock('./gsd-tools.js', () => {
+  const GSDTools = vi.fn(function GSDToolsMock() {
+    return {
+      roadmapAnalyze: vi.fn(),
+    };
+  });
+
+  return {
+    GSDTools,
+    GSDToolsError: class extends Error {
+      name = 'GSDToolsError';
+    },
+    resolveGsdToolsPath: vi.fn().mockReturnValue('/mock/gsd-tools.cjs'),
+  };
+});
 
 import { GSD } from './index.js';
 import { GSDTools } from './gsd-tools.js';
@@ -126,10 +136,11 @@ describe('GSD.run()', () => {
     // Wire mock roadmapAnalyze on the GSDTools instance
     mockRoadmapAnalyze = vi.fn();
     vi.mocked(GSDTools).mockImplementation(
-      () =>
-        ({
+      function MockGSDTools() {
+        return {
           roadmapAnalyze: mockRoadmapAnalyze,
-        }) as any,
+        } as any;
+      },
     );
   });
 

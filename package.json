@@ -38,6 +38,9 @@
   "engines": {
     "node": ">=20.0.0"
   },
+  "workspaces": [
+    "sdk"
+  ],
   "devDependencies": {
     "@types/node": "^25.5.2",
     "c8": "^11.0.0",

@@ -81,7 +81,12 @@ describe.skipIf(!gsdToolsAvailable)('Integration: PhaseRunner against real gsd-t
 
   afterAll(async () => {
     if (tmpDir) {
-      await rm(tmpDir, { recursive: true, force: true });
+      await rm(tmpDir, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     }
   });
 
@@ -319,7 +324,12 @@ describe.skipIf(!gsdToolsAvailable)('Integration: phasePlanIndex and wave execut
 
   afterAll(async () => {
     if (tmpDir) {
-      await rm(tmpDir, { recursive: true, force: true });
+      await rm(tmpDir, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     }
   });
 

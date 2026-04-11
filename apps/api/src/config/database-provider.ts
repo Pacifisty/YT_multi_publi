@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import { PrismaConnectedAccountRepository } from '../accounts/prisma-connected-account.repository';
+import { PrismaAuditEventRepository } from '../campaigns/prisma-audit-event.repository';
 import { PrismaCampaignRepository } from '../campaigns/prisma-campaign.repository';
 import { PrismaPublishJobRepository } from '../campaigns/prisma-publish-job.repository';
 import { PrismaYouTubeChannelRepository } from '../channels/prisma-youtube-channel.repository';
@@ -26,6 +27,7 @@ export interface DatabaseProviderOptions {
 export interface DatabaseProviderInstance {
   campaignRepository: PrismaCampaignRepository | null;
   publishJobRepository: PrismaPublishJobRepository | null;
+  auditEventRepository: PrismaAuditEventRepository | null;
   connectedAccountRepository: PrismaConnectedAccountRepository | null;
   youtubeChannelRepository: PrismaYouTubeChannelRepository | null;
   mediaAssetRepository: PrismaMediaAssetRepository | null;
@@ -79,6 +81,7 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
   let prismaClient: any = null;
   let campaignRepository: PrismaCampaignRepository | null = null;
   let publishJobRepository: PrismaPublishJobRepository | null = null;
+  let auditEventRepository: PrismaAuditEventRepository | null = null;
   let connectedAccountRepository: PrismaConnectedAccountRepository | null = null;
   let youtubeChannelRepository: PrismaYouTubeChannelRepository | null = null;
   let mediaAssetRepository: PrismaMediaAssetRepository | null = null;
@@ -88,6 +91,7 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
     if (prismaClient) {
       campaignRepository = new PrismaCampaignRepository(prismaClient);
       publishJobRepository = new PrismaPublishJobRepository(prismaClient);
+      auditEventRepository = new PrismaAuditEventRepository(prismaClient);
       connectedAccountRepository = new PrismaConnectedAccountRepository(prismaClient);
       youtubeChannelRepository = new PrismaYouTubeChannelRepository(prismaClient);
       mediaAssetRepository = new PrismaMediaAssetRepository(prismaClient);
@@ -101,6 +105,10 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
 
     get publishJobRepository() {
       return publishJobRepository;
+    },
+
+    get auditEventRepository() {
+      return auditEventRepository;
     },
 
     get connectedAccountRepository() {

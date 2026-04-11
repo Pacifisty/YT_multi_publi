@@ -161,3 +161,16 @@ model PublishJob {
 
   @@map("publish_jobs")
 }
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  eventType  String   @map("event_type")
+  actorEmail String   @map("actor_email")
+  campaignId String   @map("campaign_id")
+  targetId   String?  @map("target_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([campaignId, createdAt])
+  @@index([createdAt])
+  @@map("audit_events")
+}

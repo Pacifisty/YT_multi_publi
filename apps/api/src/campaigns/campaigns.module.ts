@@ -1,5 +1,5 @@
 import { SessionGuard } from '../auth/session.guard';
-import { AuditEventService, InMemoryAuditEventRepository } from './audit-event.service';
+import { AuditEventService, InMemoryAuditEventRepository, type AuditEventRepository } from './audit-event.service';
 import { CampaignService, type CampaignServiceOptions } from './campaign.service';
 import { CampaignStatusService } from './campaign-status.service';
 import { CampaignsController } from './campaigns.controller';
@@ -20,6 +20,7 @@ export interface CampaignsModuleInstance {
 
 export interface CampaignsModuleOptions extends CampaignServiceOptions {
   jobServiceOptions?: PublishJobServiceOptions;
+  auditRepository?: AuditEventRepository;
 }
 
 export function createCampaignsModule(options: CampaignsModuleOptions = {}): CampaignsModuleInstance {
@@ -27,7 +28,7 @@ export function createCampaignsModule(options: CampaignsModuleOptions = {}): Cam
   const sessionGuard = new SessionGuard();
   const jobService = new PublishJobService(options.jobServiceOptions);
   const auditService = new AuditEventService({
-    repository: new InMemoryAuditEventRepository(),
+    repository: options.auditRepository ?? new InMemoryAuditEventRepository(),
     now: options.now,
   });
   const launchService = new LaunchService({ campaignService, jobService, now: options.now });

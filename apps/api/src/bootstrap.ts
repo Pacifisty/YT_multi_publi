@@ -48,6 +48,7 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
         jobServiceOptions: databaseProvider.publishJobRepository
           ? { repository: databaseProvider.publishJobRepository }
           : undefined,
+        auditRepository: databaseProvider.auditEventRepository ?? undefined,
       }
     : undefined;
 

@@ -21,6 +21,11 @@ describe('Database Provider', () => {
     expect(provider.campaignRepository).toBeDefined();
   });
 
+  it('exposes an auditEvent repository when DATABASE_URL is set', async () => {
+    const provider = createDatabaseProvider({ databaseUrl: 'postgresql://localhost:5432/test' });
+    expect(provider.auditEventRepository).toBeDefined();
+  });
+
   it('connect sets isConnected to true', async () => {
     const provider = createDatabaseProvider({
       databaseUrl: 'postgresql://localhost:5432/test',

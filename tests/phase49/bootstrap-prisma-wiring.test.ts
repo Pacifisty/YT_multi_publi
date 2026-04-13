@@ -140,18 +140,21 @@ describe('bootstrap wires Prisma repository to app', () => {
     );
   });
 
-  it('uses in-memory when no _prismaFactory provided', async () => {
-    // Without _prismaFactory, databaseProvider creates a broken Prisma repo
-    // bootstrap should detect this and fall back to in-memory
-    const result = bootstrap({ env: baseEnv });
+  it('uses in-memory when DATABASE_URL is not configured', async () => {
+    const result = bootstrap({
+      env: {
+        ...baseEnv,
+        DATABASE_URL: '',
+      },
+    });
 
-    // Should still work — using in-memory fallback
     const { campaign } = await result.server.app.campaignsModule.campaignService.createCampaign({
       title: 'Default In-Memory',
       videoAssetId: 'v-1',
     });
 
     expect(campaign.title).toBe('Default In-Memory');
+    expect(result.databaseProvider.campaignRepository).toBeNull();
   });
 
   it('connect calls prisma.$connect', async () => {

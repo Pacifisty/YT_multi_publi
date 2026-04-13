@@ -34,8 +34,24 @@ function toPartialAccount(updates: Partial<ConnectedAccountRecord>): Partial<Con
   return result;
 }
 
+function toCreateDto(record: ConnectedAccountRecord) {
+  return {
+    provider: record.provider,
+    email: record.email ?? null,
+    displayName: record.displayName ?? null,
+    accessTokenEnc: record.accessTokenEnc,
+    refreshTokenEnc: record.refreshTokenEnc,
+    scopes: record.scopes,
+    tokenExpiresAt: record.tokenExpiresAt ? new Date(record.tokenExpiresAt) : null,
+  };
+}
+
 export function createAccountRepoAdapter(repo: ConnectedAccountRepository) {
   return {
+    createConnectedAccount: async (record: ConnectedAccountRecord): Promise<ConnectedAccountRecord> => {
+      const created = await repo.create(toCreateDto(record));
+      return toRecord(created);
+    },
     getConnectedAccount: async (id: string): Promise<ConnectedAccountRecord | null> => {
       const account = await repo.findById(id);
       return account ? toRecord(account) : null;

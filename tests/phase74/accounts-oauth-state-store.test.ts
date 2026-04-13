@@ -34,6 +34,7 @@ function createServiceWithStateStore(authUrlWithState: string) {
     service,
     exchangeCodeForTokens,
     validateCallbackState,
+    googleOauthService,
   };
 }
 
@@ -65,6 +66,46 @@ describe('AccountsService OAuth state fallback', () => {
     if (result.ok) {
       expect(result.account.email).toBe('owner@example.com');
       expect(result.account.status).toBe('connected');
+      await expect(service.listAccounts()).resolves.toEqual([result.account]);
+      await expect(service.getAccount(result.account.id)).resolves.toEqual(result.account);
+    }
+  });
+
+  test('persists oauth callback through createConnectedAccount override when provided', async () => {
+    const { googleOauthService } = createServiceWithStateStore(
+      'https://accounts.google.com/o/oauth2/v2/auth?state=state-db',
+    );
+    const createConnectedAccount = vi.fn(async (record) => ({
+      ...record,
+      id: 'persisted-account-id',
+    }));
+    const serviceWithPersistence = new AccountsService({
+      tokenCryptoService: new TokenCryptoService({ OAUTH_TOKEN_KEY: TEST_KEY }),
+      createAuthorizationRedirect: async () => 'https://accounts.google.com/o/oauth2/v2/auth?state=state-db',
+      googleOauthService,
+      createConnectedAccount,
+    });
+
+    await serviceWithPersistence.createAuthorizationRedirect({
+      adminUser: {
+        email: 'admin@example.com',
+      },
+    } as any);
+
+    const result = await serviceWithPersistence.handleOauthCallback({
+      code: 'oauth-code',
+      state: 'state-db',
+      session: {
+        adminUser: {
+          email: 'admin@example.com',
+        },
+      } as any,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(createConnectedAccount).toHaveBeenCalledTimes(1);
+    if (result.ok) {
+      expect(result.account.id).toBe('persisted-account-id');
     }
   });
 

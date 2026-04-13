@@ -1,6 +1,9 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 
 export const GOOGLE_YOUTUBE_SCOPES = [
+  'openid',
+  'email',
+  'profile',
   'https://www.googleapis.com/auth/youtube.readonly',
   'https://www.googleapis.com/auth/youtube.upload',
 ] as const;

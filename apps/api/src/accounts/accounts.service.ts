@@ -48,6 +48,8 @@ export interface ConnectedAccountRecord {
 
 interface ConnectedAccountStore {
   save(record: ConnectedAccountRecord): ConnectedAccountRecord;
+  findAll(): ConnectedAccountRecord[];
+  findById(id: string): ConnectedAccountRecord | null;
 }
 
 interface OAuthCallbackInput {
@@ -82,6 +84,7 @@ export interface AccountsServiceOptions {
   tokenCryptoService?: TokenCryptoService;
   googleOauthService?: GoogleOauthService;
   connectedAccountStore?: ConnectedAccountStore;
+  createConnectedAccount?: (record: ConnectedAccountRecord) => Promise<ConnectedAccountRecord>;
   createAuthorizationRedirect?: (session?: GoogleOauthSession | null) => string | Promise<string>;
   handleOauthCallback?: (input: OAuthCallbackInput) => Promise<OAuthCallbackResult>;
   refreshGoogleAccessToken?: (refreshToken: string) => Promise<RefreshTokenResult>;
@@ -161,10 +164,13 @@ export class AccountsService {
       scopes: tokenResult.scopes.length > 0 ? tokenResult.scopes : [...GOOGLE_YOUTUBE_SCOPES],
       tokenExpiresAt: tokenResult.tokenExpiresAt,
     });
+    const persistedAccount = this.options.createConnectedAccount
+      ? await this.options.createConnectedAccount(record)
+      : this.connectedAccountStore.save(record);
 
     return {
       ok: true,
-      account: this.connectedAccountStore.save(record),
+      account: persistedAccount,
     };
   }
 
@@ -329,14 +335,14 @@ export class AccountsService {
     if (this.options.listConnectedAccounts) {
       return this.options.listConnectedAccounts();
     }
-    return [];
+    return this.connectedAccountStore.findAll();
   }
 
   async getAccount(id: string): Promise<ConnectedAccountRecord | null> {
     if (this.options.getConnectedAccount) {
       return this.options.getConnectedAccount(id);
     }
-    return null;
+    return this.connectedAccountStore.findById(id);
   }
 
   disconnectAccount(accountId: string): { disconnected: boolean; account?: ConnectedAccountRecord } {
@@ -449,6 +455,16 @@ class InMemoryConnectedAccountStore implements ConnectedAccountStore {
 
     this.records.set(key, updated);
     return updated;
+  }
+
+  findAll(): ConnectedAccountRecord[] {
+    return Array.from(this.records.values()).sort((left, right) => {
+      return right.connectedAt.localeCompare(left.connectedAt);
+    });
+  }
+
+  findById(id: string): ConnectedAccountRecord | null {
+    return this.findAll().find((record) => record.id === id) ?? null;
   }
 }
 

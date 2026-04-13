@@ -85,6 +85,37 @@ describe('createAccountRepoAdapter', () => {
     expect(results[0].connectedAt).toBe('2024-01-01T00:00:00.000Z');
   });
 
+  it('createConnectedAccount delegates to repo.create and adapts result', async () => {
+    const repo = makeMockRepo({ create: vi.fn(async () => testAccount) });
+    const adapter = createAccountRepoAdapter(repo);
+
+    const created = await adapter.createConnectedAccount({
+      id: 'local-id',
+      provider: 'google',
+      email: 'test@example.com',
+      displayName: 'Test User',
+      accessTokenEnc: 'encrypted-access',
+      refreshTokenEnc: 'encrypted-refresh',
+      scopes: ['youtube.readonly'],
+      tokenExpiresAt: '2025-01-01T00:00:00.000Z',
+      status: 'connected',
+      connectedAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-06-01T00:00:00.000Z',
+    });
+
+    expect(repo.create).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'google',
+      email: 'test@example.com',
+      displayName: 'Test User',
+      accessTokenEnc: 'encrypted-access',
+      refreshTokenEnc: 'encrypted-refresh',
+      scopes: ['youtube.readonly'],
+      tokenExpiresAt: new Date('2025-01-01T00:00:00.000Z'),
+    }));
+    expect(created.id).toBe('acc-1');
+    expect(created.email).toBe('test@example.com');
+  });
+
   it('updateConnectedAccount delegates to repo.update with adapted data', async () => {
     const updatedAccount: ConnectedAccount = { ...testAccount, status: 'disconnected' };
     const repo = makeMockRepo({ update: vi.fn(async () => updatedAccount) });

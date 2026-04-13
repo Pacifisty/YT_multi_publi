@@ -43,7 +43,7 @@ describe('health check database status', () => {
     });
   });
 
-  test('bootstrap health reports in-memory mode when Prisma runtime is unavailable', () => {
+  test('bootstrap health reports prisma mode when DATABASE_URL and Prisma runtime are available', () => {
     const result = bootstrap({ env: baseEnv });
 
     const health = result.healthCheck.handleRequest();
@@ -51,7 +51,7 @@ describe('health check database status', () => {
     expect(health.body.database).toEqual({
       configured: true,
       connected: false,
-      mode: 'in-memory',
+      mode: 'prisma',
     });
   });
 

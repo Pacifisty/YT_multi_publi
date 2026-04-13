@@ -190,15 +190,33 @@ export function createApiRouter(options: {
       },
       {
         method: 'GET',
+        pattern: /^\/api\/accounts\/oauth\/youtube\/start$/,
+        paramNames: [],
+        handler: (req: AccountsRequest) => accountsController.startYouTubeOauth(req),
+      },
+      {
+        method: 'GET',
         pattern: /^\/api\/accounts\/oauth\/google\/callback$/,
         paramNames: [],
         handler: (req: AccountsRequest) => accountsController.handleGoogleOauthCallback(req),
+      },
+      {
+        method: 'GET',
+        pattern: /^\/api\/accounts\/oauth\/youtube\/callback$/,
+        paramNames: [],
+        handler: (req: AccountsRequest) => accountsController.handleYouTubeOauthCallback(req),
       },
       {
         method: 'PATCH',
         pattern: /^\/api\/accounts\/([^/]+)\/channels\/([^/]+)$/,
         paramNames: ['accountId', 'channelId'],
         handler: (req: AccountsRequest) => accountsController.toggleChannel(req),
+      },
+      {
+        method: 'POST',
+        pattern: /^\/api\/accounts\/([^/]+)\/channels\/sync$/,
+        paramNames: ['accountId'],
+        handler: (req: AccountsRequest) => accountsController.syncChannels(req),
       },
       {
         method: 'GET',

@@ -40,6 +40,18 @@ describe('API Router — accounts routes', () => {
       tokenCryptoService: crypto,
       listConnectedAccounts: async () => [account],
       getConnectedAccount: async (id: string) => (id === account.id ? account : null),
+      youtubeChannelsService: {
+        listMineChannels: async () => ({
+          channels: [
+            {
+              channelId: 'UC_demo',
+              title: 'Demo Channel',
+              handle: '@demo',
+              thumbnailUrl: 'https://example.com/thumb.jpg',
+            },
+          ],
+        }),
+      },
       createAuthorizationRedirect: async () => 'https://accounts.google.com/o/oauth2/v2/auth?state=state-123',
       handleOauthCallback: async (input) => (input.state === 'ok-state'
         ? { ok: true, account }
@@ -92,6 +104,17 @@ describe('API Router — accounts routes', () => {
     expect(res.body.channels).toBeDefined();
   });
 
+  it('POST /api/accounts/:accountId/channels/sync syncs channels', async () => {
+    const res = await router.handle({
+      method: 'POST',
+      path: '/api/accounts/acct-1/channels/sync',
+      session: authedSession,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.channels).toBeDefined();
+    expect(res.body.sync.channelCount).toBe(1);
+  });
+
   it('GET /api/accounts/oauth/google/start returns redirect URL', async () => {
     const res = await router.handle({
       method: 'GET',
@@ -102,10 +125,31 @@ describe('API Router — accounts routes', () => {
     expect(res.body.redirectUrl).toContain('accounts.google.com');
   });
 
+  it('GET /api/accounts/oauth/youtube/start returns redirect URL', async () => {
+    const res = await router.handle({
+      method: 'GET',
+      path: '/api/accounts/oauth/youtube/start',
+      session: authedSession,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.redirectUrl).toContain('accounts.google.com');
+  });
+
   it('GET /api/accounts/oauth/google/callback returns account on valid code/state', async () => {
     const res = await router.handle({
       method: 'GET',
       path: '/api/accounts/oauth/google/callback',
+      session: authedSession,
+      query: { code: 'abc', state: 'ok-state' },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.account.id).toBe('acct-1');
+  });
+
+  it('GET /api/accounts/oauth/youtube/callback returns account on valid code/state', async () => {
+    const res = await router.handle({
+      method: 'GET',
+      path: '/api/accounts/oauth/youtube/callback',
       session: authedSession,
       query: { code: 'abc', state: 'ok-state' },
     });

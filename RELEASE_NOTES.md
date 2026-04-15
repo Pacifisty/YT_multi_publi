@@ -13,12 +13,14 @@ Data: 2026-04-11
 - API and persistence:
   - Added Prisma-backed audit event repository wiring.
   - Added `AuditEvent` model and migration.
+  - Hardened Prisma startup to fail fast when the Prisma Client is missing or required tables have not been migrated yet.
 - Web route/view:
   - Added `activitySummary` and `activityTimeline` on campaign detail route.
   - Added `activityFilters` contract with selected option, options list, filtered summary, and filtered timeline.
 - Tests:
   - Expanded integration coverage for campaign detail timeline/filter behavior.
   - Added/updated persistence and migration wiring tests.
+  - Added focused startup/readiness coverage for Prisma schema validation and operator-facing startup errors.
 
 ## Validation
 
@@ -32,4 +34,3 @@ Data: 2026-04-11
 - `2f91325` feat: persist campaign audit events via prisma
 - `a553449` feat: add unified activity timeline to campaign detail
 - `e314e27` feat: add activity filters for campaign detail timeline
-

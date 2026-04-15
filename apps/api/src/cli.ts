@@ -9,6 +9,28 @@ function parsePort(rawPort: string | undefined): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+export function formatStartupError(error: unknown): string[] {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (message.includes('Prisma Client is not available')) {
+    return [
+      '[api] failed to start',
+      `[api] ${message}`,
+      '[api] Fix: run `npm install` and `npm run db:generate`, then start the server again.',
+    ];
+  }
+
+  if (message.includes('Database schema is missing required tables')) {
+    return [
+      '[api] failed to start',
+      `[api] ${message}`,
+      '[api] Fix: run `npm run db:deploy` against the configured database, then start the server again.',
+    ];
+  }
+
+  return ['[api] failed to start', message];
+}
+
 async function main(): Promise<void> {
   const requestedPort = parsePort(process.env.PORT);
   const server = await startServer({
@@ -22,7 +44,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  console.error('[api] failed to start');
-  console.error(error);
+  for (const line of formatStartupError(error)) {
+    console.error(line);
+  }
   process.exitCode = 1;
 });

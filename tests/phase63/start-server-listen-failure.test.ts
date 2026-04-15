@@ -27,6 +27,10 @@ function createFakePrisma(disconnectFn = vi.fn().mockResolvedValue(undefined)) {
 
 describe('startServer listen failure cleanup', () => {
   let cleanup: (() => Promise<void>) | null = null;
+  const inMemoryEnv = {
+    ...baseEnv,
+    DATABASE_URL: '',
+  };
 
   afterEach(async () => {
     if (cleanup) {
@@ -39,7 +43,7 @@ describe('startServer listen failure cleanup', () => {
   test('disconnects the database if HTTP listen fails after connect', async () => {
     const { startServer } = await import('../../apps/api/src/start');
 
-    const running = await startServer({ env: baseEnv, port: 0 });
+    const running = await startServer({ env: inMemoryEnv, port: 0 });
     cleanup = running.shutdown;
 
     const disconnectFn = vi.fn().mockResolvedValue(undefined);
@@ -59,7 +63,7 @@ describe('startServer listen failure cleanup', () => {
   test('disconnects the database on listen failure when using the Prisma module path', async () => {
     const { startServer } = await import('../../apps/api/src/start');
 
-    const running = await startServer({ env: baseEnv, port: 0 });
+    const running = await startServer({ env: inMemoryEnv, port: 0 });
     cleanup = running.shutdown;
 
     const disconnectFn = vi.fn().mockResolvedValue(undefined);

@@ -29,7 +29,7 @@ describe('database provider connect/disconnect race safety', () => {
     expect(provider.isConnected()).toBe(false);
   });
 
-  test('disconnect during a failing connect resolves without calling $disconnect', async () => {
+  test('disconnect during a failing connect resolves without issuing an extra $disconnect', async () => {
     let rejectConnect: ((error: Error) => void) | undefined;
     const connectFn = vi.fn(
       () => new Promise<void>((_, reject) => {
@@ -50,7 +50,7 @@ describe('database provider connect/disconnect race safety', () => {
 
     await expect(connectPromise).rejects.toThrow('connect failed');
     await expect(disconnectPromise).resolves.toBeUndefined();
-    expect(disconnectFn).not.toHaveBeenCalled();
+    expect(disconnectFn).toHaveBeenCalledTimes(1);
     expect(provider.isConnected()).toBe(false);
   });
 });

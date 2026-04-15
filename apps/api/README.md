@@ -46,6 +46,13 @@ When `DATABASE_URL` is configured and migrations are applied, `/health` should r
 
 - `database.configured: true`
 - `database.mode: "prisma"`
+- `database.connected: true`
+
+`/ready` should return:
+
+- HTTP `200`
+- `status: "ready"`
+- `ready: true`
 
 For YouTube account connection (Google OAuth), set:
 
@@ -76,6 +83,52 @@ npm.cmd run db:deploy
 npm.cmd run db:push
 npm.cmd run db:studio
 ```
+
+## Startup troubleshooting
+
+If startup fails with:
+
+```text
+DATABASE_URL is configured, but Prisma Client is not available.
+```
+
+Run:
+
+```powershell
+npm.cmd install
+npm.cmd run db:generate
+```
+
+If startup fails with:
+
+```text
+Database schema is missing required tables: ...
+```
+
+Run:
+
+```powershell
+npm.cmd run db:deploy
+```
+
+If PostgreSQL is reachable but the configured database itself does not exist, create it manually or recreate the bundled Docker volume:
+
+```powershell
+docker compose down -v
+docker compose up -d
+```
+
+That resets the bundled `postgres` service and recreates the default `yt_multi_publi` database from `docker-compose.yml`.
+
+If `docker compose up -d` fails before that, make sure Docker Desktop is running and the Linux engine is available.
+
+To verify the full local Prisma startup flow in one command:
+
+```powershell
+npm.cmd run verify:prisma-startup
+```
+
+This command runs `db:generate`, `db:deploy`, starts the API, and confirms that `/health` and `/ready` report Prisma as connected and ready.
 
 Default health endpoints:
 

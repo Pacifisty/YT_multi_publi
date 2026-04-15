@@ -29,10 +29,10 @@ For persistent local development with PostgreSQL:
 docker compose up -d
 ```
 
-2. Set this in `.env`:
+2. Set `DATABASE_URL` in `.env` to:
 
-```env
-DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/yt_multi_publi?schema=public
+```text
+postgresql://postgres:postgres@127.0.0.1:5432/yt_multi_publi?schema=public
 ```
 
 3. Generate Prisma Client and apply migrations:

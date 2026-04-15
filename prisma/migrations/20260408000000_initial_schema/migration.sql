@@ -185,14 +185,4 @@ ALTER TABLE "campaign_targets" ADD CONSTRAINT "campaign_targets_thumbnail_asset_
 
 -- AddForeignKey
 ALTER TABLE "publish_jobs" ADD CONSTRAINT "publish_jobs_campaign_target_id_fkey" FOREIGN KEY ("campaign_target_id") REFERENCES "campaign_targets"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-+---------------------------------------------------------+
-¦  Update available 6.19.3 -> 7.7.0                       ¦
-¦                                                         ¦
-¦  This is a major update - please follow the guide at    ¦
-¦  https://pris.ly/d/major-version-upgrade                ¦
-¦                                                         ¦
-¦  Run the following to update                            ¦
-¦    npm i --save-dev prisma@latest                       ¦
-¦    npm i @prisma/client@latest                          ¦
-+---------------------------------------------------------+
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-const { execFileSync, spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const { once } = require('events');
 const net = require('net');
 
@@ -83,10 +83,24 @@ async function ensureDatabaseReachable(databaseUrl) {
 
 function runStep(label, args) {
   console.log(`[verify:prisma-startup] ${label}`);
-  execFileSync(npmCommand(), args, {
-    stdio: 'inherit',
-    env: { ...process.env },
-  });
+  const result = isWindows()
+    ? spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', [npmCommand(), ...args].join(' ')], {
+        stdio: 'inherit',
+        env: { ...process.env },
+        windowsHide: true,
+      })
+    : spawnSync(npmCommand(), args, {
+        stdio: 'inherit',
+        env: { ...process.env },
+      });
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  if (result.status !== 0) {
+    throw new Error(`${label} failed with exit code ${result.status ?? 'unknown'}.`);
+  }
 }
 
 function formatStartupOutput(output) {
@@ -222,7 +236,7 @@ async function main() {
   }
 
   if (!process.env.DATABASE_URL) {
-    throw new Error('DATABASE_URL must be configured in .env before running verify:prisma-startup.');
+    throw new Error('DATABASE_URL must be configured in the environment or .env before running verify:prisma-startup.');
   }
 
   await ensureDatabaseReachable(process.env.DATABASE_URL);

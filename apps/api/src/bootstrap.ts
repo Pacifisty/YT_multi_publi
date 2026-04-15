@@ -84,7 +84,7 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
     getDatabaseStatus: () => ({
       configured: Boolean(env.DATABASE_URL),
       connected: databaseProvider.isConnected(),
-      mode: databaseProvider.campaignRepository ? 'prisma' : 'in-memory',
+      mode: env.DATABASE_URL ? 'prisma' : 'in-memory',
     }),
   });
 

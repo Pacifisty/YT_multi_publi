@@ -35,7 +35,7 @@ describe('database provider lifecycle safety', () => {
     expect(provider.isConnected()).toBe(false);
   });
 
-  test('failed connect leaves provider disconnected and makes disconnect a no-op', async () => {
+  test('failed connect leaves provider disconnected, cleans up Prisma, and makes later disconnect a no-op', async () => {
     const connectFn = vi.fn().mockRejectedValue(new Error('db unavailable'));
     const disconnectFn = vi.fn().mockResolvedValue(undefined);
 
@@ -46,10 +46,11 @@ describe('database provider lifecycle safety', () => {
 
     await expect(provider.connect()).rejects.toThrow('db unavailable');
     expect(provider.isConnected()).toBe(false);
+    expect(disconnectFn).toHaveBeenCalledTimes(1);
 
     await provider.disconnect();
 
-    expect(disconnectFn).not.toHaveBeenCalled();
+    expect(disconnectFn).toHaveBeenCalledTimes(1);
   });
 
   test('concurrent connect calls share the same in-flight connection attempt', async () => {

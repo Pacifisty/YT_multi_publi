@@ -36,6 +36,21 @@ export interface DatabaseProviderInstance {
   disconnect(): Promise<void>;
 }
 
+const REQUIRED_POSTGRES_TABLES = [
+  'admin_users',
+  'connected_accounts',
+  'youtube_channels',
+  'media_assets',
+  'campaigns',
+  'campaign_targets',
+  'publish_jobs',
+  'audit_events',
+] as const;
+
+function createPrismaUnavailableMessage(): string {
+  return 'DATABASE_URL is configured, but Prisma Client is not available. Install dependencies and run Prisma generate before starting the server.';
+}
+
 function loadPrismaModule(moduleOverride?: PrismaModuleLike): PrismaModuleLike | null {
   if (moduleOverride) {
     return moduleOverride;
@@ -71,6 +86,34 @@ function createPrismaClient(options: DatabaseProviderOptions): any | null {
   });
 }
 
+async function verifyRequiredTables(prismaClient: any): Promise<void> {
+  if (typeof prismaClient?.$queryRawUnsafe !== 'function') {
+    return;
+  }
+
+  const rows = await prismaClient.$queryRawUnsafe<{ table_name: string }[]>(`
+    SELECT table_name
+    FROM information_schema.tables
+    WHERE table_schema = current_schema()
+      AND table_name IN (${REQUIRED_POSTGRES_TABLES.map((name) => `'${name}'`).join(', ')})
+  `);
+
+  const existingTables = new Set(
+    Array.isArray(rows)
+      ? rows
+          .map((row) => row?.table_name)
+          .filter((tableName): tableName is string => typeof tableName === 'string')
+      : [],
+  );
+  const missingTables = REQUIRED_POSTGRES_TABLES.filter((tableName) => !existingTables.has(tableName));
+
+  if (missingTables.length > 0) {
+    throw new Error(
+      `Database schema is missing required tables: ${missingTables.join(', ')}. Run Prisma migrations before starting the server.`,
+    );
+  }
+}
+
 export function createDatabaseProvider(options: DatabaseProviderOptions): DatabaseProviderInstance {
   const { databaseUrl } = options;
 
@@ -85,6 +128,7 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
   let connectedAccountRepository: PrismaConnectedAccountRepository | null = null;
   let youtubeChannelRepository: PrismaYouTubeChannelRepository | null = null;
   let mediaAssetRepository: PrismaMediaAssetRepository | null = null;
+  let startupIssue: string | null = null;
 
   if (databaseUrl) {
     prismaClient = createPrismaClient(options);
@@ -95,6 +139,8 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
       connectedAccountRepository = new PrismaConnectedAccountRepository(prismaClient);
       youtubeChannelRepository = new PrismaYouTubeChannelRepository(prismaClient);
       mediaAssetRepository = new PrismaMediaAssetRepository(prismaClient);
+    } else {
+      startupIssue = createPrismaUnavailableMessage();
     }
   }
 
@@ -130,7 +176,11 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
     async connect() {
       desiredConnected = true;
 
-      if (!databaseUrl || !prismaClient) return;
+      if (!databaseUrl) return;
+      if (startupIssue) {
+        throw new Error(startupIssue);
+      }
+      if (!prismaClient) return;
 
       if (disconnectPromise) {
         await disconnectPromise;
@@ -141,8 +191,20 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
       if (connectPromise) return connectPromise;
 
       connectPromise = (async () => {
-        await prismaClient.$connect();
-        connected = true;
+        try {
+          await prismaClient.$connect();
+          await verifyRequiredTables(prismaClient);
+          connected = true;
+        } catch (error) {
+          try {
+            await prismaClient.$disconnect();
+          } catch {
+            // Best effort cleanup after a failed startup check.
+          }
+
+          connected = false;
+          throw error;
+        }
       })();
 
       try {

@@ -1,7 +1,11 @@
 import type { ConnectedAccountRecord } from '../../accounts/accounts.service';
 
+export interface ChannelTokenResolutionOptions {
+  requirePlaylistWriteScope?: boolean;
+}
+
 export interface ChannelTokenResolver {
-  resolve(channelId: string): Promise<{ accessToken: string }>;
+  resolve(channelId: string, options?: ChannelTokenResolutionOptions): Promise<{ accessToken: string }>;
 }
 
 export type ChannelTokenResolverErrorCode = 'CHANNEL_NOT_FOUND' | 'REAUTH_REQUIRED';
@@ -48,7 +52,7 @@ export class InMemoryChannelTokenResolver implements ChannelTokenResolver {
     this.decryptToken = options.decryptToken;
   }
 
-  async resolve(channelId: string): Promise<{ accessToken: string }> {
+  async resolve(channelId: string, _options?: ChannelTokenResolutionOptions): Promise<{ accessToken: string }> {
     const account = await this.getAccountForChannel(channelId);
 
     if (!account) {

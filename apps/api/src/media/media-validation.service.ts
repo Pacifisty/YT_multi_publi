@@ -3,7 +3,8 @@ import type { UploadedMediaFile } from './storage/local-storage.service';
 export const VALIDATION_RULES = {
   VIDEO_MAX_SIZE_BYTES: 2 * 1024 * 1024 * 1024, // 2 GB
   THUMBNAIL_MAX_SIZE_BYTES: 5 * 1024 * 1024, // 5 MB
-  VIDEO_MAX_DURATION_SECONDS: 21600, // 6 hours
+  SHORT_FORM_MAX_DURATION_SECONDS: 180, // 3 minutes
+  VIDEO_MAX_DURATION_SECONDS: 2147483647, // Storage safeguard for 32-bit integer persistence
   ACCEPTED_VIDEO_MIMES: ['video/mp4', 'video/quicktime'] as readonly string[],
   ACCEPTED_THUMBNAIL_MIMES: ['image/jpeg', 'image/png'] as readonly string[],
 } as const;

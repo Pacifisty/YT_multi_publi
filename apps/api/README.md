@@ -20,6 +20,7 @@ cp .env.example .env
 
 Fill any real credentials you need.  
 `DATABASE_URL` can stay empty for in-memory mode.
+`PUBLIC_APP_URL` should point to the externally reachable base URL when platforms like Instagram need to fetch uploaded media back from your server.
 
 For persistent local development with PostgreSQL:
 
@@ -61,6 +62,23 @@ For YouTube account connection (Google OAuth), set:
 - `GOOGLE_REDIRECT_URI=http://127.0.0.1:3000/workspace/accounts/callback`
 
 In Google Cloud Console, the same URI must be added as an authorized redirect URI.
+
+For Instagram account connection, set:
+
+- `INSTAGRAM_CLIENT_ID`
+- `INSTAGRAM_CLIENT_SECRET`
+- `INSTAGRAM_REDIRECT_URI=http://127.0.0.1:3000/workspace/accounts/callback?provider=instagram`
+
+Register the same callback in your Instagram/Meta app settings.
+
+For TikTok account connection, set:
+
+- `TIKTOK_CLIENT_KEY`
+- `TIKTOK_CLIENT_SECRET`
+- `TIKTOK_REDIRECT_URI=http://127.0.0.1:3000/workspace/accounts/callback?provider=tiktok`
+
+Register the same callback in the TikTok developer console.
+For direct video publishing to TikTok, your TikTok app must also have the Content Posting API enabled for Direct Post, the `video.publish` scope approved, and the domain used by `PUBLIC_APP_URL` verified in TikTok URL properties because the app uses TikTok's `PULL_FROM_URL` flow.
 
 ## 3. Start API
 
@@ -144,5 +162,5 @@ Frontend routes served by the same process:
 - `GET /workspace/campanhas/nova`
 - `GET /workspace/campanhas/:campaignId`
 - `GET /workspace/accounts`
-- `GET /workspace/accounts/callback` (Google OAuth return route)
+- `GET /workspace/accounts/callback` (OAuth return route for Google, Instagram, and TikTok)
 - `GET /workspace/media`

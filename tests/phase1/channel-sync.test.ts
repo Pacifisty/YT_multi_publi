@@ -90,6 +90,24 @@ describe('channel sync after OAuth callback', () => {
 
     expect(channels).toHaveLength(2);
   });
+
+  test('re-sync reactivates previously deactivated channels for the same account', async () => {
+    const crypto = createTokenCrypto();
+    const account = createConnectedAccount(crypto);
+
+    const service = new AccountsService({
+      tokenCryptoService: crypto,
+      youtubeChannelsService: createMockYouTubeChannelsService(),
+    });
+
+    const channels = await service.syncChannelsForAccount(account);
+    await service.toggleChannel(channels[0].id, false);
+
+    await service.syncChannelsForAccount(account);
+    const reloadedChannels = await service.getChannelsForAccount(account.id);
+
+    expect(reloadedChannels.find((channel) => channel.id === channels[0].id)?.isActive).toBe(true);
+  });
 });
 
 describe('channel toggle activation', () => {

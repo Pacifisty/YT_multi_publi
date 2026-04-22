@@ -4,9 +4,18 @@ import { TokenCryptoService } from '../common/crypto/token-crypto.service';
 import {
   GOOGLE_YOUTUBE_SCOPES,
   GoogleOauthService,
+  hasYouTubePlaylistWriteScope,
   type GoogleOauthSession,
   type GoogleTokenResult,
 } from '../integrations/google/google-oauth.service';
+import type { InstagramOauthSession, InstagramTokenResult } from '../integrations/instagram/instagram-oauth.service';
+import { InstagramOauthService } from '../integrations/instagram/instagram-oauth.service';
+import type { TikTokOauthSession, TikTokTokenResult } from '../integrations/tiktok/tiktok-oauth.service';
+import { TikTokOauthService } from '../integrations/tiktok/tiktok-oauth.service';
+import {
+  ChannelTokenResolverError,
+  type ChannelTokenResolutionOptions,
+} from '../integrations/youtube/channel-token-resolver';
 import type { YouTubeChannelInfo, YouTubeChannelsService } from '../integrations/youtube/youtube-channels.service';
 
 export interface ChannelRecord {
@@ -21,8 +30,10 @@ export interface ChannelRecord {
 }
 
 export interface ConnectedAccountPersistenceInput {
+  ownerEmail?: string;
   provider: string;
   googleSubject?: string;
+  providerSubject?: string;
   email?: string;
   displayName?: string;
   accessToken: string;
@@ -33,8 +44,10 @@ export interface ConnectedAccountPersistenceInput {
 
 export interface ConnectedAccountRecord {
   id: string;
+  ownerEmail?: string | null;
   provider: string;
   googleSubject?: string;
+  providerSubject?: string;
   email?: string;
   displayName?: string;
   accessTokenEnc: string;
@@ -50,13 +63,16 @@ interface ConnectedAccountStore {
   save(record: ConnectedAccountRecord): ConnectedAccountRecord;
   findAll(): ConnectedAccountRecord[];
   findById(id: string): ConnectedAccountRecord | null;
+  delete(id: string): boolean;
 }
 
 interface OAuthCallbackInput {
   code: string;
   state: string;
-  session?: GoogleOauthSession | null;
+  session?: Record<string, unknown> | null;
 }
+
+export type SupportedOauthProvider = 'google' | 'youtube' | 'instagram' | 'tiktok';
 
 type OAuthCallbackResult =
   | {
@@ -83,12 +99,16 @@ export interface RefreshResult {
 export interface AccountsServiceOptions {
   tokenCryptoService?: TokenCryptoService;
   googleOauthService?: GoogleOauthService;
+  instagramOauthService?: InstagramOauthService;
+  tikTokOauthService?: TikTokOauthService;
   connectedAccountStore?: ConnectedAccountStore;
   createConnectedAccount?: (record: ConnectedAccountRecord) => Promise<ConnectedAccountRecord>;
   createAuthorizationRedirect?: (session?: GoogleOauthSession | null) => string | Promise<string>;
   handleOauthCallback?: (input: OAuthCallbackInput) => Promise<OAuthCallbackResult>;
   refreshGoogleAccessToken?: (refreshToken: string) => Promise<RefreshTokenResult>;
+  refreshTikTokAccessToken?: (refreshToken: string) => Promise<RefreshTokenResult>;
   updateConnectedAccount?: (id: string, updates: Partial<ConnectedAccountRecord>) => Promise<ConnectedAccountRecord>;
+  deleteConnectedAccount?: (id: string) => Promise<boolean>;
   youtubeChannelsService?: YouTubeChannelsService;
   channelStore?: ChannelStore;
   getConnectedAccount?: (id: string) => Promise<ConnectedAccountRecord | null>;
@@ -102,7 +122,34 @@ export interface ChannelStore {
   findByAccountId(accountId: string): Promise<ChannelRecord[]>;
   findById(channelId: string): Promise<ChannelRecord | null>;
   update(channelId: string, updates: Partial<ChannelRecord>): Promise<ChannelRecord | null>;
+  delete(channelId: string): Promise<boolean>;
   deactivateAllForAccount(accountId: string): Promise<void>;
+}
+
+export class AccountDeletionBlockedError extends Error {
+  constructor(message = 'This account cannot be deleted because one or more channels are already used in campaigns.') {
+    super(message);
+    this.name = 'AccountDeletionBlockedError';
+  }
+}
+
+function normalizeOwnerEmail(value: string | null | undefined): string | null {
+  const normalized = value?.trim().toLowerCase();
+  return normalized ? normalized : null;
+}
+
+function filterAccountsByOwner(accounts: ConnectedAccountRecord[], ownerEmail?: string): ConnectedAccountRecord[] {
+  const normalizedOwnerEmail = normalizeOwnerEmail(ownerEmail);
+  if (!normalizedOwnerEmail) {
+    return accounts;
+  }
+
+  const hasOwnedAccounts = accounts.some((account) => normalizeOwnerEmail(account.ownerEmail) !== null);
+  if (!hasOwnedAccounts) {
+    return accounts;
+  }
+
+  return accounts.filter((account) => normalizeOwnerEmail(account.ownerEmail) === normalizedOwnerEmail);
 }
 
 export class AccountsService {
@@ -110,6 +157,8 @@ export class AccountsService {
 
   private tokenCryptoService?: TokenCryptoService;
   private googleOauthService?: GoogleOauthService;
+  private instagramOauthService?: InstagramOauthService;
+  private tikTokOauthService?: TikTokOauthService;
   private readonly connectedAccountStore: ConnectedAccountStore;
   private readonly channelStore: ChannelStore;
   private readonly now: () => Date;
@@ -118,15 +167,48 @@ export class AccountsService {
   constructor(private readonly options: AccountsServiceOptions = {}) {
     this.tokenCryptoService = options.tokenCryptoService;
     this.googleOauthService = options.googleOauthService;
+    this.instagramOauthService = options.instagramOauthService;
+    this.tikTokOauthService = options.tikTokOauthService;
     this.connectedAccountStore = options.connectedAccountStore ?? new InMemoryConnectedAccountStore();
     this.channelStore = options.channelStore ?? new InMemoryChannelStore();
     this.now = options.now ?? (() => new Date());
   }
 
   async createAuthorizationRedirect(session?: GoogleOauthSession | null): Promise<string> {
+    return this.createAuthorizationRedirectForProvider('google', session);
+  }
+
+  async createAuthorizationRedirectForProvider(
+    provider: SupportedOauthProvider,
+    session?: Record<string, unknown> | null,
+  ): Promise<string> {
+    if (provider === 'instagram') {
+      const redirectUrl = await this.getInstagramOauthService().createAuthorizationRedirect(session as InstagramOauthSession | null | undefined);
+      const state = extractStateFromAuthorizationRedirect(redirectUrl);
+      if (state) {
+        this.rememberOauthState(
+          state,
+          (session as { adminUser?: { email?: string } } | null | undefined)?.adminUser?.email,
+        );
+      }
+      return redirectUrl;
+    }
+
+    if (provider === 'tiktok') {
+      const redirectUrl = await this.getTikTokOauthService().createAuthorizationRedirect(session as TikTokOauthSession | null | undefined);
+      const state = extractStateFromAuthorizationRedirect(redirectUrl);
+      if (state) {
+        this.rememberOauthState(
+          state,
+          (session as { adminUser?: { email?: string } } | null | undefined)?.adminUser?.email,
+        );
+      }
+      return redirectUrl;
+    }
+
     const redirectUrl = this.options.createAuthorizationRedirect
       ? await this.options.createAuthorizationRedirect(session)
-      : await this.getGoogleOauthService().createAuthorizationRedirect(session);
+      : await this.getGoogleOauthService().createAuthorizationRedirect(session as GoogleOauthSession | null | undefined);
 
     const state = extractStateFromAuthorizationRedirect(redirectUrl);
     if (state) {
@@ -137,12 +219,20 @@ export class AccountsService {
   }
 
   async handleOauthCallback(input: OAuthCallbackInput): Promise<OAuthCallbackResult> {
+    return this.handleOauthCallbackForProvider('google', input);
+  }
+
+  async handleOauthCallbackForProvider(
+    provider: SupportedOauthProvider,
+    input: OAuthCallbackInput,
+  ): Promise<OAuthCallbackResult> {
     if (this.options.handleOauthCallback) {
       return this.options.handleOauthCallback(input);
     }
 
     const adminEmail = (input.session as { adminUser?: { email?: string } } | null | undefined)?.adminUser?.email;
-    const sessionStateValid = this.getGoogleOauthService().validateCallbackState(input.session, input.state);
+    const canonicalProvider = provider === 'youtube' ? 'google' : provider;
+    const sessionStateValid = this.validateProviderCallbackState(canonicalProvider, input.session, input.state);
     const storedStateValid = this.consumeOauthState(input.state, adminEmail);
     const stateValid = sessionStateValid || storedStateValid;
 
@@ -153,10 +243,12 @@ export class AccountsService {
       };
     }
 
-    const tokenResult = await this.getGoogleOauthService().exchangeCodeForTokens(input.code);
+    const tokenResult = await this.exchangeProviderCode(canonicalProvider, input.code);
     const record = this.createPersistenceRecord({
-      provider: 'google',
-      googleSubject: tokenResult.profile.googleSubject,
+      ownerEmail: adminEmail,
+      provider: canonicalProvider,
+      googleSubject: tokenResult.profile.providerSubject ?? tokenResult.profile.googleSubject,
+      providerSubject: tokenResult.profile.providerSubject ?? tokenResult.profile.googleSubject,
       email: tokenResult.profile.email,
       displayName: tokenResult.profile.displayName,
       accessToken: tokenResult.accessToken,
@@ -179,8 +271,10 @@ export class AccountsService {
 
     return {
       id: randomUUID(),
+      ownerEmail: normalizeOwnerEmail(input.ownerEmail),
       provider: input.provider,
-      googleSubject: input.googleSubject,
+      googleSubject: input.providerSubject ?? input.googleSubject,
+      providerSubject: input.providerSubject ?? input.googleSubject,
       email: input.email,
       displayName: input.displayName,
       accessTokenEnc: this.getTokenCryptoService().encrypt(input.accessToken),
@@ -225,7 +319,7 @@ export class AccountsService {
     }
 
     try {
-      const refreshFn = this.options.refreshGoogleAccessToken ?? this.defaultRefreshGoogleAccessToken.bind(this);
+      const refreshFn = this.getRefreshFnForProvider(account.provider);
       const refreshed = await refreshFn(tokens.refreshToken);
 
       const crypto = this.getTokenCryptoService();
@@ -272,7 +366,7 @@ export class AccountsService {
   private isAuthorizationError(error: unknown): boolean {
     if (!(error instanceof Error)) return false;
 
-    const anyError = error as Record<string, unknown>;
+    const anyError = error as unknown as Record<string, unknown>;
 
     if (anyError.code === 'invalid_grant') return true;
 
@@ -288,6 +382,24 @@ export class AccountsService {
   private async defaultRefreshGoogleAccessToken(refreshToken: string): Promise<RefreshTokenResult> {
     const googleService = this.getGoogleOauthService();
     return googleService.refreshAccessToken(refreshToken);
+  }
+
+  private async defaultRefreshTikTokAccessToken(refreshToken: string): Promise<RefreshTokenResult> {
+    const tiktokService = this.getTikTokOauthService();
+    const refreshed = await tiktokService.refreshAccessToken(refreshToken);
+    return {
+      accessToken: refreshed.accessToken,
+      refreshToken: refreshed.refreshToken,
+      expiresAt: refreshed.tokenExpiresAt ?? this.now().toISOString(),
+    };
+  }
+
+  private getRefreshFnForProvider(provider: string): (refreshToken: string) => Promise<RefreshTokenResult> {
+    if (provider === 'tiktok') {
+      return this.options.refreshTikTokAccessToken ?? this.defaultRefreshTikTokAccessToken.bind(this);
+    }
+
+    return this.options.refreshGoogleAccessToken ?? this.defaultRefreshGoogleAccessToken.bind(this);
   }
 
   async syncChannelsForAccount(account: ConnectedAccountRecord): Promise<ChannelRecord[]> {
@@ -320,7 +432,19 @@ export class AccountsService {
     return channels;
   }
 
-  async toggleChannel(channelId: string, isActive: boolean): Promise<ChannelRecord | null> {
+  async toggleChannel(channelId: string, isActive: boolean, ownerEmail?: string): Promise<ChannelRecord | null> {
+    if (ownerEmail) {
+      const channel = await this.channelStore.findById(channelId);
+      if (!channel) {
+        return null;
+      }
+
+      const account = await this.getAccount(channel.connectedAccountId, ownerEmail);
+      if (!account) {
+        return null;
+      }
+    }
+
     return this.channelStore.update(channelId, { isActive });
   }
 
@@ -331,18 +455,104 @@ export class AccountsService {
     return this.channelStore.findByAccountId(accountId);
   }
 
-  async listAccounts(): Promise<ConnectedAccountRecord[]> {
-    if (this.options.listConnectedAccounts) {
-      return this.options.listConnectedAccounts();
-    }
-    return this.connectedAccountStore.findAll();
+  async getChannel(channelId: string): Promise<ChannelRecord | null> {
+    return this.channelStore.findById(channelId);
   }
 
-  async getAccount(id: string): Promise<ConnectedAccountRecord | null> {
-    if (this.options.getConnectedAccount) {
-      return this.options.getConnectedAccount(id);
+  async getAccountForChannel(channelId: string): Promise<ConnectedAccountRecord | null> {
+    const channel = await this.channelStore.findById(channelId);
+    if (!channel) {
+      return null;
     }
-    return this.connectedAccountStore.findById(id);
+
+    return this.getAccount(channel.connectedAccountId);
+  }
+
+  async resolveAccessTokenForChannel(channelId: string, options: ChannelTokenResolutionOptions = {}): Promise<string> {
+    const channel = await this.getChannel(channelId);
+    if (!channel) {
+      throw new ChannelTokenResolverError('CHANNEL_NOT_FOUND', { channelId });
+    }
+
+    const account = await this.getAccount(channel.connectedAccountId);
+    if (!account) {
+      throw new ChannelTokenResolverError('CHANNEL_NOT_FOUND', { channelId });
+    }
+
+    const refreshResult = await this.refreshAccessTokenIfNeeded(account);
+    if (refreshResult.error === 'REAUTH_REQUIRED') {
+      throw new ChannelTokenResolverError('REAUTH_REQUIRED', {
+        channelId,
+        accountId: refreshResult.account.id,
+      });
+    }
+
+    if (options.requirePlaylistWriteScope && !hasYouTubePlaylistWriteScope(refreshResult.account.scopes)) {
+      throw new ChannelTokenResolverError('REAUTH_REQUIRED', {
+        channelId,
+        accountId: refreshResult.account.id,
+      });
+    }
+
+    return this.readPersistedTokens(refreshResult.account).accessToken;
+  }
+
+  async listAccounts(ownerEmail?: string): Promise<ConnectedAccountRecord[]> {
+    if (this.options.listConnectedAccounts) {
+      const accounts = await this.options.listConnectedAccounts();
+      return filterAccountsByOwner(accounts, ownerEmail);
+    }
+    return filterAccountsByOwner(this.connectedAccountStore.findAll(), ownerEmail);
+  }
+
+  async getAccount(id: string, ownerEmail?: string): Promise<ConnectedAccountRecord | null> {
+    const normalizedOwnerEmail = normalizeOwnerEmail(ownerEmail);
+
+    if (this.options.getConnectedAccount) {
+      const account = await this.options.getConnectedAccount(id);
+      if (!account) {
+        return null;
+      }
+
+      if (normalizedOwnerEmail && normalizeOwnerEmail(account.ownerEmail) !== normalizedOwnerEmail) {
+        const accounts = this.options.listConnectedAccounts
+          ? await this.options.listConnectedAccounts()
+          : [account];
+        const hasOwnedAccounts = accounts.some((entry) => normalizeOwnerEmail(entry.ownerEmail) !== null);
+        if (hasOwnedAccounts || normalizeOwnerEmail(account.ownerEmail) !== null) {
+          return null;
+        }
+      }
+
+      return account;
+    }
+    const account = this.connectedAccountStore.findById(id);
+    if (!account) {
+      return null;
+    }
+
+    if (normalizedOwnerEmail && normalizeOwnerEmail(account.ownerEmail) !== normalizedOwnerEmail) {
+      const hasOwnedAccounts = this.connectedAccountStore.findAll().some((entry) => normalizeOwnerEmail(entry.ownerEmail) !== null);
+      if (hasOwnedAccounts || normalizeOwnerEmail(account.ownerEmail) !== null) {
+        return null;
+      }
+    }
+
+    return account;
+  }
+
+  async resolveAccessTokenForConnectedAccount(accountId: string): Promise<string> {
+    const account = await this.getAccount(accountId);
+    if (!account) {
+      throw new Error(`Connected account not found: ${accountId}`);
+    }
+
+    const refreshResult = await this.refreshAccessTokenIfNeeded(account);
+    if (refreshResult.error === 'REAUTH_REQUIRED') {
+      throw new Error('REAUTH_REQUIRED');
+    }
+
+    return this.readPersistedTokens(refreshResult.account).accessToken;
   }
 
   disconnectAccount(accountId: string): { disconnected: boolean; account?: ConnectedAccountRecord } {
@@ -363,8 +573,13 @@ export class AccountsService {
     return { disconnected: true };
   }
 
-  async disconnectAccountAsync(accountId: string): Promise<{ disconnected: boolean; account?: ConnectedAccountRecord }> {
-    await this.channelStore.deactivateAllForAccount(accountId);
+  async disconnectAccountAsync(accountId: string, ownerEmail?: string): Promise<{ disconnected: boolean; account?: ConnectedAccountRecord }> {
+    const account = await this.getAccount(accountId, ownerEmail);
+    if (!account) {
+      return { disconnected: false };
+    }
+
+    await this.channelStore.deactivateAllForAccount(account.id);
 
     const nowIso = this.now().toISOString();
     const updates: Partial<ConnectedAccountRecord> = {
@@ -374,11 +589,52 @@ export class AccountsService {
 
     const updateFn = this.options.updateConnectedAccount;
     if (updateFn) {
-      const updated = await updateFn(accountId, updates);
+      const updated = await updateFn(account.id, updates);
       return { disconnected: true, account: updated };
     }
 
     return { disconnected: true };
+  }
+
+  async deleteAccountAsync(accountId: string, ownerEmail?: string): Promise<{ deleted: boolean; removedChannels: number }> {
+    const account = await this.getAccount(accountId, ownerEmail);
+    if (!account) {
+      return { deleted: false, removedChannels: 0 };
+    }
+
+    const channels = await this.channelStore.findByAccountId(account.id);
+    let removedChannels = 0;
+
+    for (const channel of channels) {
+      try {
+        const deleted = await this.channelStore.delete(channel.id);
+        if (!deleted) {
+          throw new Error(`Channel ${channel.id} could not be deleted.`);
+        }
+        removedChannels += 1;
+      } catch (error) {
+        if (this.isRelationConstraintError(error)) {
+          throw new AccountDeletionBlockedError(
+            'This account cannot be deleted because one or more of its channels are already used in campaigns. Remove those campaign targets first.',
+          );
+        }
+        throw error;
+      }
+    }
+
+    try {
+      const deleted = this.options.deleteConnectedAccount
+        ? await this.options.deleteConnectedAccount(account.id)
+        : this.connectedAccountStore.delete(account.id);
+      return { deleted, removedChannels };
+    } catch (error) {
+      if (this.isRelationConstraintError(error)) {
+        throw new AccountDeletionBlockedError(
+          'This account cannot be deleted because it is still referenced by other records in the workspace.',
+        );
+      }
+      throw error;
+    }
   }
 
   private getTokenCryptoService(): TokenCryptoService {
@@ -389,6 +645,53 @@ export class AccountsService {
   private getGoogleOauthService(): GoogleOauthService {
     this.googleOauthService = this.googleOauthService ?? new GoogleOauthService();
     return this.googleOauthService;
+  }
+
+  private getInstagramOauthService(): InstagramOauthService {
+    this.instagramOauthService = this.instagramOauthService ?? new InstagramOauthService();
+    return this.instagramOauthService;
+  }
+
+  private getTikTokOauthService(): TikTokOauthService {
+    this.tikTokOauthService = this.tikTokOauthService ?? new TikTokOauthService();
+    return this.tikTokOauthService;
+  }
+
+  private validateProviderCallbackState(
+    provider: 'google' | 'instagram' | 'tiktok',
+    session: OAuthCallbackInput['session'],
+    state: string,
+  ): boolean {
+    if (provider === 'instagram') {
+      return this.getInstagramOauthService().validateCallbackState(
+        session as InstagramOauthSession | null | undefined,
+        state,
+      );
+    }
+
+    if (provider === 'tiktok') {
+      return this.getTikTokOauthService().validateCallbackState(
+        session as TikTokOauthSession | null | undefined,
+        state,
+      );
+    }
+
+    return this.getGoogleOauthService().validateCallbackState(session, state);
+  }
+
+  private async exchangeProviderCode(
+    provider: 'google' | 'instagram' | 'tiktok',
+    code: string,
+  ): Promise<GoogleTokenResult | InstagramTokenResult | TikTokTokenResult> {
+    if (provider === 'instagram') {
+      return this.getInstagramOauthService().exchangeCodeForTokens(code);
+    }
+
+    if (provider === 'tiktok') {
+      return this.getTikTokOauthService().exchangeCodeForTokens(code);
+    }
+
+    return this.getGoogleOauthService().exchangeCodeForTokens(code);
   }
 
   private rememberOauthState(state: string, adminEmail?: string): void {
@@ -422,6 +725,20 @@ export class AccountsService {
       }
     }
   }
+
+  private isRelationConstraintError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+
+    const anyError = error as unknown as Record<string, unknown>;
+    if (anyError.code === 'P2003') return true;
+
+    const message = error.message.toLowerCase();
+    return (
+      message.includes('foreign key') ||
+      message.includes('constraint failed') ||
+      message.includes('violates foreign key')
+    );
+  }
 }
 
 function extractStateFromAuthorizationRedirect(redirectUrl: string): string | null {
@@ -438,7 +755,8 @@ class InMemoryConnectedAccountStore implements ConnectedAccountStore {
   private readonly records = new Map<string, ConnectedAccountRecord>();
 
   save(record: ConnectedAccountRecord): ConnectedAccountRecord {
-    const key = record.googleSubject ? `${record.provider}:${record.googleSubject}` : record.id;
+    const ownerKey = normalizeOwnerEmail(record.ownerEmail) ?? 'unowned';
+    const key = record.googleSubject ? `${ownerKey}:${record.provider}:${record.googleSubject}` : record.id;
     const existing = this.records.get(key);
 
     if (!existing) {
@@ -466,6 +784,16 @@ class InMemoryConnectedAccountStore implements ConnectedAccountStore {
   findById(id: string): ConnectedAccountRecord | null {
     return this.findAll().find((record) => record.id === id) ?? null;
   }
+
+  delete(id: string): boolean {
+    for (const [key, record] of this.records.entries()) {
+      if (record.id === id) {
+        this.records.delete(key);
+        return true;
+      }
+    }
+    return false;
+  }
 }
 
 export type { OAuthCallbackInput, OAuthCallbackResult };
@@ -488,6 +816,7 @@ class InMemoryChannelStore implements ChannelStore {
       title: record.title,
       handle: record.handle,
       thumbnailUrl: record.thumbnailUrl,
+      isActive: record.isActive,
       lastSyncedAt: record.lastSyncedAt,
     };
     this.records.set(key, updated);
@@ -511,6 +840,16 @@ class InMemoryChannelStore implements ChannelStore {
       }
     }
     return null;
+  }
+
+  async delete(channelId: string): Promise<boolean> {
+    for (const [key, record] of this.records) {
+      if (record.id === channelId) {
+        this.records.delete(key);
+        return true;
+      }
+    }
+    return false;
   }
 
   async deactivateAllForAccount(accountId: string): Promise<void> {

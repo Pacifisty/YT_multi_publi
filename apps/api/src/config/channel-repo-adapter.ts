@@ -26,6 +26,7 @@ export function createChannelRepoAdapter(repo: YouTubeChannelRepository): Channe
           title: record.title,
           handle: record.handle ?? null,
           thumbnailUrl: record.thumbnailUrl ?? null,
+          isActive: record.isActive,
           lastSyncedAt: new Date(record.lastSyncedAt),
         });
         return updated ? toChannelRecord(updated) : record;
@@ -60,6 +61,10 @@ export function createChannelRepoAdapter(repo: YouTubeChannelRepository): Channe
 
       const result = await repo.update(channelId, partialChannel);
       return result ? toChannelRecord(result) : null;
+    },
+
+    async delete(channelId: string): Promise<boolean> {
+      return repo.delete(channelId);
     },
 
     async deactivateAllForAccount(accountId: string): Promise<void> {

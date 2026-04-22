@@ -145,10 +145,17 @@ describe('App server bootstrap', () => {
     expect(app.authModule).toBeDefined();
     expect(app.campaignsModule).toBeDefined();
     expect(app.router).toBeDefined();
+    expect(app.backgroundProcessor).toBeDefined();
+    expect(app.backgroundProcessor?.kick).toBeTypeOf('function');
   });
 
   test('full lifecycle: create campaign, add target, mark ready, launch', async () => {
-    const app = createApp();
+    const app = createApp({
+      env: {
+        ADMIN_EMAIL: 'admin@test.com',
+        ADMIN_PASSWORD_HASH: 'plain:secret123',
+      },
+    });
 
     // Create
     const createRes = await app.handleRequest(authenticatedRequest({
@@ -181,6 +188,20 @@ describe('App server bootstrap', () => {
     }));
     expect(readyRes.status).toBe(200);
     expect(readyRes.body.campaign.status).toBe('ready');
+
+    const selectPlanRes = await app.handleRequest(authenticatedRequest({
+      method: 'POST',
+      path: '/api/account/plan/select',
+      body: { plan: 'FREE' },
+    }));
+    expect(selectPlanRes.status).toBe(200);
+
+    const visitRes = await app.handleRequest(authenticatedRequest({
+      method: 'POST',
+      path: '/api/account/plan/visit',
+    }));
+    expect(visitRes.status).toBe(200);
+    expect(visitRes.body.grantedTokens).toBe(10);
 
     // Launch
     const launchRes = await app.handleRequest(authenticatedRequest({

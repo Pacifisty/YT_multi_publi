@@ -14,7 +14,7 @@ function createDashboard() {
   const auditService = new AuditEventService({ repository: auditRepo });
   const dashboard = new DashboardService({ campaignService, jobService, auditService });
 
-  return { campaignService, jobService, auditService, dashboard };
+  return { campaignRepo, campaignService, jobService, auditService, dashboard };
 }
 
 describe('DashboardService.getStats', () => {
@@ -72,6 +72,21 @@ describe('DashboardService.getStats', () => {
     expect(stats.campaigns.total).toBe(2);
     expect(stats.campaigns.byStatus.draft).toBe(1);
     expect(stats.campaigns.byStatus.ready).toBe(1);
+  });
+
+  test('uses effective campaign status in dashboard totals when stored campaign status is stale', async () => {
+    const { campaignRepo, campaignService, dashboard } = createDashboard();
+
+    const { campaign } = await campaignService.createCampaign({ title: 'Stale Status', videoAssetId: 'a1' });
+    const { target } = await campaignService.addTarget(campaign.id, { channelId: 'ch-1', videoTitle: 'V1', videoDescription: 'D1' });
+    await campaignService.updateTargetStatus(campaign.id, target.id, 'publicado', { youtubeVideoId: 'yt-1' });
+
+    campaignRepo.update(campaign.id, { status: 'launching' });
+
+    const stats = await dashboard.getStats();
+
+    expect(stats.campaigns.byStatus.launching).toBe(0);
+    expect(stats.campaigns.byStatus.completed).toBe(1);
   });
 
   test('calculates target success rate', async () => {

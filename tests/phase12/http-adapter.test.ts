@@ -1,5 +1,8 @@
-import { describe, expect, test, vi } from 'vitest';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, expect, test, vi } from 'vitest';
 
 import {
   createRequestHandler,
@@ -16,7 +19,14 @@ function mockApp(response: Partial<HttpResponse> = {}): AppInstance {
     }),
     authModule: {} as any,
     campaignsModule: {} as any,
+    accountsModule: {} as any,
+    mediaModule: {
+      mediaService: {
+        getAssetFile: vi.fn(async () => null),
+      },
+    } as any,
     router: {} as any,
+    backgroundProcessor: null,
   };
 }
 
@@ -55,7 +65,7 @@ function mockReqWithBody(body: unknown, overrides: Partial<IncomingMessage> = {}
   return req as IncomingMessage;
 }
 
-function mockRes(): ServerResponse & { _status: number; _headers: Record<string, string | string[]>; _body: string } {
+function mockRes(): ServerResponse & { _status: number; _headers: Record<string, string | string[]>; _body: string | Buffer } {
   const res: any = {
     _status: 0,
     _headers: {} as Record<string, string | string[]>,
@@ -69,8 +79,8 @@ function mockRes(): ServerResponse & { _status: number; _headers: Record<string,
       res._headers[name.toLowerCase()] = value;
       return res;
     },
-    end(body?: string) {
-      if (body) res._body = body;
+    end(body?: string | Buffer) {
+      if (body !== undefined) res._body = body;
     },
   };
   return res;
@@ -265,6 +275,53 @@ describe('HTTP adapter — createRequestHandler', () => {
     expect(res._status).toBe(200);
     expect(res._headers['content-type']).toBe('application/javascript; charset=utf-8');
     expect(res._body).toContain('renderRoute');
+    expect(app.handleRequest).not.toHaveBeenCalled();
+  });
+
+  test('serves authenticated media asset files for video preview', async () => {
+    const app = mockApp();
+    const tempDir = await mkdtemp(join(tmpdir(), 'ytmp-media-preview-'));
+    const filePath = join(tempDir, 'clip.mp4');
+    const fileContents = Buffer.from('fake-video-preview');
+    await writeFile(filePath, fileContents);
+
+    app.mediaModule = {
+      mediaService: {
+        getAssetFile: vi.fn(async () => ({
+          asset: {
+            id: 'media-1',
+            mime_type: 'video/mp4',
+          },
+          absolute_path: filePath,
+        })),
+      },
+    } as any;
+
+    const sessionResolver = vi.fn().mockReturnValue({ adminUser: { email: 'admin@test.com' } });
+    const handler = createRequestHandler({ app, sessionResolver });
+    const req = mockReq({ method: 'GET', url: '/media-files/media-1', headers: { cookie: 'session=ok' } });
+    const res = mockRes();
+
+    await handler(req, res as any);
+
+    expect(app.mediaModule.mediaService.getAssetFile).toHaveBeenCalledWith('media-1');
+    expect(res._status).toBe(200);
+    expect(res._headers['content-type']).toBe('video/mp4');
+    expect(res._headers['accept-ranges']).toBe('bytes');
+    expect(res._body).toEqual(fileContents);
+    expect(app.handleRequest).not.toHaveBeenCalled();
+  });
+
+  test('rejects unauthenticated media asset file requests', async () => {
+    const app = mockApp();
+    const handler = createRequestHandler({ app });
+    const req = mockReq({ method: 'GET', url: '/media-files/media-1' });
+    const res = mockRes();
+
+    await handler(req, res as any);
+
+    expect(res._status).toBe(401);
+    expect(res._body).toBe('Authentication required.');
     expect(app.handleRequest).not.toHaveBeenCalled();
   });
 

@@ -14,7 +14,10 @@ interface PrismaClient {
 function toConnectedAccount(row: any): ConnectedAccount {
   return {
     id: row.id,
+    ownerEmail: row.ownerEmail ?? null,
     provider: row.provider,
+    googleSubject: row.googleSubject ?? null,
+    providerSubject: row.googleSubject ?? null,
     email: row.email ?? null,
     displayName: row.displayName ?? null,
     accessTokenEnc: row.accessTokenEnc,
@@ -35,7 +38,9 @@ export class PrismaConnectedAccountRepository implements ConnectedAccountReposit
     const row = await this.prisma.connectedAccount.create({
       data: {
         id: randomUUID(),
+        ownerEmail: dto.ownerEmail ?? null,
         provider: dto.provider,
+        googleSubject: dto.providerSubject ?? dto.googleSubject ?? null,
         email: dto.email ?? null,
         displayName: dto.displayName ?? null,
         accessTokenEnc: dto.accessTokenEnc,

@@ -1,5 +1,14 @@
 import { describe, expect, test, vi } from 'vitest';
 
+async function hasPrismaClientInstalled(): Promise<boolean> {
+  try {
+    await import('@prisma/client');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ── Prisma Media Asset Repository ────────────────────────────────────────────
 
 describe('PrismaMediaAssetRepository', () => {
@@ -179,6 +188,13 @@ describe('database-provider wiring for media assets', () => {
     );
 
     const provider = createDatabaseProvider({ databaseUrl: 'postgresql://localhost/test' });
+    const hasPrisma = await hasPrismaClientInstalled();
+
+    if (hasPrisma) {
+      expect(provider.mediaAssetRepository).not.toBeNull();
+      return;
+    }
+
     expect(provider.mediaAssetRepository).toBeNull();
   });
 

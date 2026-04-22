@@ -6,6 +6,7 @@ import { createErrorHandler } from './middleware/error-handler';
 import { createRateLimiter } from './middleware/rate-limiter';
 import { createHealthCheck, type HealthCheckInstance } from './health';
 import { createDatabaseProvider, type DatabaseProviderInstance } from './config/database-provider';
+import type { AuthServiceOptions } from './auth/auth.service';
 import { createAccountRepoAdapter } from './config/account-repo-adapter';
 import { createChannelRepoAdapter } from './config/channel-repo-adapter';
 import { createMediaRepoAdapter } from './config/media-repo-adapter';
@@ -42,6 +43,12 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
   });
 
   // Extract Prisma repositories if available, otherwise server defaults to in-memory
+  const authModuleOptions: AuthServiceOptions | undefined = databaseProvider.authUserRepository
+    ? {
+        userStore: databaseProvider.authUserRepository,
+      }
+    : undefined;
+
   const campaignsModuleOptions = databaseProvider.campaignRepository
     ? {
         repository: databaseProvider.campaignRepository,
@@ -70,7 +77,15 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
     ? { repository: createMediaRepoAdapter(databaseProvider.mediaAssetRepository) }
     : undefined;
 
-  const server = createServer({ env, sessionResolver, campaignsModuleOptions, accountsModuleOptions, mediaModuleOptions });
+  const server = createServer({
+    env,
+    sessionResolver,
+    authModuleOptions,
+    campaignsModuleOptions,
+    accountsModuleOptions,
+    mediaModuleOptions,
+    accountPlanStore: databaseProvider.accountPlanRepository ?? undefined,
+  });
 
   // Determine allowed origins
   const allowedOrigins = options.allowedOrigins ??

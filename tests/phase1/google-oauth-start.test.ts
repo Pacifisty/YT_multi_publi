@@ -8,7 +8,7 @@ describe('google oauth start endpoint', () => {
   test('returns redirect url with offline access and include granted scopes', async () => {
     const service = new AccountsService({
       createAuthorizationRedirect: () =>
-        'https://accounts.google.com/o/oauth2/v2/auth?access_type=offline&include_granted_scopes=true&scope=openid%20email%20profile%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.readonly%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.upload',
+        'https://accounts.google.com/o/oauth2/v2/auth?access_type=offline&include_granted_scopes=true&scope=openid%20email%20profile%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.readonly%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.upload%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.force-ssl',
     });
     const controller = new AccountsController(service, new SessionGuard());
 
@@ -28,5 +28,6 @@ describe('google oauth start endpoint', () => {
     expect(response.body.redirectUrl).toContain('profile');
     expect(response.body.redirectUrl).toContain('youtube.readonly');
     expect(response.body.redirectUrl).toContain('youtube.upload');
+    expect(response.body.redirectUrl).toContain('youtube.force-ssl');
   });
 });

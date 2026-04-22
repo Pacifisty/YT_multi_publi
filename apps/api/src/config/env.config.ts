@@ -2,9 +2,17 @@ import { isValidTokenKey } from '../common/crypto/token-crypto.service';
 
 export interface EnvConfig {
   databaseUrl: string | undefined;
+  publicAppUrl: string | undefined;
   googleClientId: string | undefined;
   googleClientSecret: string | undefined;
   googleRedirectUri: string | undefined;
+  googleAuthRedirectUri: string | undefined;
+  instagramClientId: string | undefined;
+  instagramClientSecret: string | undefined;
+  instagramRedirectUri: string | undefined;
+  tiktokClientKey: string | undefined;
+  tiktokClientSecret: string | undefined;
+  tiktokRedirectUri: string | undefined;
   oauthTokenKey: string | undefined;
   adminEmail: string | undefined;
   adminPasswordHash: string | undefined;
@@ -37,9 +45,17 @@ export function loadEnvConfig(env: Record<string, string | undefined>): EnvConfi
 
   return {
     databaseUrl: env.DATABASE_URL,
+    publicAppUrl: env.PUBLIC_APP_URL,
     googleClientId: env.GOOGLE_CLIENT_ID,
     googleClientSecret: env.GOOGLE_CLIENT_SECRET,
     googleRedirectUri: env.GOOGLE_REDIRECT_URI,
+    googleAuthRedirectUri: env.GOOGLE_AUTH_REDIRECT_URI,
+    instagramClientId: env.INSTAGRAM_CLIENT_ID,
+    instagramClientSecret: env.INSTAGRAM_CLIENT_SECRET,
+    instagramRedirectUri: env.INSTAGRAM_REDIRECT_URI,
+    tiktokClientKey: env.TIKTOK_CLIENT_KEY,
+    tiktokClientSecret: env.TIKTOK_CLIENT_SECRET,
+    tiktokRedirectUri: env.TIKTOK_REDIRECT_URI,
     oauthTokenKey: env.OAUTH_TOKEN_KEY,
     adminEmail: env.ADMIN_EMAIL,
     adminPasswordHash: env.ADMIN_PASSWORD_HASH,
@@ -71,14 +87,6 @@ export function validateEnvConfig(config: EnvConfig): EnvValidationError[] {
     errors.push({ field: 'OAUTH_TOKEN_KEY', message: 'OAUTH_TOKEN_KEY is required' });
   } else if (!isValidTokenKey(config.oauthTokenKey)) {
     errors.push({ field: 'OAUTH_TOKEN_KEY', message: 'OAUTH_TOKEN_KEY must resolve to exactly 32 bytes' });
-  }
-
-  if (!config.adminEmail) {
-    errors.push({ field: 'ADMIN_EMAIL', message: 'ADMIN_EMAIL is required' });
-  }
-
-  if (!config.adminPasswordHash) {
-    errors.push({ field: 'ADMIN_PASSWORD_HASH', message: 'ADMIN_PASSWORD_HASH is required' });
   }
 
   if (isNaN(config.port)) {

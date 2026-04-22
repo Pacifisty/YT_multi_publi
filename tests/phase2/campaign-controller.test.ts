@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { CampaignsController } from '../../apps/api/src/campaigns/campaigns.controller';
 import { CampaignService, InMemoryCampaignRepository } from '../../apps/api/src/campaigns/campaign.service';
 import { SessionGuard } from '../../apps/api/src/auth/session.guard';
+import { AccountPlanService } from '../../apps/api/src/account-plan/account-plan.service';
 
 function createAuthenticatedRequest() {
   return {
@@ -174,5 +175,64 @@ describe('campaigns controller', () => {
     });
 
     expect(response.status).toBe(400);
+  });
+
+  test('POST /campaigns/:id/targets blocks instagram target for non-pro plans', async () => {
+    const repository = new InMemoryCampaignRepository();
+    const service = new CampaignService({ repository });
+    const accountPlanService = new AccountPlanService();
+    const controller = new CampaignsController(service, new SessionGuard(), undefined, undefined, undefined, undefined, undefined, accountPlanService);
+
+    const { campaign } = await service.createCampaign({ title: 'Camp', videoAssetId: 'a1' });
+
+    const response = await controller.addTarget({
+      ...createAuthenticatedRequest(),
+      params: { id: campaign.id },
+      body: {
+        platform: 'instagram',
+        destinationId: 'ig-destination-1',
+        videoTitle: 'Instagram Video',
+        videoDescription: 'Instagram Desc',
+      },
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toMatchObject({
+      error: expect.stringContaining('PRO'),
+    });
+  });
+
+  test('POST /campaigns/:id/launch charges tokens and blocks launch when balance is insufficient', async () => {
+    const repository = new InMemoryCampaignRepository();
+    const service = new CampaignService({ repository });
+    const accountPlanService = new AccountPlanService();
+    const controller = new CampaignsController(service, new SessionGuard(), undefined, undefined, undefined, undefined, undefined, accountPlanService);
+
+    const { campaign } = await service.createCampaign({ title: 'Camp', videoAssetId: 'a1' });
+    await service.addTarget(campaign.id, {
+      channelId: 'ch-1',
+      videoTitle: 'T',
+      videoDescription: 'D',
+    });
+    await service.markReady(campaign.id);
+
+    const firstLaunch = await controller.launch({
+      ...createAuthenticatedRequest(),
+      params: { id: campaign.id },
+    });
+    expect(firstLaunch.status).toBe(402);
+
+    await accountPlanService.selectPlan('admin@example.com', 'FREE');
+    await accountPlanService.claimDailyVisit('admin@example.com');
+
+    const secondLaunch = await controller.launch({
+      ...createAuthenticatedRequest(),
+      params: { id: campaign.id },
+    });
+
+    expect(secondLaunch.status).toBe(200);
+
+    const account = await accountPlanService.getAccount('admin@example.com');
+    expect(account.tokens).toBe(5);
   });
 });

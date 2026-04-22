@@ -44,6 +44,9 @@ function createAsyncChannelStore(seedRecords: ChannelRecord[] = []) {
       records.set(channelId, updated);
       return updated;
     }),
+    delete: vi.fn(async (channelId: string) => {
+      return records.delete(channelId);
+    }),
     deactivateAllForAccount: vi.fn(async (accountId: string) => {
       for (const [key, record] of records) {
         if (record.connectedAccountId === accountId) {
@@ -139,5 +142,33 @@ describe('Phase 56: Async ChannelStore through controller', () => {
     await service.disconnectAccountAsync('acc-1');
 
     expect(asyncStore.deactivateAllForAccount).toHaveBeenCalledWith('acc-1');
+  });
+
+  it('service deleteAccountAsync removes all channels before deleting the account', async () => {
+    const testChannel = createTestChannelRecord();
+    const asyncStore = createAsyncChannelStore([testChannel]);
+    const deleteConnectedAccount = vi.fn(async () => true);
+    const service = new AccountsService({
+      channelStore: asyncStore as any,
+      getConnectedAccount: async (id: string) => ({
+        id,
+        provider: 'google',
+        accessTokenEnc: 'enc',
+        refreshTokenEnc: null,
+        scopes: [],
+        tokenExpiresAt: null,
+        status: 'connected',
+        connectedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }),
+      deleteConnectedAccount,
+    });
+
+    const result = await service.deleteAccountAsync('acc-1');
+
+    expect(asyncStore.delete).toHaveBeenCalledWith('ch-1');
+    expect(deleteConnectedAccount).toHaveBeenCalledWith('acc-1');
+    expect(result.deleted).toBe(true);
+    expect(result.removedChannels).toBe(1);
   });
 });

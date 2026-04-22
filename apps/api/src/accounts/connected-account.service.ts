@@ -2,7 +2,10 @@ import { randomUUID } from 'node:crypto';
 
 export interface ConnectedAccount {
   id: string;
+  ownerEmail?: string | null;
   provider: string;
+  googleSubject: string | null;
+  providerSubject?: string | null;
   email: string | null;
   displayName: string | null;
   accessTokenEnc: string;
@@ -15,7 +18,10 @@ export interface ConnectedAccount {
 }
 
 export interface CreateConnectedAccountDto {
+  ownerEmail?: string | null;
   provider: string;
+  googleSubject?: string | null;
+  providerSubject?: string | null;
   email?: string | null;
   displayName?: string | null;
   accessTokenEnc: string;
@@ -95,7 +101,10 @@ export class InMemoryConnectedAccountRepository implements ConnectedAccountRepos
     const now = new Date();
     const account: ConnectedAccount = {
       id: randomUUID(),
+      ownerEmail: dto.ownerEmail ?? null,
       provider: dto.provider,
+      googleSubject: dto.providerSubject ?? dto.googleSubject ?? null,
+      providerSubject: dto.providerSubject ?? dto.googleSubject ?? null,
       email: dto.email ?? null,
       displayName: dto.displayName ?? null,
       accessTokenEnc: dto.accessTokenEnc,

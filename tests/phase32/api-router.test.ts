@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { createApiRouter, type ApiRequest } from '../../apps/api/src/router';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { createApiRouter } from '../../apps/api/src/router';
 import { createCampaignsModule } from '../../apps/api/src/campaigns/campaigns.module';
 import { AccountsController } from '../../apps/api/src/accounts/accounts.controller';
 import { AccountsService } from '../../apps/api/src/accounts/accounts.service';
@@ -8,6 +8,8 @@ import { MediaService, InMemoryMediaRepository } from '../../apps/api/src/media/
 import { SessionGuard } from '../../apps/api/src/auth/session.guard';
 import { TokenCryptoService } from '../../apps/api/src/common/crypto/token-crypto.service';
 import type { ConnectedAccountRecord } from '../../apps/api/src/accounts/accounts.service';
+import { AccountPlanController } from '../../apps/api/src/account-plan/account-plan.controller';
+import { AccountPlanService } from '../../apps/api/src/account-plan/account-plan.service';
 
 const TEST_KEY = '12345678901234567890123456789012';
 const authedSession = { adminUser: { email: 'admin@test.com' } };
@@ -40,6 +42,7 @@ describe('API Router — accounts routes', () => {
       tokenCryptoService: crypto,
       listConnectedAccounts: async () => [account],
       getConnectedAccount: async (id: string) => (id === account.id ? account : null),
+      deleteConnectedAccount: async (id: string) => id === account.id,
       youtubeChannelsService: {
         listMineChannels: async () => ({
           channels: [
@@ -56,6 +59,26 @@ describe('API Router — accounts routes', () => {
       handleOauthCallback: async (input) => (input.state === 'ok-state'
         ? { ok: true, account }
         : { ok: false, reason: 'INVALID_STATE' }),
+      instagramOauthService: {
+        createAuthorizationRedirect: async () => 'https://www.instagram.com/oauth/authorize?state=state-123',
+        validateCallbackState: () => true,
+        exchangeCodeForTokens: async () => ({
+          accessToken: 'ig-token',
+          scopes: ['instagram_business_basic'],
+          tokenExpiresAt: null,
+          profile: { providerSubject: 'ig-user-1', displayName: 'Instagram User' },
+        }),
+      } as any,
+      tikTokOauthService: {
+        createAuthorizationRedirect: async () => 'https://www.tiktok.com/v2/auth/authorize/?state=state-123',
+        validateCallbackState: () => true,
+        exchangeCodeForTokens: async () => ({
+          accessToken: 'tt-token',
+          scopes: ['user.info.basic'],
+          tokenExpiresAt: null,
+          profile: { providerSubject: 'tt-user-1', displayName: 'TikTok User' },
+        }),
+      } as any,
     });
     const accountsController = new AccountsController(accountsService, new SessionGuard());
 
@@ -135,6 +158,26 @@ describe('API Router — accounts routes', () => {
     expect(res.body.redirectUrl).toContain('accounts.google.com');
   });
 
+  it('GET /api/accounts/oauth/instagram/start returns redirect URL', async () => {
+    const res = await router.handle({
+      method: 'GET',
+      path: '/api/accounts/oauth/instagram/start',
+      session: authedSession,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.redirectUrl).toContain('instagram.com');
+  });
+
+  it('GET /api/accounts/oauth/tiktok/start returns redirect URL', async () => {
+    const res = await router.handle({
+      method: 'GET',
+      path: '/api/accounts/oauth/tiktok/start',
+      session: authedSession,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.redirectUrl).toContain('tiktok.com');
+  });
+
   it('GET /api/accounts/oauth/google/callback returns account on valid code/state', async () => {
     const res = await router.handle({
       method: 'GET',
@@ -157,6 +200,28 @@ describe('API Router — accounts routes', () => {
     expect(res.body.account.id).toBe('acct-1');
   });
 
+  it('GET /api/accounts/oauth/instagram/callback returns account on valid code/state', async () => {
+    const res = await router.handle({
+      method: 'GET',
+      path: '/api/accounts/oauth/instagram/callback',
+      session: authedSession,
+      query: { code: 'abc', state: 'ok-state' },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.account.id).toBe('acct-1');
+  });
+
+  it('GET /api/accounts/oauth/tiktok/callback returns account on valid code/state', async () => {
+    const res = await router.handle({
+      method: 'GET',
+      path: '/api/accounts/oauth/tiktok/callback',
+      session: authedSession,
+      query: { code: 'abc', state: 'ok-state' },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.account.id).toBe('acct-1');
+  });
+
   it('DELETE /api/accounts/:accountId disconnects with confirmation', async () => {
     const res = await router.handle({
       method: 'DELETE',
@@ -166,6 +231,24 @@ describe('API Router — accounts routes', () => {
     });
     expect(res.status).toBe(200);
     expect(res.body.disconnected).toBe(true);
+  });
+
+  it('DELETE /api/accounts/:accountId/permanent deletes with confirmation', async () => {
+    await router.handle({
+      method: 'POST',
+      path: '/api/accounts/acct-1/channels/sync',
+      session: authedSession,
+    });
+
+    const res = await router.handle({
+      method: 'DELETE',
+      path: '/api/accounts/acct-1/permanent',
+      session: authedSession,
+      body: { confirm: 'DELETE' },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.deleted).toBe(true);
+    expect(res.body.removedChannels).toBe(1);
   });
 
   it('returns 401 for unauthenticated account request', async () => {
@@ -288,5 +371,149 @@ describe('API Router — existing campaign routes still work', () => {
       session: authedSession,
     });
     expect(res.status).toBe(404);
+  });
+});
+
+describe('API Router — background processing hooks', () => {
+  it('kicks the background processor after a successful campaign launch', async () => {
+    const campaignsModule = createCampaignsModule();
+    const kick = vi.fn().mockResolvedValue(undefined);
+    const router = createApiRouter({
+      campaignsModule,
+      backgroundProcessor: { kick },
+    });
+
+    const createResponse = await router.handle({
+      method: 'POST',
+      path: '/api/campaigns',
+      session: authedSession,
+      body: { title: 'Launchable campaign', videoAssetId: 'video-1' },
+    });
+    const campaignId = createResponse.body.campaign.id;
+
+    await router.handle({
+      method: 'POST',
+      path: `/api/campaigns/${campaignId}/targets`,
+      session: authedSession,
+      body: {
+        channelId: 'channel-1',
+        videoTitle: 'Video title',
+        videoDescription: 'Video description',
+      },
+    });
+
+    await router.handle({
+      method: 'POST',
+      path: `/api/campaigns/${campaignId}/ready`,
+      session: authedSession,
+    });
+
+    const launchResponse = await router.handle({
+      method: 'POST',
+      path: `/api/campaigns/${campaignId}/launch`,
+      session: authedSession,
+    });
+
+    expect(launchResponse.status).toBe(200);
+    expect(kick).toHaveBeenCalledTimes(1);
+  });
+
+  it('kicks the background processor after a successful target retry', async () => {
+    const campaignsModule = createCampaignsModule();
+    const kick = vi.fn().mockResolvedValue(undefined);
+    const router = createApiRouter({
+      campaignsModule,
+      backgroundProcessor: { kick },
+    });
+
+    const { campaign } = await campaignsModule.campaignService.createCampaign({
+      title: 'Retryable campaign',
+      videoAssetId: 'video-2',
+    });
+
+    const { target } = await campaignsModule.campaignService.addTarget(campaign.id, {
+      channelId: 'channel-2',
+      videoTitle: 'Video title',
+      videoDescription: 'Video description',
+    });
+
+    await campaignsModule.campaignService.markReady(campaign.id);
+    await campaignsModule.launchService.launchCampaign(campaign.id);
+
+    const jobs = await campaignsModule.jobService.getJobsForTarget(target.id);
+    const job = jobs[0];
+    await campaignsModule.jobService.markFailed(job.id, 'Upload failed');
+    await campaignsModule.campaignService.updateTargetStatus(campaign.id, target.id, 'erro', {
+      errorMessage: 'Upload failed',
+    });
+
+    const retryResponse = await router.handle({
+      method: 'POST',
+      path: `/api/campaigns/${campaign.id}/targets/${target.id}/retry`,
+      session: authedSession,
+    });
+
+    expect(retryResponse.status).toBe(200);
+    expect(kick).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('API Router - account plan routes', () => {
+  let router: ReturnType<typeof createApiRouter>;
+  let accountPlanService: AccountPlanService;
+
+  beforeEach(() => {
+    accountPlanService = new AccountPlanService();
+    const accountPlanController = new AccountPlanController(accountPlanService, new SessionGuard());
+    router = createApiRouter({
+      campaignsModule: createCampaignsModule({ accountPlanService }),
+      accountPlanController,
+    });
+  });
+
+  it('GET /api/account/plan returns the current plan summary', async () => {
+    const res = await router.handle({
+      method: 'GET',
+      path: '/api/account/plan',
+      session: authedSession,
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.account.plan).toBe('FREE');
+    expect(res.body.account.maxTokens).toBe(80);
+  });
+
+  it('POST /api/account/plan/visit grants daily tokens once per day', async () => {
+    const firstRes = await router.handle({
+      method: 'POST',
+      path: '/api/account/plan/visit',
+      session: authedSession,
+    });
+
+    const secondRes = await router.handle({
+      method: 'POST',
+      path: '/api/account/plan/visit',
+      session: authedSession,
+    });
+
+    expect(firstRes.status).toBe(200);
+    expect(firstRes.body.claimed).toBe(true);
+    expect(firstRes.body.grantedTokens).toBe(10);
+    expect(secondRes.status).toBe(200);
+    expect(secondRes.body.claimed).toBe(false);
+    expect(secondRes.body.account.tokens).toBe(10);
+  });
+
+  it('POST /api/account/plan/select updates the current plan', async () => {
+    const res = await router.handle({
+      method: 'POST',
+      path: '/api/account/plan/select',
+      session: authedSession,
+      body: { plan: 'PRO' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.account.plan).toBe('PRO');
+    expect(res.body.account.allowedPlatforms).toEqual(['youtube', 'instagram', 'tiktok']);
   });
 });

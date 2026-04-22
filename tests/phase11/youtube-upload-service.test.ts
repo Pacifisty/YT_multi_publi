@@ -57,7 +57,7 @@ describe('YouTubeUploadService', () => {
       expect(result.videoId).toBe('yt-video-1');
     }
 
-    expect(tokenResolver.resolve).toHaveBeenCalledWith('ch-1');
+    expect(tokenResolver.resolve).toHaveBeenCalledWith('ch-1', { requirePlaylistWriteScope: true });
     expect(fileResolver.resolve).toHaveBeenCalledWith('asset-1');
     expect(thumbnailResolver.resolve).toHaveBeenCalledWith('thumb-123');
     expect(uploadFn).toHaveBeenCalledWith({
@@ -170,8 +170,9 @@ describe('YouTubeUploadService', () => {
       thumbnailFileResolver: createMockThumbnailResolver(),
     });
 
-    const token = await service.getAccessToken('ch-1');
+    const token = await service.getAccessToken('ch-1', { requirePlaylistWriteScope: true });
     expect(token).toBe('mock-token-123');
+    expect(tokenResolver.resolve).toHaveBeenCalledWith('ch-1', { requirePlaylistWriteScope: true });
 
     const filePath = await service.getVideoFilePath('asset-1');
     expect(filePath).toBe('/uploads/video.mp4');

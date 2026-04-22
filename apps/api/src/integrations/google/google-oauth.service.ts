@@ -6,7 +6,28 @@ export const GOOGLE_YOUTUBE_SCOPES = [
   'profile',
   'https://www.googleapis.com/auth/youtube.readonly',
   'https://www.googleapis.com/auth/youtube.upload',
+  'https://www.googleapis.com/auth/youtube.force-ssl',
 ] as const;
+
+export const GOOGLE_AUTH_SCOPES = [
+  'openid',
+  'email',
+  'profile',
+] as const;
+
+export const YOUTUBE_PLAYLIST_WRITE_SCOPES = [
+  'https://www.googleapis.com/auth/youtube',
+  'https://www.googleapis.com/auth/youtube.force-ssl',
+  'https://www.googleapis.com/auth/youtubepartner',
+  'youtube',
+  'youtube.force-ssl',
+  'youtubepartner',
+] as const;
+
+export function hasYouTubePlaylistWriteScope(scopes: readonly string[] | null | undefined): boolean {
+  const grantedScopes = new Set((scopes ?? []).filter((scope) => typeof scope === 'string' && scope.trim()));
+  return YOUTUBE_PLAYLIST_WRITE_SCOPES.some((scope) => grantedScopes.has(scope));
+}
 
 export interface GoogleOauthSession {
   oauthStateNonce?: string;
@@ -18,6 +39,7 @@ export interface GoogleTokenResult {
   scopes: string[];
   tokenExpiresAt: string | null;
   profile: {
+    providerSubject?: string;
     googleSubject?: string;
     email?: string;
     displayName?: string;
@@ -73,7 +95,10 @@ export class GoogleOauthService {
     this.createUserInfoClient = options.createUserInfoClient ?? createOfficialUserInfoClient;
   }
 
-  async createAuthorizationRedirect(session?: GoogleOauthSession | null): Promise<string> {
+  async createAuthorizationRedirect(
+    session?: GoogleOauthSession | null,
+    scopes: readonly string[] = GOOGLE_YOUTUBE_SCOPES,
+  ): Promise<string> {
     const client = await this.createClient();
     const state = randomUUID();
 
@@ -84,7 +109,7 @@ export class GoogleOauthService {
     return client.generateAuthUrl({
       access_type: 'offline',
       include_granted_scopes: true,
-      scope: GOOGLE_YOUTUBE_SCOPES,
+      scope: scopes,
       state,
       prompt: 'consent',
     });
@@ -130,10 +155,48 @@ export class GoogleOauthService {
       scopes: tokenResponse.tokens.scope ? tokenResponse.tokens.scope.split(' ') : [],
       tokenExpiresAt: tokenResponse.tokens.expiry_date ? new Date(tokenResponse.tokens.expiry_date).toISOString() : null,
       profile: {
+        providerSubject: userInfo.data.id,
         googleSubject: userInfo.data.id,
         email: userInfo.data.email,
         displayName: userInfo.data.name,
       },
+    };
+  }
+
+  async refreshAccessToken(refreshToken: string): Promise<{
+    accessToken: string;
+    refreshToken?: string;
+    expiresAt: string;
+  }> {
+    const client = await this.createClient();
+    const refreshClient = client as GoogleOauthClient & {
+      refreshAccessToken?: () => Promise<{
+        credentials?: {
+          access_token?: string;
+          refresh_token?: string;
+          expiry_date?: number;
+        };
+      }>;
+    };
+
+    client.setCredentials({ refresh_token: refreshToken });
+    if (typeof refreshClient.refreshAccessToken !== 'function') {
+      throw new Error('Google OAuth client does not support refreshAccessToken().');
+    }
+
+    const refreshed = await refreshClient.refreshAccessToken();
+    const credentials = refreshed.credentials ?? {};
+    const accessToken = credentials.access_token;
+    if (!accessToken) {
+      throw new Error('Google refresh did not return an access token.');
+    }
+
+    return {
+      accessToken,
+      refreshToken: credentials.refresh_token,
+      expiresAt: credentials.expiry_date
+        ? new Date(credentials.expiry_date).toISOString()
+        : new Date(Date.now() + 3600 * 1000).toISOString(),
     };
   }
 }

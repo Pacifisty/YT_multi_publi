@@ -45,12 +45,13 @@ describe('YouTube upload worker', () => {
     const mockUpload: YouTubeUploadFn = vi.fn().mockResolvedValue({
       videoId: 'yt-uploaded-123',
     });
+    const getAccessToken = vi.fn().mockResolvedValue('mock-access-token');
 
     const worker = new YouTubeUploadWorker({
       jobService,
       campaignService,
       uploadFn: mockUpload,
-      getAccessToken: async () => 'mock-access-token',
+      getAccessToken,
       getVideoFilePath: async () => '/storage/videos/test.mp4',
       getThumbnailFilePath: async () => '/storage/thumbnails/thumb.jpg',
     });
@@ -73,6 +74,7 @@ describe('YouTube upload worker', () => {
         privacy: 'public',
       }),
     );
+    expect(getAccessToken).toHaveBeenCalledWith('channel-1', { requirePlaylistWriteScope: true });
   });
 
   test('marks job failed when YouTube upload throws', async () => {

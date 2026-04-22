@@ -1,15 +1,18 @@
 export interface CampaignDetailTarget {
   id: string;
   channelTitle: string;
+  platform?: string;
   videoTitle: string;
   status: 'aguardando' | 'enviando' | 'publicado' | 'erro';
   publishAt?: string | null;
+  externalPublishId: string | null;
   youtubeVideoId: string | null;
   errorMessage: string | null;
   reauthRequired?: boolean;
   hasPostUploadWarning?: boolean;
   reviewYoutubeUrl?: string | null;
   youtubeUrl?: string;
+  publishedUrl?: string;
   partialFailureYoutubeUrl?: string;
   partialFailureWarning?: string;
   retryAvailable?: boolean;
@@ -44,8 +47,12 @@ export interface CampaignDetailView {
   };
 }
 
-function isTerminalTarget(target: Pick<CampaignDetailTarget, 'status' | 'youtubeVideoId' | 'errorMessage'>): boolean {
-  return (target.status === 'erro' && Boolean(target.errorMessage)) || (target.status === 'publicado' && Boolean(target.youtubeVideoId));
+function hasPublishedReference(target: Pick<CampaignDetailTarget, 'externalPublishId' | 'youtubeVideoId'>): boolean {
+  return Boolean(target.externalPublishId ?? target.youtubeVideoId);
+}
+
+function isTerminalTarget(target: Pick<CampaignDetailTarget, 'status' | 'externalPublishId' | 'youtubeVideoId' | 'errorMessage'>): boolean {
+  return (target.status === 'erro' && Boolean(target.errorMessage)) || (target.status === 'publicado' && hasPublishedReference(target));
 }
 
 const POLLING_INTERVAL_MS = 3000;
@@ -89,6 +96,9 @@ export function buildCampaignDetailView(data: CampaignDetailData, options: Campa
       ...t,
       errorMessage: t.status === 'erro' ? t.errorMessage : null,
       reauthRequired,
+      publishedUrl: t.status === 'publicado' && t.platform === 'youtube' && t.youtubeVideoId
+        ? `https://www.youtube.com/watch?v=${t.youtubeVideoId}`
+        : undefined,
       youtubeUrl: t.status === 'publicado' && t.youtubeVideoId
         ? `https://www.youtube.com/watch?v=${t.youtubeVideoId}`
         : undefined,
@@ -103,7 +113,7 @@ export function buildCampaignDetailView(data: CampaignDetailData, options: Campa
   });
 
   const allTerminal = targets.length > 0 && targets.every((t) => isTerminalTarget(t));
-  const completedCount = targets.filter((t) => t.status === 'publicado' && t.youtubeVideoId).length;
+  const completedCount = targets.filter((t) => t.status === 'publicado' && hasPublishedReference(t)).length;
   const hasActivePendingTargets = targets.some((target) => {
     if (target.scheduledPending) {
       return false;

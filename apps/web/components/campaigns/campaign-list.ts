@@ -20,6 +20,7 @@ export interface CampaignListRow {
   reauthHref?: string;
   targets?: Array<{
     status: string;
+    externalPublishId?: string | null;
     youtubeVideoId?: string | null;
     errorMessage?: string | null;
     reauthRequired?: boolean;
@@ -46,6 +47,10 @@ export interface CampaignListView {
 
 function isReauthRequiredTarget(target: NonNullable<CampaignListRow['targets']>[number]): boolean {
   return target.reauthRequired === true || target.errorMessage === 'REAUTH_REQUIRED';
+}
+
+function hasPublishedReference(target: NonNullable<CampaignListRow['targets']>[number]): boolean {
+  return Boolean(target.externalPublishId ?? target.youtubeVideoId);
 }
 
 export function buildCampaignListView(data: { rows: CampaignListRow[] }): CampaignListView {
@@ -78,11 +83,11 @@ export function buildCampaignListView(data: { rows: CampaignListRow[] }): Campai
       const outcomeSummary = row.outcomeSummary ?? (row.targets
         ? {
           publishedCount: row.targets.filter((target) =>
-            target.status === 'publicado' && Boolean(target.youtubeVideoId)).length,
+            target.status === 'publicado' && hasPublishedReference(target)).length,
           failedCount: row.targets.filter((target) =>
             target.status === 'erro' && Boolean(target.errorMessage)).length,
           pendingCount: row.targets.filter((target) =>
-            !((target.status === 'publicado' && Boolean(target.youtubeVideoId))
+            !((target.status === 'publicado' && hasPublishedReference(target))
               || (target.status === 'erro' && Boolean(target.errorMessage)))).length,
         }
         : undefined);

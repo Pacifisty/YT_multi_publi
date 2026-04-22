@@ -36,6 +36,25 @@ describe('App Route Consolidation', () => {
       expect(response.status).toBe(401);
     });
 
+    it('POST /auth/register creates a new authenticated user', async () => {
+      const { router } = setup();
+      const request: ApiRequest = {
+        method: 'POST',
+        path: '/auth/register',
+        session: null,
+        body: {
+          email: 'new-user@test.com',
+          password: 'secret123',
+          fullName: 'New User',
+        },
+      };
+
+      const response = await router.handle(request);
+      expect(response.status).toBe(200);
+      expect(response.body.user.email).toBe('new-user@test.com');
+      expect(response.body.user.needsPlanSelection).toBe(true);
+    });
+
     it('POST /auth/logout returns 200 with cookies', async () => {
       const { router } = setup();
       const request: ApiRequest = {

@@ -92,10 +92,13 @@ function mergeCampaignWithLiveStatus(campaign: CampaignDetailData, liveStatus?: 
 
     return {
       ...target,
+      platform: liveTarget.platform,
+      channelTitle: liveTarget.destinationLabel ?? target.channelTitle,
       videoTitle: liveTarget.videoTitle,
       status: liveTarget.status as CampaignDetailData['targets'][number]['status'],
       publishAt: liveTarget.publishAt,
       scheduledPending: liveTarget.scheduledPending,
+      externalPublishId: liveTarget.externalPublishId,
       youtubeVideoId: liveTarget.youtubeVideoId,
       errorMessage: liveTarget.errorMessage,
       reauthRequired: liveTarget.reauthRequired,

@@ -8,19 +8,38 @@ datasource db {
 }
 
 model AdminUser {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id                     String   @id @default(cuid())
+  email                  String   @unique
+  fullName               String?  @map("full_name")
+  passwordHash           String?  @map("password_hash")
+  googleSubject          String?  @unique @map("google_subject")
+  isActive               Boolean  @default(true) @map("is_active")
+  planSelectionCompleted Boolean  @default(false) @map("plan_selection_completed")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
 
   @@map("admin_users")
 }
 
+model AccountPlan {
+  email            String   @id
+  plan             String
+  tokens           Int
+  lastDailyVisitAt DateTime? @map("last_daily_visit_at")
+  billingStartedAt DateTime? @map("billing_started_at")
+  billingExpiresAt DateTime? @map("billing_expires_at")
+  selectedAt       DateTime? @map("selected_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("account_plans")
+}
+
 model ConnectedAccount {
   id              String   @id @default(cuid())
+  ownerEmail      String?  @map("owner_email")
   provider        String
+  googleSubject   String?  @map("google_subject")
   email           String?
   displayName     String?  @map("display_name")
   accessTokenEnc  String   @map("access_token_enc")
@@ -33,6 +52,8 @@ model ConnectedAccount {
 
   channels        YouTubeChannel[]
 
+  @@unique([provider, googleSubject, ownerEmail])
+  @@index([ownerEmail])
   @@map("connected_accounts")
 }
 
@@ -61,6 +82,7 @@ enum MediaAssetType {
 
 model MediaAsset {
   id                String         @id @default(cuid())
+  ownerEmail        String?        @map("owner_email")
   assetType         MediaAssetType @map("asset_type")
   originalName      String         @map("original_name")
   storagePath       String         @map("storage_path")
@@ -76,6 +98,7 @@ model MediaAsset {
   campaigns         Campaign[]
   campaignTargets   CampaignTarget[]
 
+  @@index([ownerEmail])
   @@index([linkedVideoAssetId])
   @@map("media_assets")
 }
@@ -90,6 +113,7 @@ enum CampaignStatus {
 
 model Campaign {
   id               String         @id @default(cuid())
+  ownerEmail       String?        @map("owner_email")
   title            String
   videoAssetId     String         @map("video_asset_id")
   videoAsset       MediaAsset     @relation(fields: [videoAssetId], references: [id])
@@ -100,6 +124,7 @@ model Campaign {
 
   targets          CampaignTarget[]
 
+  @@index([ownerEmail])
   @@index([videoAssetId])
   @@map("campaigns")
 }
@@ -115,8 +140,12 @@ model CampaignTarget {
   id                   String       @id @default(cuid())
   campaignId           String       @map("campaign_id")
   campaign             Campaign     @relation(fields: [campaignId], references: [id])
-  channelId            String       @map("channel_id")
-  channel              YouTubeChannel @relation(fields: [channelId], references: [id])
+  platform             String       @default("youtube")
+  destinationId        String       @default("") @map("destination_id")
+  destinationLabel     String?      @map("destination_label")
+  connectedAccountId   String?      @map("connected_account_id")
+  channelId            String?      @map("channel_id")
+  channel              YouTubeChannel? @relation(fields: [channelId], references: [id])
   videoTitle           String       @map("video_title")
   videoDescription     String       @map("video_description")
   tags                 String[]     @default([])
@@ -126,6 +155,7 @@ model CampaignTarget {
   thumbnailAssetId     String?      @map("thumbnail_asset_id")
   thumbnailAsset       MediaAsset?  @relation(fields: [thumbnailAssetId], references: [id])
   status               TargetStatus @default(aguardando)
+  externalPublishId    String?      @map("external_publish_id")
   youtubeVideoId       String?      @map("youtube_video_id")
   errorMessage         String?      @map("error_message")
   retryCount           Int          @default(0) @map("retry_count")

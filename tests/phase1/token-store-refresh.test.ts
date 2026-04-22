@@ -235,4 +235,52 @@ describe('token refresh lifecycle', () => {
     // Must not leak raw error message to consumer
     expect(JSON.stringify(result)).not.toContain('Sensitive internal OAuth error detail');
   });
+
+  test('uses TikTok token refresh for tiktok accounts', async () => {
+    const crypto = createTokenCrypto();
+    const refreshedAccessToken = 'tiktok-refreshed-access-token';
+    const rotatedRefreshToken = 'tiktok-rotated-refresh-token';
+    const newExpiry = new Date(Date.now() + 3600_000).toISOString();
+    const refreshGoogleSpy = vi.fn();
+    const refreshTikTokSpy = vi.fn(async () => ({
+      accessToken: refreshedAccessToken,
+      refreshToken: rotatedRefreshToken,
+      expiresAt: newExpiry,
+    }));
+
+    const service = new AccountsService({
+      tokenCryptoService: crypto,
+      refreshGoogleAccessToken: refreshGoogleSpy,
+      refreshTikTokAccessToken: refreshTikTokSpy,
+      updateConnectedAccount: async (id, updates) =>
+        ({
+          ...createConnectedAccount(crypto, {
+            provider: 'tiktok',
+            googleSubject: 'tt-user-1',
+            providerSubject: 'tt-user-1',
+            email: undefined,
+            displayName: 'TikTok User',
+          }),
+          ...updates,
+          id,
+        }) as ConnectedAccountRecord,
+    });
+
+    const account = createConnectedAccount(crypto, {
+      provider: 'tiktok',
+      googleSubject: 'tt-user-1',
+      providerSubject: 'tt-user-1',
+      email: undefined,
+      displayName: 'TikTok User',
+    });
+
+    const result = await service.refreshAccessTokenIfNeeded(account);
+
+    expect(result.refreshed).toBe(true);
+    expect(refreshTikTokSpy).toHaveBeenCalledOnce();
+    expect(refreshGoogleSpy).not.toHaveBeenCalled();
+    expect(crypto.decrypt(result.account.accessTokenEnc)).toBe(refreshedAccessToken);
+    expect(crypto.decrypt(result.account.refreshTokenEnc!)).toBe(rotatedRefreshToken);
+    expect(result.account.tokenExpiresAt).toBe(newExpiry);
+  });
 });

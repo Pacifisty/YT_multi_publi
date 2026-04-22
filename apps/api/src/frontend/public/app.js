@@ -59,9 +59,11 @@ function formatDurationSeconds(value) {
   return `${seconds}s`;
 }
 
+const SHORT_FORM_MAX_DURATION_SECONDS = 180;
+
 function getVideoPublishFormat(asset) {
   const durationSeconds = Number(asset?.duration_seconds ?? 0);
-  return durationSeconds > 0 && durationSeconds <= 60 ? 'short' : 'standard';
+  return durationSeconds > 0 && durationSeconds <= SHORT_FORM_MAX_DURATION_SECONDS ? 'short' : 'standard';
 }
 
 function getVideoPublishFormatLabel(format) {
@@ -98,6 +100,43 @@ async function buildUploadPayloadFromFile(file) {
 const BACKGROUND_THEME_STORAGE_KEY = 'ytmp-workspace-background-theme';
 const FONT_THEME_STORAGE_KEY = 'ytmp-font-theme';
 const OAUTH_PROVIDER_STORAGE_KEY = 'ytmp-pending-oauth-provider';
+const MEDIA_PREVIEW_SIZE_STORAGE_KEY = 'ytmp-media-preview-sizes';
+const DEFAULT_MEDIA_PREVIEW_SIZE = 'medium';
+const MEDIA_PREVIEW_SIZE_OPTIONS = [
+  { id: 'low', label: 'Baixo' },
+  { id: 'medium', label: 'Medio' },
+  { id: 'large', label: 'Grande' },
+];
+const ACCOUNT_PLAN_OPTIONS = [
+  {
+    id: 'FREE',
+    label: 'Free',
+    priceLabel: 'Gratis',
+    description: 'Ideal para conhecer a plataforma e publicar no YouTube sem custo mensal.',
+    tokenSummary: '80 tokens maximos',
+    visitSummary: '+10 tokens por visita diaria',
+    platformSummary: 'YouTube',
+  },
+  {
+    id: 'BASIC',
+    label: 'Basic',
+    priceLabel: 'R$ 9,99 / mes',
+    description: 'Mais folego para operacao recorrente com limite maior de campanhas.',
+    tokenSummary: '250 tokens maximos',
+    visitSummary: '+25 tokens por visita diaria',
+    platformSummary: 'YouTube',
+  },
+  {
+    id: 'PRO',
+    label: 'Pro',
+    priceLabel: 'R$ 19,99 / mes',
+    description: 'Plano completo para publicar em YouTube, Instagram e TikTok.',
+    tokenSummary: '600 tokens maximos',
+    visitSummary: '+50 tokens por visita diaria',
+    platformSummary: 'YouTube + Instagram + TikTok',
+    featured: true,
+  },
+];
 const BACKGROUND_THEME_OPTIONS = [
   {
     id: 'deep-black-blue',
@@ -903,7 +942,12 @@ async function apiRequest(method, url, body) {
 const api = {
   me: () => apiRequest('GET', '/auth/me'),
   login: (credentials) => apiRequest('POST', '/auth/login', credentials),
+  register: (payload) => apiRequest('POST', '/auth/register', payload),
+  startAuthGoogleOauth: () => apiRequest('GET', '/auth/google/start'),
+  authGoogleCallback: (code, stateParam) => apiRequest('GET', buildUrl('/auth/google/callback', { code, state: stateParam })),
   logout: () => apiRequest('POST', '/auth/logout'),
+  accountPlanSummary: () => apiRequest('GET', '/api/account/plan'),
+  selectAccountPlan: (plan) => apiRequest('POST', '/api/account/plan/select', { plan }),
   dashboard: () => apiRequest('GET', '/api/dashboard'),
   campaigns: (filters = {}) => apiRequest('GET', buildUrl('/api/campaigns', filters)),
   campaignById: (id) => apiRequest('GET', `/api/campaigns/${encodeURIComponent(id)}`),
@@ -924,12 +968,17 @@ const api = {
   accounts: () => apiRequest('GET', '/api/accounts'),
   startGoogleOauth: () => apiRequest('GET', '/api/accounts/oauth/google/start'),
   startYouTubeOauth: () => apiRequest('GET', '/api/accounts/oauth/youtube/start'),
+  startInstagramOauth: () => apiRequest('GET', '/api/accounts/oauth/instagram/start'),
+  startTikTokOauth: () => apiRequest('GET', '/api/accounts/oauth/tiktok/start'),
   accountOauthCallback: (code, stateParam) => apiRequest('GET', buildUrl('/api/accounts/oauth/google/callback', { code, state: stateParam })),
   accountYouTubeOauthCallback: (code, stateParam) => apiRequest('GET', buildUrl('/api/accounts/oauth/youtube/callback', { code, state: stateParam })),
+  accountInstagramOauthCallback: (code, stateParam) => apiRequest('GET', buildUrl('/api/accounts/oauth/instagram/callback', { code, state: stateParam })),
+  accountTikTokOauthCallback: (code, stateParam) => apiRequest('GET', buildUrl('/api/accounts/oauth/tiktok/callback', { code, state: stateParam })),
   accountChannels: (accountId) => apiRequest('GET', `/api/accounts/${encodeURIComponent(accountId)}/channels`),
   syncAccountChannels: (accountId) => apiRequest('POST', `/api/accounts/${encodeURIComponent(accountId)}/channels/sync`),
   toggleChannel: (accountId, channelId, isActive) => apiRequest('PATCH', `/api/accounts/${encodeURIComponent(accountId)}/channels/${encodeURIComponent(channelId)}`, { isActive }),
   disconnectAccount: (accountId) => apiRequest('DELETE', `/api/accounts/${encodeURIComponent(accountId)}`, { confirm: 'DISCONNECT' }),
+  deleteAccount: (accountId) => apiRequest('DELETE', `/api/accounts/${encodeURIComponent(accountId)}/permanent`, { confirm: 'DELETE' }),
   media: () => apiRequest('GET', '/api/media'),
   uploadMedia: (payload) => apiRequest('POST', '/api/media', payload),
   deleteMedia: (id) => apiRequest('DELETE', `/api/media/${encodeURIComponent(id)}`),
@@ -942,6 +991,7 @@ const state = {
   backgroundTheme: readStoredBackgroundTheme() ?? getSystemBackgroundTheme(),
   theme: 'light',
   fontTheme: readStoredFontTheme(),
+  mediaPreviewSizes: readStoredMediaPreviewSizes(),
   uiNotice: null,
   autoRefreshTimer: null,
 };
@@ -980,7 +1030,59 @@ function applyBackgroundTheme(backgroundThemeId) {
   }
 }
 
-function backgroundPickerHtml(prefix) {
+function isValidMediaPreviewSize(value) {
+  return MEDIA_PREVIEW_SIZE_OPTIONS.some((option) => option.id === value);
+}
+
+function readStoredMediaPreviewSizes() {
+  try {
+    const raw = localStorage.getItem(MEDIA_PREVIEW_SIZE_STORAGE_KEY);
+    if (!raw) {
+      return {};
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(parsed).filter((entry) => typeof entry[0] === 'string' && isValidMediaPreviewSize(entry[1])),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredMediaPreviewSizes(previewSizes) {
+  try {
+    localStorage.setItem(MEDIA_PREVIEW_SIZE_STORAGE_KEY, JSON.stringify(previewSizes));
+  } catch {
+    // Ignore storage errors in private/sandboxed browsers.
+  }
+}
+
+function getMediaPreviewSizeLabel(previewSize) {
+  return MEDIA_PREVIEW_SIZE_OPTIONS.find((option) => option.id === previewSize)?.label ?? 'Medio';
+}
+
+function getMediaPreviewSizeForAsset(assetId) {
+  return state.mediaPreviewSizes[assetId] ?? DEFAULT_MEDIA_PREVIEW_SIZE;
+}
+
+function updateMediaPreviewSize(assetId, previewSize) {
+  if (!assetId || !isValidMediaPreviewSize(previewSize)) {
+    return;
+  }
+
+  state.mediaPreviewSizes = {
+    ...state.mediaPreviewSizes,
+    [assetId]: previewSize,
+  };
+  writeStoredMediaPreviewSizes(state.mediaPreviewSizes);
+}
+
+function settingsPickerHtml(prefix) {
   const selectedTheme = BACKGROUND_THEME_OPTIONS.find((option) => option.id === state.backgroundTheme) ?? BACKGROUND_THEME_OPTIONS[0];
   const cardsHtml = BACKGROUND_THEME_OPTIONS.map((option) => {
     const selectedClass = option.id === state.backgroundTheme ? ' selected' : '';
@@ -1002,19 +1104,34 @@ function backgroundPickerHtml(prefix) {
     `;
   }).join('');
 
+  const fontOptionsHtml = FONT_THEME_OPTIONS.map((option) => (
+    `<option value="${option.id}" ${option.id === state.fontTheme ? 'selected' : ''}>${option.label}</option>`
+  )).join('');
+
   return `
-    <details class="background-picker" ${prefix === 'login' ? '' : ''}>
+    <details class="settings-picker">
       <summary class="theme-toggle-btn">
-        Background color
+        ⚙ Settings
         <span class="background-picker-current">${escapeHtml(selectedTheme.label)}</span>
       </summary>
-      <div class="background-picker-panel">
-        <div class="background-picker-header">
-          <strong>Background color</strong>
-          <span class="muted">Escolha um estilo com preview ao vivo.</span>
+      <div class="settings-panel">
+        <div class="settings-section">
+          <div class="settings-section-header">
+            <strong>Background</strong>
+            <span class="muted">Live preview on select.</span>
+          </div>
+          <div class="background-grid">
+            ${cardsHtml}
+          </div>
         </div>
-        <div class="background-grid">
-          ${cardsHtml}
+        <div class="settings-section">
+          <div class="settings-section-header">
+            <strong>Text color</strong>
+            <span class="muted">Applies globally.</span>
+          </div>
+          <select id="${escapeHtml(prefix)}-font-theme-select" class="font-theme-select-panel">
+            ${fontOptionsHtml}
+          </select>
         </div>
       </div>
     </details>
@@ -1101,10 +1218,29 @@ function escapeAttribute(value) {
   return escapeHtml(value).replaceAll('`', '&#96;');
 }
 
-function showModal({ title, message = '', fields = [], confirmLabel = 'Confirm', cancelLabel = 'Cancel', tone = 'info' }) {
+function showModal({
+  title,
+  message = '',
+  fields = [],
+  confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
+  tone = 'info',
+  bodyHtml = '',
+  cardClassName = '',
+}) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
     overlay.className = 'app-modal-backdrop';
+    const showCancelButton = typeof cancelLabel === 'string' && cancelLabel.trim().length > 0;
+    const showConfirmButton = typeof confirmLabel === 'string' && confirmLabel.trim().length > 0;
+    const actionsHtml = showCancelButton || showConfirmButton
+      ? `
+        <div class="inline-actions modal-actions">
+          ${showCancelButton ? `<button class="btn" type="button" data-role="modal-cancel">${escapeHtml(cancelLabel)}</button>` : ''}
+          ${showConfirmButton ? `<button class="btn-primary" type="submit" data-role="modal-confirm">${escapeHtml(confirmLabel)}</button>` : ''}
+        </div>
+      `
+      : '';
     const fieldsHtml = fields.map((field) => {
       const value = field.value ?? '';
       if (field.type === 'textarea') {
@@ -1129,20 +1265,20 @@ function showModal({ title, message = '', fields = [], confirmLabel = 'Confirm',
       `;
     }).join('');
 
+    const toneLabelMap = { info: 'Info', warning: 'Warning', danger: 'Action required', error: 'Error', success: 'Success' };
+    const toneLabel = toneLabelMap[tone] ?? tone;
     overlay.innerHTML = `
-      <div class="app-modal-card">
+      <div class="app-modal-card ${escapeAttribute(cardClassName)}">
         <div class="stack">
-          <span class="pill ${escapeHtml(tone)}">${escapeHtml(tone)}</span>
+          <span class="pill ${escapeHtml(tone)}">${escapeHtml(toneLabel)}</span>
           <div class="stack">
             <h3>${escapeHtml(title)}</h3>
             ${message ? `<p class="muted">${escapeHtml(message)}</p>` : ''}
           </div>
           <form class="stack" data-role="modal-form">
             ${fieldsHtml}
-            <div class="inline-actions modal-actions">
-              <button class="btn" type="button" data-role="modal-cancel">${escapeHtml(cancelLabel)}</button>
-              <button class="btn-primary" type="submit" data-role="modal-confirm">${escapeHtml(confirmLabel)}</button>
-            </div>
+            ${bodyHtml}
+            ${actionsHtml}
           </form>
         </div>
       </div>
@@ -1178,7 +1314,7 @@ function showModal({ title, message = '', fields = [], confirmLabel = 'Confirm',
 
     document.addEventListener('keydown', handleEscape);
     document.body.appendChild(overlay);
-    const firstInput = overlay.querySelector('input, textarea');
+    const firstInput = overlay.querySelector('input, textarea, select');
     if (firstInput instanceof HTMLElement) {
       firstInput.focus();
       if ('select' in firstInput || 'value' in firstInput) {
@@ -1230,10 +1366,7 @@ function renderWorkspaceShell(options) {
   const navHtml = tabs.map((tab) => (
     `<a class="nav-link ${tab.id === currentTab ? 'active' : ''}" data-link href="${tab.href}">${tab.label}</a>`
   )).join('');
-  const fontThemeOptionsHtml = FONT_THEME_OPTIONS.map((option) => (
-    `<option value="${option.id}" ${option.id === state.fontTheme ? 'selected' : ''}>${option.label}</option>`
-  )).join('');
-  const backgroundPicker = backgroundPickerHtml('workspace');
+  const settingsPicker = settingsPickerHtml('workspace');
   const combinedNoticeHtml = `${renderUiNotice()}${options.noticeHtml ?? ''}`;
 
   root.innerHTML = `
@@ -1246,13 +1379,7 @@ function renderWorkspaceShell(options) {
           </div>
           <nav class="nav">${navHtml}</nav>
           <div class="nav">
-            ${backgroundPicker}
-            <label class="font-theme-control">
-              <span>Text style</span>
-              <select id="font-theme-select" class="font-theme-select">
-                ${fontThemeOptionsHtml}
-              </select>
-            </label>
+            ${settingsPicker}
             <span class="user-email">${escapeHtml(state.me?.email ?? '')}</span>
             <button id="logout-btn" class="logout-btn" type="button">Logout</button>
           </div>
@@ -1281,7 +1408,7 @@ function renderWorkspaceShell(options) {
     });
   }
 
-  const fontThemeSelect = document.getElementById('font-theme-select');
+  const fontThemeSelect = document.getElementById('workspace-font-theme-select');
   if (fontThemeSelect) {
     fontThemeSelect.addEventListener('change', (event) => {
       applyFontTheme(event.target.value);
@@ -1296,41 +1423,52 @@ function renderWorkspaceShell(options) {
 }
 
 function renderLoginPage(options = {}) {
-  const fontThemeOptionsHtml = FONT_THEME_OPTIONS.map((option) => (
-    `<option value="${option.id}" ${option.id === state.fontTheme ? 'selected' : ''}>${option.label}</option>`
-  )).join('');
-  const backgroundPicker = backgroundPickerHtml('login');
+  const mode = options.mode === 'register' ? 'register' : 'login';
+  const title = mode === 'register' ? 'Create your account' : 'Sign in to your workspace';
+  const subtitle = mode === 'register'
+    ? 'Create an account with email and password or continue with Google.'
+    : 'Use your email and password or continue with Google to access the publishing workspace.';
+  const submitLabel = mode === 'register' ? 'Create account' : 'Sign in';
+  const settingsPicker = settingsPickerHtml('login');
   const combinedNoticeHtml = `${renderUiNotice()}${options.error ? `<div class="notice error">${escapeHtml(options.error)}</div>` : ''}`;
 
   root.innerHTML = `
     <div class="login-wrap">
       <div class="login-toolbar">
-        ${backgroundPicker}
-        <label class="font-theme-control">
-          <span>Text style</span>
-          <select id="login-font-theme-select" class="font-theme-select">
-            ${fontThemeOptionsHtml}
-          </select>
-        </label>
+        ${settingsPicker}
       </div>
       <section class="login-card stack">
         ${combinedNoticeHtml}
         <div>
-          <h1>Admin sign in</h1>
-          <p class="muted">Use the seeded admin credential to access the internal publishing workspace.</p>
+          <div class="auth-mode-switch" role="tablist" aria-label="Authentication mode">
+            <button class="${mode === 'login' ? 'btn-primary' : 'btn'}" type="button" data-auth-mode="login">Sign in</button>
+            <button class="${mode === 'register' ? 'btn-primary' : 'btn'}" type="button" data-auth-mode="register">Create account</button>
+          </div>
+          <h1>${escapeHtml(title)}</h1>
+          <p class="muted">${escapeHtml(subtitle)}</p>
         </div>
         <form id="login-form" class="form-grid">
+          ${mode === 'register' ? `
+            <label>
+              Full name
+              <input name="fullName" type="text" autocomplete="name" />
+            </label>
+          ` : ''}
           <label>
             Email
             <input name="email" type="email" required autocomplete="username" />
           </label>
           <label>
             Password
-            <input name="password" type="password" required autocomplete="current-password" />
+            <input name="password" type="password" required autocomplete="${mode === 'register' ? 'new-password' : 'current-password'}" />
           </label>
-          <button class="btn-primary" type="submit">Sign in</button>
+          <button class="btn-primary" type="submit">${escapeHtml(submitLabel)}</button>
         </form>
-        <p class="footnote">Default example from .env.example: admin@example.com / admin123</p>
+        <div class="auth-divider"><span>or</span></div>
+        <button id="google-auth-btn" class="btn" type="button">Continue with Google</button>
+        <p class="footnote">${mode === 'register'
+          ? 'After the account is created, the next step is choosing the plan for the workspace.'
+          : 'If this is your first Google access, the platform will ask you to choose a plan before opening the workspace.'}</p>
       </section>
     </div>
   `;
@@ -1343,25 +1481,184 @@ function renderLoginPage(options = {}) {
       email: String(data.get('email') ?? ''),
       password: String(data.get('password') ?? ''),
     };
-    const result = await api.login(credentials);
+    const payload = mode === 'register'
+      ? {
+          ...credentials,
+          fullName: String(data.get('fullName') ?? ''),
+        }
+      : credentials;
+    const result = mode === 'register'
+      ? await api.register(payload)
+      : await api.login(credentials);
     if (!result.ok) {
-      renderLoginPage({ error: result.error });
+      renderLoginPage({ error: result.error, mode });
       return;
     }
-    state.me = result.body?.user ?? null;
-    navigate('/workspace/dashboard', true);
+    handleAuthenticatedNavigation(result.body?.user);
+  });
+
+  document.querySelectorAll('[data-auth-mode]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const nextMode = button.getAttribute('data-auth-mode') === 'register' ? 'register' : 'login';
+      navigate(buildUrl('/login', nextMode === 'register' ? { mode: 'register' } : {}), true);
+    });
+  });
+
+  const googleAuthButton = document.getElementById('google-auth-btn');
+  googleAuthButton?.addEventListener('click', async () => {
+    const result = await api.startAuthGoogleOauth();
+    if (!result.ok || !result.body?.redirectUrl) {
+      renderLoginPage({ error: result.error || 'Unable to start Google sign-in.', mode });
+      return;
+    }
+    window.location.assign(result.body.redirectUrl);
   });
 
   const loginFontThemeSelect = document.getElementById('login-font-theme-select');
-  if (loginFontThemeSelect) {
-    loginFontThemeSelect.addEventListener('change', (event) => {
-      applyFontTheme(event.target.value);
-      renderLoginPage(options);
-    });
-  }
+  loginFontThemeSelect?.addEventListener('change', (event) => {
+    applyFontTheme(event.target.value);
+    renderLoginPage({ ...options, mode });
+  });
 
   bindBackgroundPicker(() => {
-    renderLoginPage(options);
+    renderLoginPage({ ...options, mode });
+  });
+  bindUiNoticeDismiss();
+}
+
+function handleAuthenticatedNavigation(user) {
+  state.me = user ?? null;
+  if (!user?.email) {
+    navigate('/login', true);
+    return;
+  }
+
+  navigate(user.needsPlanSelection ? '/onboarding/plan' : '/workspace/dashboard', true);
+}
+
+async function renderGoogleAuthCallbackPage() {
+  renderLoading('Completing Google sign-in...');
+
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code') ?? '';
+  const oauthState = params.get('state') ?? '';
+
+  if (!code || !oauthState) {
+    renderLoginPage({
+      error: 'Google callback is missing the authorization code or state.',
+      mode: 'login',
+    });
+    return;
+  }
+
+  const result = await api.authGoogleCallback(code, oauthState);
+  if (!result.ok) {
+    renderLoginPage({
+      error: result.error,
+      mode: 'login',
+    });
+    return;
+  }
+
+  handleAuthenticatedNavigation(result.body?.user);
+}
+
+function renderPlanCard(option, selectedPlan) {
+  const isSelected = option.id === selectedPlan;
+  return `
+    <article class="plan-card ${option.featured ? 'featured' : ''} ${isSelected ? 'selected' : ''}">
+      <div class="stack">
+        <div class="inline-actions">
+          <span class="pill ${option.featured ? 'success' : 'info'}">${escapeHtml(option.label)}</span>
+          ${option.featured ? '<span class="pill warning">Most complete</span>' : ''}
+        </div>
+        <div class="plan-price">${escapeHtml(option.priceLabel)}</div>
+        <p class="muted">${escapeHtml(option.description)}</p>
+      </div>
+      <div class="stack plan-points">
+        <span>${escapeHtml(option.tokenSummary)}</span>
+        <span>${escapeHtml(option.visitSummary)}</span>
+        <span>${escapeHtml(option.platformSummary)}</span>
+      </div>
+      <button class="${option.featured ? 'btn-primary' : 'btn'}" type="button" data-action="select-onboarding-plan" data-plan-id="${escapeHtml(option.id)}">
+        ${isSelected ? 'Selected now' : `Choose ${escapeHtml(option.label)}`}
+      </button>
+    </article>
+  `;
+}
+
+async function renderPlanSelectionPage(options = {}) {
+  const result = await api.accountPlanSummary();
+  if (!result.ok) {
+    if (result.status === 401) {
+      unauthorizedRedirect();
+      return;
+    }
+
+    renderLoginPage({
+      error: result.error,
+      mode: 'login',
+    });
+    return;
+  }
+
+  const account = result.body?.account ?? null;
+  const selectedPlan = account?.plan ?? 'FREE';
+  const combinedNoticeHtml = `${renderUiNotice()}${options.error ? `<div class="notice error">${escapeHtml(options.error)}</div>` : ''}`;
+  const planCardsHtml = ACCOUNT_PLAN_OPTIONS.map((option) => renderPlanCard(option, selectedPlan)).join('');
+  const settingsPicker = settingsPickerHtml('plan-onboarding');
+
+  root.innerHTML = `
+    <div class="login-wrap">
+      <div class="login-toolbar">
+        ${settingsPicker}
+      </div>
+      <section class="login-card plan-onboarding-card stack">
+        ${combinedNoticeHtml}
+        <div class="stack">
+          <h1>Choose your account plan</h1>
+          <p class="muted">Your account has already been created. Pick the plan you want to use before entering the workspace.</p>
+          <div class="notice info">
+            Logged in as <strong>${escapeHtml(state.me?.fullName || state.me?.email || '')}</strong>.
+          </div>
+        </div>
+        <section class="plan-grid">
+          ${planCardsHtml}
+        </section>
+      </section>
+    </div>
+  `;
+
+  document.querySelectorAll('[data-action="select-onboarding-plan"]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const planId = button.getAttribute('data-plan-id');
+      if (!planId) {
+        return;
+      }
+
+      setButtonBusy(button, true, 'Saving...');
+      const selectResult = await api.selectAccountPlan(planId);
+      setButtonBusy(button, false);
+
+      if (!selectResult.ok) {
+        await renderPlanSelectionPage({ error: selectResult.error });
+        return;
+      }
+
+      state.me = selectResult.body?.user ?? { ...state.me, needsPlanSelection: false };
+      setUiNotice('success', 'Plan selected', `The ${planId} plan is now active for your account.`);
+      navigate('/workspace/dashboard', true);
+    });
+  });
+
+  const planFontThemeSelect = document.getElementById('plan-onboarding-font-theme-select');
+  planFontThemeSelect?.addEventListener('change', (event) => {
+    applyFontTheme(event.target.value);
+    void renderPlanSelectionPage(options);
+  });
+
+  bindBackgroundPicker(() => {
+    void renderPlanSelectionPage(options);
   });
   bindUiNoticeDismiss();
 }
@@ -1422,7 +1719,12 @@ function renderLoading(label = 'Loading...') {
   root.innerHTML = `
     <div class="page">
       <main class="container">
-        <section class="card">${escapeHtml(label)}</section>
+        <section class="card">
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <span class="muted">${escapeHtml(label)}</span>
+          </div>
+        </section>
       </main>
     </div>
   `;
@@ -1492,7 +1794,6 @@ function renderBreakdownList(breakdown, emptyLabel = 'No data') {
 function renderEmptyStateCard({ title, message, actionsHtml = '', tone = 'neutral' }) {
   return `
     <section class="card stack empty-state-card">
-      <span class="pill ${escapeHtml(tone)}">${escapeHtml(tone === 'neutral' ? 'Empty state' : tone)}</span>
       <div class="stack">
         <h3>${escapeHtml(title)}</h3>
         <p class="muted">${escapeHtml(message)}</p>
@@ -1500,6 +1801,211 @@ function renderEmptyStateCard({ title, message, actionsHtml = '', tone = 'neutra
       ${actionsHtml ? `<div class="inline-actions">${actionsHtml}</div>` : ''}
     </section>
   `;
+}
+
+function formatAccountIdentityLabel(account) {
+  const primary = account?.displayName ?? account?.email ?? account?.id ?? 'Unknown account';
+  const email = account?.email && account.email !== primary ? account.email : null;
+  const providerLabel = getProviderLabel(account?.provider);
+  const subjectSuffix = account?.providerSubject || account?.googleSubject
+    ? `${providerLabel} ID ${account?.providerSubject ?? account?.googleSubject}`
+    : null;
+  const idSuffix = account?.id ? `Internal ID ${account.id}` : null;
+  return {
+    primary,
+    secondary: [email, subjectSuffix, idSuffix].filter(Boolean).join(' | '),
+  };
+}
+
+function getProviderLabel(provider) {
+  switch ((provider ?? '').toLowerCase()) {
+    case 'youtube':
+      return 'YouTube';
+    case 'instagram':
+      return 'Instagram';
+    case 'tiktok':
+      return 'TikTok';
+    case 'google':
+    default:
+      return 'Google';
+  }
+}
+
+function supportsChannels(provider) {
+  const normalized = (provider ?? '').toLowerCase();
+  return normalized === 'google' || normalized === 'youtube';
+}
+
+function buildMediaAssetFileUrl(assetId) {
+  return `/media-files/${encodeURIComponent(assetId)}`;
+}
+
+function renderMediaPreviewSizePicker(assetId, previewSizeLabel, previewSize) {
+  const sizeOptionsHtml = MEDIA_PREVIEW_SIZE_OPTIONS.map((option) => `
+    <button
+      class="${option.id === previewSize ? 'btn-primary' : 'btn'} media-preview-size-option"
+      type="button"
+      data-action="set-media-preview-size"
+      data-media-id="${escapeHtml(assetId)}"
+      data-preview-size="${escapeHtml(option.id)}"
+    >
+      ${escapeHtml(option.label)}
+    </button>
+  `).join('');
+
+  return `
+    <details class="media-preview-picker">
+      <summary class="btn">Display: ${escapeHtml(previewSizeLabel)}</summary>
+      <div class="media-preview-picker-menu">
+        ${sizeOptionsHtml}
+      </div>
+    </details>
+  `;
+}
+
+function renderMediaFileActionLinks(asset) {
+  const fileUrl = buildMediaAssetFileUrl(asset.id);
+  const fileName = asset.original_name ?? asset.id;
+
+  return `
+    <a class="btn" href="${escapeAttribute(fileUrl)}" target="_blank" rel="noopener noreferrer">Open</a>
+    <a class="btn" href="${escapeAttribute(fileUrl)}" download="${escapeAttribute(fileName)}">Download</a>
+  `;
+}
+
+function renderVideoPreviewCell(asset) {
+  const previewSize = getMediaPreviewSizeForAsset(asset.id);
+  const previewSizeLabel = getMediaPreviewSizeLabel(previewSize);
+  const videoUrl = buildMediaAssetFileUrl(asset.id);
+  const posterUrl = asset.thumbnail?.id ? buildMediaAssetFileUrl(asset.thumbnail.id) : '';
+
+  return `
+    <div class="media-preview-stack">
+      <div
+        class="media-preview-frame"
+        data-action="open-media-preview"
+        data-media-id="${escapeHtml(asset.id)}"
+        data-media-preview-frame="true"
+        data-preview-size="${escapeHtml(previewSize)}"
+        tabindex="0"
+        role="button"
+        aria-label="Preview de video ${escapeHtml(asset.original_name ?? asset.id)}"
+      >
+        <video
+          class="media-preview-video"
+          data-preview-video="true"
+          muted
+          playsinline
+          loop
+          preload="none"
+          src="${escapeHtml(videoUrl)}"
+          ${posterUrl ? `poster="${escapeHtml(posterUrl)}"` : ''}
+        ></video>
+        <div class="media-preview-overlay">
+          <span class="media-preview-hint">Passe o mouse para preview e clique para abrir</span>
+          <span class="media-preview-size-pill">${escapeHtml(previewSizeLabel)}</span>
+        </div>
+      </div>
+      ${renderMediaPreviewSizePicker(asset.id, previewSizeLabel, previewSize)}
+    </div>
+  `;
+}
+
+function renderThumbnailPreviewCell(asset) {
+  const previewSize = getMediaPreviewSizeForAsset(asset.id);
+  const previewSizeLabel = getMediaPreviewSizeLabel(previewSize);
+  const imageUrl = buildMediaAssetFileUrl(asset.id);
+
+  return `
+    <div class="media-preview-stack">
+      <div
+        class="media-preview-frame media-preview-image-frame"
+        data-action="open-media-preview"
+        data-media-id="${escapeHtml(asset.id)}"
+        data-preview-size="${escapeHtml(previewSize)}"
+        tabindex="0"
+        role="button"
+        aria-label="Preview de thumbnail ${escapeHtml(asset.original_name ?? asset.id)}"
+      >
+        <img
+          class="media-preview-image"
+          src="${escapeHtml(imageUrl)}"
+          alt="${escapeHtml(asset.original_name ?? asset.id)}"
+          loading="lazy"
+        />
+        <div class="media-preview-overlay">
+          <span class="media-preview-hint">Passe o mouse para ampliar e clique para abrir</span>
+          <span class="media-preview-size-pill">${escapeHtml(previewSizeLabel)}</span>
+        </div>
+      </div>
+      ${renderMediaPreviewSizePicker(asset.id, previewSizeLabel, previewSize)}
+    </div>
+  `;
+}
+
+function openMediaPreviewDialog(asset) {
+  if (!asset?.id) {
+    return Promise.resolve(null);
+  }
+
+  const previewUrl = buildMediaAssetFileUrl(asset.id);
+  const assetName = asset.original_name ?? asset.id;
+  const assetTypeLabel = asset.asset_type === 'thumbnail'
+    ? 'Thumbnail'
+    : asset.asset_type === 'video'
+      ? 'Video'
+      : asset.asset_type ?? 'Asset';
+  const formatLabel = asset.asset_type === 'video'
+    ? getVideoPublishFormatLabel(getVideoPublishFormat(asset))
+    : null;
+  const detailItems = [
+    `<span class="pill info">${escapeHtml(assetTypeLabel)}</span>`,
+    formatLabel ? `<span class="pill">${escapeHtml(formatLabel)}</span>` : '',
+    `<span class="media-preview-modal-meta-item">${escapeHtml(formatBytes(asset.size_bytes))}</span>`,
+    asset.duration_seconds ? `<span class="media-preview-modal-meta-item">${escapeHtml(formatDurationSeconds(asset.duration_seconds))}</span>` : '',
+    `<span class="media-preview-modal-meta-item"><code>${escapeHtml(asset.id)}</code></span>`,
+  ].filter(Boolean).join('');
+
+  const mediaHtml = asset.asset_type === 'video'
+    ? `
+      <video
+        class="media-preview-modal-media"
+        controls
+        playsinline
+        preload="metadata"
+        src="${escapeHtml(previewUrl)}"
+      ></video>
+    `
+    : `
+      <img
+        class="media-preview-modal-media"
+        src="${escapeHtml(previewUrl)}"
+        alt="${escapeHtml(assetName)}"
+        loading="eager"
+      />
+    `;
+
+  return showModal({
+    title: assetName,
+    message: 'Preview ampliado do asset selecionado.',
+    tone: 'info',
+    confirmLabel: '',
+    cancelLabel: 'Fechar',
+    cardClassName: 'media-preview-modal-card',
+    bodyHtml: `
+      <div class="media-preview-modal-content">
+        <div class="media-preview-modal-stage">
+          ${mediaHtml}
+        </div>
+        <div class="media-preview-modal-meta">
+          ${detailItems}
+        </div>
+        <div class="inline-actions media-preview-modal-actions">
+          ${renderMediaFileActionLinks(asset)}
+        </div>
+      </div>
+    `,
+  });
 }
 
 function renderChecklistCard(title, items) {
@@ -1553,6 +2059,15 @@ function summarizeCampaignOutcomes(campaign) {
   };
 }
 
+function shouldAutoRefreshDashboard(stats) {
+  const campaignsByStatus = stats?.campaigns?.byStatus ?? {};
+  const jobsByStatus = stats?.jobs?.byStatus ?? {};
+
+  return Number(campaignsByStatus.launching ?? 0) > 0 ||
+    Number(jobsByStatus.queued ?? 0) > 0 ||
+    Number(jobsByStatus.processing ?? 0) > 0;
+}
+
 async function renderDashboardPage() {
   const result = await api.dashboard();
   if (!result.ok) {
@@ -1577,18 +2092,18 @@ async function renderDashboardPage() {
   channels.sort((left, right) => Number(right.published ?? 0) - Number(left.published ?? 0));
 
   const summaryCards = [
-    { label: 'Campaigns', value: formatNumber(stats?.campaigns?.total ?? 0), hint: 'Total campaigns tracked' },
-    { label: 'Targets', value: formatNumber(stats?.targets?.total ?? 0), hint: 'All targets across campaigns' },
-    { label: 'Jobs', value: formatNumber(stats?.jobs?.total ?? 0), hint: 'Upload jobs queued + finished' },
-    { label: 'Published', value: formatNumber(targetsByStatus.publicado ?? 0), hint: 'Targets successfully published' },
-    { label: 'Failed', value: formatNumber(targetsByStatus.erro ?? 0), hint: 'Targets in error state' },
-    { label: 'Success Rate', value: formatPercent(stats?.targets?.successRate ?? 0), hint: 'Published / terminal targets' },
-    { label: 'Retry Attempts', value: formatNumber(stats?.jobs?.totalRetries ?? 0), hint: 'Retries spent so far' },
-    { label: 'Blocked Targets', value: formatNumber(stats?.reauth?.blockedTargets ?? 0), hint: 'Need account reauth' },
+    { label: 'Campaigns', value: formatNumber(stats?.campaigns?.total ?? 0), hint: 'Total campaigns tracked', tone: 'info' },
+    { label: 'Targets', value: formatNumber(stats?.targets?.total ?? 0), hint: 'All targets across campaigns', tone: 'info' },
+    { label: 'Jobs', value: formatNumber(stats?.jobs?.total ?? 0), hint: 'Upload jobs queued + finished', tone: 'info' },
+    { label: 'Published', value: formatNumber(targetsByStatus.publicado ?? 0), hint: 'Targets successfully published', tone: 'success' },
+    { label: 'Failed', value: formatNumber(targetsByStatus.erro ?? 0), hint: 'Targets in error state', tone: 'danger' },
+    { label: 'Success Rate', value: formatPercent(stats?.targets?.successRate ?? 0), hint: 'Published / terminal targets', tone: 'success' },
+    { label: 'Retry Attempts', value: formatNumber(stats?.jobs?.totalRetries ?? 0), hint: 'Retries spent so far', tone: 'warning' },
+    { label: 'Blocked Targets', value: formatNumber(stats?.reauth?.blockedTargets ?? 0), hint: 'Need account reauth', tone: 'danger' },
   ];
 
   const cardsHtml = summaryCards.map((card) => (
-    `<article class="card">
+    `<article class="card" data-tone="${escapeHtml(card.tone)}">
       <div class="summary-value">${escapeHtml(card.value)}</div>
       <div class="summary-label">${escapeHtml(card.label)}</div>
       <div class="summary-hint">${escapeHtml(card.hint)}</div>
@@ -1784,6 +2299,16 @@ async function renderDashboardPage() {
       </section>
     `,
   });
+
+  if (shouldAutoRefreshDashboard(stats)) {
+    clearAutoRefreshTimer();
+    state.autoRefreshTimer = setTimeout(() => {
+      if (window.location.pathname !== '/workspace/dashboard') {
+        return;
+      }
+      void renderDashboardPage();
+    }, 3000);
+  }
 }
 
 async function renderAccountsOauthCallbackPage() {
@@ -1791,15 +2316,28 @@ async function renderAccountsOauthCallbackPage() {
   const code = query.get('code') ?? '';
   const stateParam = query.get('state') ?? '';
   const provider = (query.get('provider') ?? readPendingOauthProvider() ?? 'google').trim().toLowerCase();
-  const isYouTubeProvider = provider === 'youtube';
-  const callbackRequest = isYouTubeProvider
-    ? api.accountYouTubeOauthCallback(code, stateParam)
-    : api.accountOauthCallback(code, stateParam);
+  const providerLabel = getProviderLabel(provider);
+  let callbackRequest;
+  switch (provider) {
+    case 'youtube':
+      callbackRequest = api.accountYouTubeOauthCallback(code, stateParam);
+      break;
+    case 'instagram':
+      callbackRequest = api.accountInstagramOauthCallback(code, stateParam);
+      break;
+    case 'tiktok':
+      callbackRequest = api.accountTikTokOauthCallback(code, stateParam);
+      break;
+    case 'google':
+    default:
+      callbackRequest = api.accountOauthCallback(code, stateParam);
+      break;
+  }
 
   if (!code || !stateParam) {
     renderWorkspaceShell({
       title: 'Accounts',
-      subtitle: `${isYouTubeProvider ? 'YouTube' : 'Google'} OAuth callback`,
+      subtitle: `${providerLabel} OAuth callback`,
       noticeHtml: '<div class="notice error">Missing OAuth callback parameters (code/state).</div>',
       contentHtml: '<section class="card"><a class="btn" data-link href="/workspace/accounts">Back to accounts</a></section>',
     });
@@ -1808,8 +2346,8 @@ async function renderAccountsOauthCallbackPage() {
 
   renderWorkspaceShell({
     title: 'Accounts',
-    subtitle: `Finishing ${isYouTubeProvider ? 'YouTube' : 'Google'} connection...`,
-    contentHtml: `<section class="card">Connecting your ${isYouTubeProvider ? 'YouTube' : 'Google'} account...</section>`,
+    subtitle: `Finishing ${providerLabel} connection...`,
+    contentHtml: `<section class="card">Connecting your ${providerLabel} account...</section>`,
   });
 
   const callbackResult = await callbackRequest;
@@ -1822,7 +2360,7 @@ async function renderAccountsOauthCallbackPage() {
 
     navigate(buildUrl('/workspace/accounts', {
       oauth: 'error',
-      provider: isYouTubeProvider ? 'youtube' : 'google',
+      provider,
       oauthMessage: callbackResult.error ?? 'OAuth callback failed.',
     }), true);
     return;
@@ -1830,7 +2368,7 @@ async function renderAccountsOauthCallbackPage() {
 
   navigate(buildUrl('/workspace/accounts', {
     oauth: 'success',
-    provider: isYouTubeProvider ? 'youtube' : 'google',
+    provider,
     syncChannels: callbackResult.body?.sync?.channelCount ?? '',
     syncMessage: callbackResult.body?.sync?.message ?? '',
   }), true);
@@ -1845,7 +2383,7 @@ async function renderAccountsPage() {
     }
     renderWorkspaceShell({
       title: 'Accounts',
-      subtitle: 'Connected Google accounts and YouTube channels.',
+      subtitle: 'Connected social accounts and publishing channels.',
       noticeHtml: `<div class="notice error">${escapeHtml(listResult.error)}</div>`,
       contentHtml: '<section class="card">Unable to load accounts.</section>',
     });
@@ -1861,6 +2399,7 @@ async function renderAccountsPage() {
   const oauthMessage = (query.get('oauthMessage') ?? '').trim();
   const syncChannelsCount = query.get('syncChannels');
   const syncMessage = (query.get('syncMessage') ?? '').trim();
+  const oauthProviderLabel = getProviderLabel(oauthProvider);
 
   const channelResponses = await Promise.all(accounts.map((account) => api.accountChannels(account.id)));
   const channelsByAccountId = new Map();
@@ -1909,6 +2448,7 @@ async function renderAccountsPage() {
     : filteredAccounts[0]?.id ?? accounts[0]?.id ?? null;
   const selectedAccount = selectedAccountId ? accounts.find((account) => account.id === selectedAccountId) ?? null : null;
   const channels = selectedAccountId ? (channelsByAccountId.get(selectedAccountId) ?? []) : [];
+  const selectedAccountSupportsChannels = supportsChannels(selectedAccount?.provider);
   const selectedAccountChannelSummary = selectedAccountId
     ? {
         total: channels.length,
@@ -1930,14 +2470,14 @@ async function renderAccountsPage() {
   const disconnectedCount = accounts.filter((account) => account.status === 'disconnected').length;
 
   const metricsCards = [
-    { label: 'Connected', value: connectedCount, hint: 'Accounts ready to publish' },
-    { label: 'Reauth Required', value: reauthCount, hint: 'Accounts needing reconnection' },
-    { label: 'Disconnected', value: disconnectedCount, hint: 'Manually disconnected accounts' },
-    { label: 'Active Channels', value: activeChannels, hint: `${formatNumber(totalChannels)} channels total` },
+    { label: 'Connected', value: connectedCount, hint: 'Accounts ready to publish', tone: 'success' },
+    { label: 'Reauth Required', value: reauthCount, hint: 'Accounts needing reconnection', tone: 'warning' },
+    { label: 'Disconnected', value: disconnectedCount, hint: 'Manually disconnected accounts', tone: 'danger' },
+    { label: 'Active Channels', value: activeChannels, hint: `${formatNumber(totalChannels)} channels total`, tone: 'info' },
   ];
 
   const metricsHtml = metricsCards.map((card) => `
-    <article class="card">
+    <article class="card" data-tone="${escapeHtml(card.tone)}">
       <div class="summary-value">${formatNumber(card.value)}</div>
       <div class="summary-label">${escapeHtml(card.label)}</div>
       <div class="summary-hint">${escapeHtml(card.hint)}</div>
@@ -1953,10 +2493,12 @@ async function renderAccountsPage() {
         status: statusFilter,
       });
       const accountChannels = channelsByAccountId.get(account.id) ?? [];
+      const identity = formatAccountIdentityLabel(account);
       return `
         <a class="account-chip ${isSelected ? 'selected' : ''}" data-link href="${escapeHtml(href)}">
-          <strong>${escapeHtml(account.displayName ?? account.email ?? account.id)}</strong>
-          <span>${escapeHtml(account.email ?? account.id)}</span>
+          <strong>${escapeHtml(identity.primary)}</strong>
+          <span>${escapeHtml(getProviderLabel(account.provider))}</span>
+          <span>${escapeHtml(identity.secondary || account.id)}</span>
           <small>${formatNumber(accountChannels.length)} channel${accountChannels.length === 1 ? '' : 's'}</small>
         </a>
       `;
@@ -1972,10 +2514,15 @@ async function renderAccountsPage() {
         search,
         status: statusFilter,
       });
+      const identity = formatAccountIdentityLabel(account);
 
       return `
       <tr${account.id === selectedAccountId ? ' class="row-selected"' : ''}>
-        <td>${escapeHtml(account.displayName ?? account.email ?? account.id)}</td>
+        <td>
+          <strong>${escapeHtml(identity.primary)}</strong>
+          <div class="muted">${escapeHtml(getProviderLabel(account.provider))}</div>
+          <div class="muted">${escapeHtml(identity.secondary || account.id)}</div>
+        </td>
         <td>${escapeHtml(account.email ?? '-')}</td>
         <td>${statusPill(account.status)}</td>
         <td>${formatNumber(activeCount)} / ${formatNumber(channels.length)}</td>
@@ -1983,7 +2530,8 @@ async function renderAccountsPage() {
         <td>
           <div class="inline-actions">
             <a class="btn" data-link href="${rowHref}">View channels</a>
-            <button class="btn-danger" data-action="disconnect-account" data-account-id="${escapeHtml(account.id)}" type="button">Disconnect</button>
+            <button class="btn" data-action="disconnect-account" data-account-id="${escapeHtml(account.id)}" type="button">Disconnect</button>
+            <button class="btn-danger" data-action="delete-account" data-account-id="${escapeHtml(account.id)}" type="button">Delete</button>
           </div>
         </td>
       </tr>
@@ -2032,7 +2580,7 @@ async function renderAccountsPage() {
   if (oauth === 'success') {
     notices.push(`
       <div class="notice info">
-        <h4>${oauthProvider === 'youtube' ? 'YouTube account connected' : 'Google account connected'}</h4>
+        <h4>${escapeHtml(oauthProviderLabel)} account connected</h4>
         <p>${escapeHtml(syncMessage || 'The OAuth callback completed successfully.')}</p>
       </div>
     `);
@@ -2040,16 +2588,24 @@ async function renderAccountsPage() {
   if (oauth === 'error') {
     notices.push(`
       <div class="notice error">
-        <h4>${oauthProvider === 'youtube' ? 'YouTube OAuth failed' : 'Google OAuth failed'}</h4>
+        <h4>${escapeHtml(oauthProviderLabel)} OAuth failed</h4>
         <p>${escapeHtml(oauthMessage || 'Unable to finish OAuth callback.')}</p>
       </div>
     `);
   }
-  if (selectedAccount && channels.length === 0) {
+  if (selectedAccount && selectedAccountSupportsChannels && channels.length === 0) {
     notices.push(`
       <div class="notice warning">
         <h4>No YouTube channels found yet</h4>
         <p>This Google sign-in is connected, but no YouTube channels were returned for this account. Try <strong>Sync channels</strong>, or sign in with the Google profile that owns the channel or Brand Account.</p>
+      </div>
+    `);
+  }
+  if (selectedAccount && !selectedAccountSupportsChannels) {
+    notices.push(`
+      <div class="notice info">
+        <h4>${escapeHtml(getProviderLabel(selectedAccount.provider))} connected</h4>
+        <p>This provider is now stored in the workspace. Channel sync is currently only available for YouTube connections.</p>
       </div>
     `);
   }
@@ -2073,9 +2629,13 @@ async function renderAccountsPage() {
   const accountsSetupCard = accounts.length === 0
     ? renderEmptyStateCard({
         title: 'No connected accounts yet',
-        message: 'Connect a YouTube account to sync channels and make them available for campaigns.',
+        message: 'Connect YouTube, Instagram, or TikTok accounts to centralize your publishing workspace.',
         tone: 'info',
-        actionsHtml: '<button class="btn-primary" type="button" data-action="start-youtube-oauth">Connect YouTube</button>',
+        actionsHtml: `
+          <button class="btn-primary" type="button" data-action="start-youtube-oauth">Connect YouTube</button>
+          <button class="btn" type="button" data-action="start-instagram-oauth">Connect Instagram</button>
+          <button class="btn" type="button" data-action="start-tiktok-oauth">Connect TikTok</button>
+        `,
       })
     : filteredAccounts.length === 0
       ? renderEmptyStateCard({
@@ -2097,10 +2657,12 @@ async function renderAccountsPage() {
 
   renderWorkspaceShell({
     title: 'Accounts',
-    subtitle: 'Connected Google accounts and YouTube channels.',
+    subtitle: 'Connected social accounts and YouTube publishing channels.',
     actionsHtml: `
       <div class="inline-actions">
         <button class="btn-primary" type="button" data-action="start-youtube-oauth">Connect YouTube</button>
+        <button class="btn" type="button" data-action="start-instagram-oauth">Connect Instagram</button>
+        <button class="btn" type="button" data-action="start-tiktok-oauth">Connect TikTok</button>
         <a class="btn" data-link href="${escapeHtml(buildUrl('/workspace/accounts', { search, status: statusFilter }))}">Refresh</a>
       </div>
     `,
@@ -2108,10 +2670,6 @@ async function renderAccountsPage() {
     contentHtml: `
       <section class="grid-4">${metricsHtml}</section>
       ${accountsSetupCard}
-      <section class="card stack">
-        <h3>Connection note</h3>
-        <p>YouTube account access still uses Google OAuth under the hood. The <strong>Connect YouTube</strong> shortcut starts the same secure sign-in flow, but keeps the action clearer inside the dashboard.</p>
-      </section>
       <section class="card stack">
         <h3>Connected accounts</h3>
         <form id="account-filter-form" class="grid-3">
@@ -2122,10 +2680,10 @@ async function renderAccountsPage() {
           <label>
             Status
             <select name="status">
-              <option value="">All</option>
-              <option value="connected" ${statusFilter === 'connected' ? 'selected' : ''}>connected</option>
-              <option value="reauth_required" ${statusFilter === 'reauth_required' ? 'selected' : ''}>reauth_required</option>
-              <option value="disconnected" ${statusFilter === 'disconnected' ? 'selected' : ''}>disconnected</option>
+              <option value="">All statuses</option>
+              <option value="connected" ${statusFilter === 'connected' ? 'selected' : ''}>Connected</option>
+              <option value="reauth_required" ${statusFilter === 'reauth_required' ? 'selected' : ''}>Reauth required</option>
+              <option value="disconnected" ${statusFilter === 'disconnected' ? 'selected' : ''}>Disconnected</option>
             </select>
           </label>
           <div class="inline-actions">
@@ -2133,16 +2691,13 @@ async function renderAccountsPage() {
             <a class="btn" data-link href="/workspace/accounts">Clear</a>
           </div>
         </form>
-        <div class="account-switcher">
-          ${accountSwitcherHtml}
-        </div>
         <table>
           <thead>
             <tr>
               <th>Account</th>
               <th>Email</th>
               <th>Status</th>
-              <th>Channels (active/total)</th>
+              <th>Channels (active / total)</th>
               <th>Connected</th>
               <th>Actions</th>
             </tr>
@@ -2151,39 +2706,40 @@ async function renderAccountsPage() {
         </table>
       </section>
       <section class="card stack">
-        <h3>Channels For Selected Account${selectedAccountId ? ` (${escapeHtml(selectedAccountId)})` : ''}</h3>
+        <h3>Channels — ${selectedAccount ? escapeHtml(formatAccountIdentityLabel(selectedAccount).primary) : 'select an account above'}</h3>
         <div class="inline-actions">
-          <button class="btn" data-action="sync-channels" data-account-id="${escapeHtml(selectedAccountId ?? '')}" type="button" ${selectedAccountId ? '' : 'disabled'}>
+          ${selectedAccount ? `<span class="pill">${escapeHtml(getProviderLabel(selectedAccount.provider))}</span>` : ''}
+          ${selectedAccount ? `<span class="muted">${formatNumber(selectedAccountChannelSummary?.active ?? 0)} active / ${formatNumber(selectedAccountChannelSummary?.total ?? 0)} total</span>` : ''}
+          <button class="btn" data-action="sync-channels" data-account-id="${escapeHtml(selectedAccountId ?? '')}" type="button" ${selectedAccountId && selectedAccountSupportsChannels ? '' : 'disabled'}>
             Sync channels
           </button>
         </div>
-        ${selectedAccount ? `
-          <div class="summary-inline">
-            <span>Account: ${escapeHtml(selectedAccount.displayName ?? selectedAccount.email ?? selectedAccount.id)}</span>
-            <span>Email: ${escapeHtml(selectedAccount.email ?? '-')}</span>
-            <span>Channels found: ${formatNumber(selectedAccountChannelSummary?.total ?? 0)}</span>
-            <span>Active: ${formatNumber(selectedAccountChannelSummary?.active ?? 0)}</span>
+        ${selectedAccount && !selectedAccountSupportsChannels ? `
+          <div class="notice info">
+            <h4>${escapeHtml(getProviderLabel(selectedAccount.provider))} does not expose channels here</h4>
+            <p>This account is connected and saved correctly, but channel sync in this dashboard remains YouTube-only for now.</p>
           </div>
-        ` : ''}
-        <table>
-          <thead>
-            <tr>
-              <th>Title</th>
-              <th>Handle</th>
-              <th>State</th>
-              <th>YouTube ID</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>${channelsRows}</tbody>
-        </table>
+        ` : `
+          <table>
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Handle</th>
+                <th>State</th>
+                <th>YouTube ID</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>${channelsRows}</tbody>
+          </table>
+        `}
       </section>
       <section class="card stack">
         <h3>All Linked YouTube Channels</h3>
         <div class="summary-inline">
           <span>Google accounts: ${formatNumber(accounts.length)}</span>
           <span>Total discovered channels: ${formatNumber(allChannels.length)}</span>
-          <span>Selected account: ${escapeHtml(selectedAccount?.displayName ?? selectedAccount?.email ?? selectedAccount?.id ?? 'none')}</span>
+          <span>Selected account: ${escapeHtml(selectedAccount ? formatAccountIdentityLabel(selectedAccount).primary : 'none')}</span>
         </div>
         ${channelsOverviewCard}
         <table>
@@ -2239,6 +2795,56 @@ async function renderAccountsPage() {
     });
   });
 
+  document.querySelectorAll('[data-action="start-instagram-oauth"]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      clearUiNotice();
+      setButtonBusy(button, true, 'Connecting...');
+      const result = await api.startInstagramOauth();
+      setButtonBusy(button, false);
+
+      if (!result.ok) {
+        setUiNotice('error', 'Instagram OAuth failed', result.error);
+        await renderAccountsPage();
+        return;
+      }
+
+      const redirectUrl = result.body?.redirectUrl;
+      if (!redirectUrl) {
+        setUiNotice('error', 'Instagram OAuth failed', 'OAuth redirect URL not returned by API.');
+        await renderAccountsPage();
+        return;
+      }
+
+      writePendingOauthProvider('instagram');
+      window.location.assign(redirectUrl);
+    });
+  });
+
+  document.querySelectorAll('[data-action="start-tiktok-oauth"]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      clearUiNotice();
+      setButtonBusy(button, true, 'Connecting...');
+      const result = await api.startTikTokOauth();
+      setButtonBusy(button, false);
+
+      if (!result.ok) {
+        setUiNotice('error', 'TikTok OAuth failed', result.error);
+        await renderAccountsPage();
+        return;
+      }
+
+      const redirectUrl = result.body?.redirectUrl;
+      if (!redirectUrl) {
+        setUiNotice('error', 'TikTok OAuth failed', 'OAuth redirect URL not returned by API.');
+        await renderAccountsPage();
+        return;
+      }
+
+      writePendingOauthProvider('tiktok');
+      window.location.assign(redirectUrl);
+    });
+  });
+
   document.querySelectorAll('[data-action="disconnect-account"]').forEach((button) => {
     button.addEventListener('click', async () => {
       const accountId = button.getAttribute('data-account-id');
@@ -2259,6 +2865,42 @@ async function renderAccountsPage() {
         return;
       }
       setUiNotice('success', 'Account disconnected', 'The selected account was disconnected successfully.');
+      await renderAccountsPage();
+    });
+  });
+
+  document.querySelectorAll('[data-action="delete-account"]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const accountId = button.getAttribute('data-account-id');
+      if (!accountId) return;
+      const confirmed = await showConfirmDialog({
+        title: 'Delete connected account',
+        message: 'This will permanently remove the connected account and its channels from the workspace. If a channel is already used in campaigns, deletion will be blocked.',
+        confirmLabel: 'Delete account',
+        tone: 'warning',
+      });
+      if (!confirmed) return;
+      setButtonBusy(button, true, 'Deleting...');
+      const result = await api.deleteAccount(accountId);
+      setButtonBusy(button, false);
+      if (!result.ok) {
+        setUiNotice('error', 'Unable to delete account', result.error);
+        await renderAccountsPage();
+        return;
+      }
+
+      const removedChannels = Number(result.body?.removedChannels ?? 0);
+      setUiNotice(
+        'success',
+        'Account deleted',
+        `The account was removed successfully with ${formatNumber(removedChannels)} channel${removedChannels === 1 ? '' : 's'} deleted.`,
+      );
+
+      if (selectedAccountId === accountId) {
+        navigate(buildUrl('/workspace/accounts', { search, status: statusFilter }));
+        return;
+      }
+
       await renderAccountsPage();
     });
   });
@@ -2353,15 +2995,15 @@ async function renderMediaPage() {
 
   const totalSize = filteredAssets.reduce((sum, asset) => sum + Number(asset.size_bytes ?? 0), 0);
   const totalDurationSeconds = filteredAssets.reduce((sum, asset) => sum + Number(asset.duration_seconds ?? 0), 0);
-  const withThumbnail = filteredAssets.filter((asset) => asset.thumbnail).length;
+  const linkedThumbnailAssets = filteredAssets.filter((asset) => asset.thumbnail || asset.linked_video_asset_id).length;
 
   const metricsHtml = [
-    { label: 'Assets', value: formatNumber(filteredAssets.length), hint: `of ${formatNumber(assets.length)} total` },
-    { label: 'Storage', value: formatBytes(totalSize), hint: `${formatNumber(totalSize)} bytes` },
-    { label: 'Duration', value: formatDurationSeconds(totalDurationSeconds), hint: 'Combined media duration' },
-    { label: 'With Thumbnail', value: formatNumber(withThumbnail), hint: 'Video + linked thumbnail' },
+    { label: 'Assets', value: formatNumber(filteredAssets.length), hint: `of ${formatNumber(assets.length)} total`, tone: 'info' },
+    { label: 'Storage', value: formatBytes(totalSize), hint: `${formatNumber(totalSize)} bytes`, tone: 'info' },
+    { label: 'Duration', value: formatDurationSeconds(totalDurationSeconds), hint: 'Combined media duration', tone: 'info' },
+    { label: 'Linked Thumbnails', value: formatNumber(linkedThumbnailAssets), hint: 'Video with thumbnail or thumbnail linked to video', tone: 'success' },
   ].map((card) => `
-    <article class="card">
+    <article class="card" data-tone="${escapeHtml(card.tone)}">
       <div class="summary-value">${escapeHtml(card.value)}</div>
       <div class="summary-label">${escapeHtml(card.label)}</div>
       <div class="summary-hint">${escapeHtml(card.hint)}</div>
@@ -2369,31 +3011,41 @@ async function renderMediaPage() {
   `).join('');
 
   const rows = filteredAssets.length === 0
-    ? '<tr><td colspan="9" class="muted">No media assets found.</td></tr>'
-    : filteredAssets.map((asset) => `
+    ? '<tr><td colspan="5" class="muted">No media assets found.</td></tr>'
+    : filteredAssets.map((asset) => {
+      const formatPill = asset.asset_type === 'video'
+        ? statusPill(getVideoPublishFormatLabel(getVideoPublishFormat(asset)))
+        : '';
+      const linkedPill = asset.thumbnail || asset.linked_video_asset_id ? statusPill('linked') : '';
+      return `
       <tr>
         <td>
           <strong>${escapeHtml(asset.original_name)}</strong>
-          <div class="muted">${escapeHtml(asset.mime_type ?? '-')}</div>
+          <div class="inline-actions" style="margin-top:4px;flex-wrap:wrap;">
+            ${statusPill(asset.asset_type ?? 'video')}
+            ${formatPill}
+            ${linkedPill}
+          </div>
+          <div class="muted" style="margin-top:4px;font-size:0.8rem;">${escapeHtml(asset.mime_type ?? '')} &middot; ${escapeHtml(formatDate(asset.created_at))}</div>
+          <code style="font-size:0.75rem;">${escapeHtml(asset.id)}</code>
         </td>
-        <td>${statusPill(asset.asset_type ?? 'video')}</td>
-        <td>${asset.asset_type === 'video' ? statusPill(getVideoPublishFormatLabel(getVideoPublishFormat(asset))) : '-'}</td>
+        <td>${asset.asset_type === 'video'
+          ? renderVideoPreviewCell(asset)
+          : asset.asset_type === 'thumbnail'
+            ? renderThumbnailPreviewCell(asset)
+            : '<span class="muted">—</span>'}</td>
         <td>${escapeHtml(formatBytes(asset.size_bytes))}</td>
         <td>${escapeHtml(formatDurationSeconds(asset.duration_seconds))}</td>
-        <td>${asset.thumbnail ? statusPill('linked') : '-'}</td>
-        <td>${escapeHtml(formatDate(asset.created_at))}</td>
-        <td>
-          <code>${escapeHtml(asset.id)}</code>
-          <div class="muted">${escapeHtml(asset.storage_path ?? '-')}</div>
-        </td>
         <td>
           <div class="inline-actions">
+            ${renderMediaFileActionLinks(asset)}
             <button class="btn" type="button" data-action="copy-media-id" data-media-id="${escapeHtml(asset.id)}">Copy ID</button>
             <button class="btn-danger" type="button" data-action="delete-media" data-media-id="${escapeHtml(asset.id)}">Delete</button>
           </div>
         </td>
       </tr>
-    `).join('');
+    `;
+    }).join('');
   const mediaEmptyState = assets.length === 0
     ? renderEmptyStateCard({
         title: 'Your media library is empty',
@@ -2414,11 +3066,6 @@ async function renderMediaPage() {
     actionsHtml: `
       <div class="inline-actions">
         <a class="btn" data-link href="${escapeHtml(buildUrl('/workspace/media', { search: searchInput, type: typeFilter }))}">Refresh</a>
-      </div>
-    `,
-    noticeHtml: `
-      <div class="notice info">
-        Upload supports JSON/base64 from the browser form below. Large files may take time to convert before upload.
       </div>
     `,
     contentHtml: `
@@ -2463,22 +3110,20 @@ async function renderMediaPage() {
       </section>
       <section class="card stack">
         <h3>Asset library (${formatNumber(filteredAssets.length)})</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Type</th>
-              <th>Format</th>
-              <th>Size</th>
-              <th>Duration</th>
-              <th>Thumbnail</th>
-              <th>Created</th>
-              <th>ID / Storage path</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Asset</th>
+                <th>Preview</th>
+                <th>Size</th>
+                <th>Duration</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
       </section>
     `,
   });
@@ -2552,6 +3197,83 @@ async function renderMediaPage() {
         setUiNotice('error', 'Copy failed', 'Unable to copy the media id to the clipboard.');
         await renderMediaPage();
       }
+    });
+  });
+
+  document.querySelectorAll('[data-media-preview-frame]').forEach((frame) => {
+    const video = frame.querySelector('[data-preview-video]');
+    if (!(video instanceof HTMLVideoElement)) {
+      return;
+    }
+
+    const startPreview = () => {
+      frame.setAttribute('data-preview-playing', 'true');
+      const playPromise = video.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {});
+      }
+    };
+
+    const stopPreview = () => {
+      frame.setAttribute('data-preview-playing', 'false');
+      video.pause();
+      if (video.currentTime > 0) {
+        video.currentTime = 0;
+      }
+    };
+
+    frame.addEventListener('mouseenter', startPreview);
+    frame.addEventListener('mouseleave', stopPreview);
+    frame.addEventListener('focusin', startPreview);
+    frame.addEventListener('focusout', stopPreview);
+  });
+
+  document.querySelectorAll('[data-action="set-media-preview-size"]').forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.preventDefault();
+      const mediaId = button.getAttribute('data-media-id');
+      const previewSize = button.getAttribute('data-preview-size');
+      if (!mediaId || !isValidMediaPreviewSize(previewSize)) {
+        return;
+      }
+
+      updateMediaPreviewSize(mediaId, previewSize);
+      await renderMediaPage();
+    });
+  });
+
+  const assetById = new Map(assets.map((asset) => [asset.id, asset]));
+  document.querySelectorAll('[data-action="open-media-preview"]').forEach((frame) => {
+    const openPreview = async () => {
+      const mediaId = frame.getAttribute('data-media-id');
+      if (!mediaId) {
+        return;
+      }
+
+      const asset = assetById.get(mediaId);
+      if (!asset) {
+        return;
+      }
+
+      const previewVideo = frame.querySelector('[data-preview-video]');
+      if (previewVideo instanceof HTMLVideoElement) {
+        frame.setAttribute('data-preview-playing', 'false');
+        previewVideo.pause();
+        if (previewVideo.currentTime > 0) {
+          previewVideo.currentTime = 0;
+        }
+      }
+
+      await openMediaPreviewDialog(asset);
+    };
+
+    frame.addEventListener('click', openPreview);
+    frame.addEventListener('keydown', async (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') {
+        return;
+      }
+      event.preventDefault();
+      await openPreview();
     });
   });
 
@@ -2907,9 +3629,9 @@ async function renderCampaignsPage() {
 }
 
 async function renderCampaignComposerPage() {
-  const [mediaResult, accountsResult] = await Promise.all([api.media(), api.accounts()]);
-  if (!mediaResult.ok || !accountsResult.ok) {
-    const failing = !mediaResult.ok ? mediaResult : accountsResult;
+  const [mediaResult, destinationsResult] = await Promise.all([api.media(), loadConnectedPublishDestinations()]);
+  if (!mediaResult.ok || !destinationsResult.ok) {
+    const failing = !mediaResult.ok ? mediaResult : destinationsResult;
     if (failing.status === 401) {
       unauthorizedRedirect();
       return;
@@ -2927,21 +3649,29 @@ async function renderCampaignComposerPage() {
   const videos = assets.filter((asset) => asset.asset_type === 'video' || asset.asset_type === undefined);
   const shortVideos = videos.filter((asset) => getVideoPublishFormat(asset) === 'short');
   const standardVideos = videos.filter((asset) => getVideoPublishFormat(asset) === 'standard');
-  const accounts = Array.isArray(accountsResult.body?.accounts) ? accountsResult.body.accounts : [];
-  const channelResponses = await Promise.all(accounts.map((account) => api.accountChannels(account.id)));
-  const channels = channelResponses
-    .filter((response) => response.ok)
-    .flatMap((response) => Array.isArray(response.body?.channels) ? response.body.channels : [])
-    .filter((channel) => channel.isActive);
+  const connectedChannels = destinationsResult.destinations;
+  const activeChannels = connectedChannels.filter((channel) => channel.platform === 'youtube');
   const hasVideos = videos.length > 0;
-  const hasChannels = channels.length > 0;
+  const hasChannels = connectedChannels.length > 0;
 
-  const channelCheckboxes = channels.length === 0
-    ? '<p class="muted">No active channels available.</p>'
-    : channels.map((channel) => `
-      <label>
-        <input type="checkbox" name="channelId" value="${escapeHtml(channel.id)}" />
-        ${escapeHtml(channel.title)} (${escapeHtml(channel.id)})
+  const channelToggleCards = connectedChannels.length === 0
+    ? '<p class="muted">No connected publishing destinations available.</p>'
+    : connectedChannels.map((channel) => `
+      <label class="channel-toggle-card ${channel.isActive ? 'selected' : ''}" data-channel-toggle-card>
+        <input class="channel-toggle-input" type="checkbox" name="destinationRef" value="${escapeHtml(`${channel.platform}:${channel.destinationId}`)}" ${channel.platform === 'youtube' ? 'checked' : ''} />
+        <span class="channel-toggle-body">
+          <span class="channel-toggle-meta">
+            <strong>${escapeHtml(channel.destinationLabel || channel.title || channel.youtubeChannelId || channel.id)}</strong>
+            <small>${escapeHtml(getProviderLabel(channel.platform))}</small>
+            <small>${escapeHtml(channel.handle || channel.youtubeChannelId || channel.email || channel.id)}</small>
+          </span>
+          <span class="channel-toggle-switch" aria-hidden="true">
+            <span class="channel-toggle-switch-track">
+              <span class="channel-toggle-switch-thumb"></span>
+            </span>
+            <span class="channel-toggle-switch-label">${channel.platform === 'youtube' ? 'ON' : 'OFF'}</span>
+          </span>
+        </span>
       </label>
     `).join('');
 
@@ -2962,13 +3692,13 @@ async function renderCampaignComposerPage() {
         },
         {
           done: hasChannels,
-          label: hasChannels ? 'Channels are ready' : 'Connect a YouTube account',
-          hint: hasChannels ? `${formatNumber(channels.length)} active channels can receive targets.` : 'Connect YouTube and sync channels to target publications directly from the composer.',
+          label: hasChannels ? 'Publishing destinations are ready' : 'Connect publishing accounts',
+          hint: hasChannels ? `${formatNumber(activeChannels.length)} YouTube channels and ${formatNumber(connectedChannels.length - activeChannels.length)} social destinations are available for this campaign.` : 'Connect YouTube, Instagram, or TikTok accounts to target publications directly from the composer.',
           actionHtml: '<a class="btn" data-link href="/workspace/accounts">Open accounts</a>',
         },
       ])}
       <section class="card stack">
-        <div class="notice info">If no channels are selected, a draft campaign is created without targets.</div>
+        <div class="notice info">If no destinations are selected, a draft campaign is created without targets.</div>
         ${!hasVideos ? renderEmptyStateCard({
           title: 'No video assets available',
           message: 'The composer is ready, but you still need to upload at least one video before creating a campaign.',
@@ -2979,7 +3709,7 @@ async function renderCampaignComposerPage() {
           <article class="card">
             <div class="summary-value">${formatNumber(shortVideos.length)}</div>
             <div class="summary-label">Reels / Shorts</div>
-            <div class="summary-hint">Videos with up to 60 seconds</div>
+            <div class="summary-hint">Videos with up to 3 minutes (180 seconds)</div>
           </article>
           <article class="card">
             <div class="summary-value">${formatNumber(standardVideos.length)}</div>
@@ -3045,8 +3775,13 @@ async function renderCampaignComposerPage() {
             <input name="playlistId" />
           </label>
           <fieldset class="card">
-            <legend>Active channels</legend>
-            <div class="stack">${channelCheckboxes}</div>
+            <legend>Connected publishing destinations</legend>
+            <div class="inline-actions">
+              <button class="btn" type="button" data-action="select-all-campaign-channels">Turn all ON</button>
+              <button class="btn" type="button" data-action="clear-campaign-channels">Turn all OFF</button>
+            </div>
+            <div class="notice info">Use the toggle to decide exactly which connected channels or social accounts will receive this campaign.</div>
+            <div class="channel-toggle-grid">${channelToggleCards}</div>
           </fieldset>
           <div class="inline-actions">
             <button class="btn-primary" type="submit" ${hasVideos ? '' : 'disabled'}>Save draft</button>
@@ -3085,6 +3820,37 @@ async function renderCampaignComposerPage() {
   applyPublishFormatFilter();
   publishFormatSelect?.addEventListener('change', applyPublishFormatFilter);
 
+  const channelToggleInputs = Array.from(form?.querySelectorAll('.channel-toggle-input') ?? []);
+  const syncChannelToggleCards = () => {
+    channelToggleInputs.forEach((input) => {
+      const card = input.closest('[data-channel-toggle-card]');
+      const switchLabel = card?.querySelector('.channel-toggle-switch-label');
+      card?.classList.toggle('selected', input.checked);
+      if (switchLabel) {
+        switchLabel.textContent = input.checked ? 'ON' : 'OFF';
+      }
+    });
+  };
+
+  syncChannelToggleCards();
+  channelToggleInputs.forEach((input) => {
+    input.addEventListener('change', syncChannelToggleCards);
+  });
+
+  form?.querySelector('[data-action="select-all-campaign-channels"]')?.addEventListener('click', () => {
+    channelToggleInputs.forEach((input) => {
+      input.checked = true;
+    });
+    syncChannelToggleCards();
+  });
+
+  form?.querySelector('[data-action="clear-campaign-channels"]')?.addEventListener('click', () => {
+    channelToggleInputs.forEach((input) => {
+      input.checked = false;
+    });
+    syncChannelToggleCards();
+  });
+
   form?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const data = new FormData(form);
@@ -3117,7 +3883,7 @@ async function renderCampaignComposerPage() {
       return;
     }
 
-    const selectedChannelIds = data.getAll('channelId').map((entry) => String(entry));
+    const selectedDestinationRefs = data.getAll('destinationRef').map((entry) => String(entry));
     const newCampaignId = created.body?.campaign?.id;
     if (!newCampaignId) {
       setButtonBusy(submitButton, false);
@@ -3126,7 +3892,7 @@ async function renderCampaignComposerPage() {
       return;
     }
 
-    if (selectedChannelIds.length > 0) {
+    if (selectedDestinationRefs.length > 0) {
       const tags = String(data.get('tags') ?? '')
         .split(',')
         .map((tag) => tag.trim())
@@ -3142,10 +3908,18 @@ async function renderCampaignComposerPage() {
 
       const addTargets = await api.addTargetsBulk(
         newCampaignId,
-        selectedChannelIds.map((channelId) => ({
-          channelId,
-          ...targetTemplate,
-        })),
+        selectedDestinationRefs.map((destinationRef) => {
+          const [platform, destinationId] = destinationRef.split(':');
+          const destination = connectedChannels.find((entry) => entry.platform === platform && entry.destinationId === destinationId);
+          return {
+            platform,
+            destinationId,
+            destinationLabel: destination?.destinationLabel ?? destination?.title ?? destinationId,
+            connectedAccountId: destination?.connectedAccountId ?? null,
+            channelId: platform === 'youtube' ? destinationId : undefined,
+            ...targetTemplate,
+          };
+        }),
       );
       if (!addTargets.ok) {
         setUiNotice('warning', 'Campaign created with target issues', `Targets could not be added: ${addTargets.error}`);
@@ -3188,6 +3962,153 @@ function applyTimelineFilters(timeline, activityFilter, targetFilter) {
   });
 }
 
+function formatConnectedChannelOptionLabel(channel) {
+  const title = String(channel?.title ?? channel?.id ?? 'Unknown channel');
+  const secondary = channel?.handle
+    ? channel.handle
+    : channel?.youtubeChannelId
+      ? `YT ${channel.youtubeChannelId}`
+      : channel?.id ?? 'Unknown id';
+  return `${title} (${secondary}) - ${channel?.id ?? 'unknown'}`;
+}
+
+function formatPublishDestinationOptionLabel(destination) {
+  const providerLabel = getProviderLabel(destination?.platform);
+  const title = String(destination?.destinationLabel ?? destination?.title ?? destination?.id ?? 'Unknown destination');
+  const secondary = destination?.handle
+    ? destination.handle
+    : destination?.youtubeChannelId
+      ? `YT ${destination.youtubeChannelId}`
+      : destination?.email
+        ? destination.email
+        : destination?.id ?? 'Unknown id';
+  return `${providerLabel}: ${title} (${secondary})`;
+}
+
+async function loadActiveConnectedChannels() {
+  const accountsResult = await api.accounts();
+  if (!accountsResult.ok) {
+    return {
+      ok: false,
+      status: accountsResult.status,
+      error: accountsResult.error,
+      channels: [],
+    };
+  }
+
+  const accounts = Array.isArray(accountsResult.body?.accounts) ? accountsResult.body.accounts : [];
+  if (accounts.length === 0) {
+    return {
+      ok: true,
+      channels: [],
+    };
+  }
+
+  const channelResponses = await Promise.all(accounts.map((account) => api.accountChannels(account.id)));
+  const unauthorized = channelResponses.find((response) => !response.ok && response.status === 401);
+  if (unauthorized) {
+    return {
+      ok: false,
+      status: 401,
+      error: unauthorized.error,
+      channels: [],
+    };
+  }
+
+  const channels = channelResponses
+    .filter((response) => response.ok)
+    .flatMap((response) => Array.isArray(response.body?.channels) ? response.body.channels : [])
+    .filter((channel) => channel.isActive);
+
+  const failedResponse = channelResponses.find((response) => !response.ok);
+  if (failedResponse && channels.length === 0) {
+    return {
+      ok: false,
+      status: failedResponse.status,
+      error: failedResponse.error,
+      channels: [],
+    };
+  }
+
+  channels.sort((left, right) => formatConnectedChannelOptionLabel(left).localeCompare(formatConnectedChannelOptionLabel(right)));
+
+  return {
+    ok: true,
+    channels,
+  };
+}
+
+async function loadConnectedPublishDestinations() {
+  const accountsResult = await api.accounts();
+  if (!accountsResult.ok) {
+    return {
+      ok: false,
+      status: accountsResult.status,
+      error: accountsResult.error,
+      destinations: [],
+    };
+  }
+
+  const accounts = Array.isArray(accountsResult.body?.accounts) ? accountsResult.body.accounts : [];
+  const youtubeAccounts = accounts.filter((account) => supportsChannels(account.provider));
+  const channelResponses = await Promise.all(youtubeAccounts.map((account) => api.accountChannels(account.id)));
+  const unauthorized = channelResponses.find((response) => !response.ok && response.status === 401);
+  if (unauthorized) {
+    return {
+      ok: false,
+      status: 401,
+      error: unauthorized.error,
+      destinations: [],
+    };
+  }
+
+  const youtubeDestinations = channelResponses
+    .filter((response) => response.ok)
+    .flatMap((response) => Array.isArray(response.body?.channels) ? response.body.channels : [])
+    .filter((channel) => channel.isActive)
+    .map((channel) => ({
+      platform: 'youtube',
+      id: channel.id,
+      destinationId: channel.id,
+      destinationLabel: channel.title ?? channel.youtubeChannelId ?? channel.id,
+      connectedAccountId: channel.connectedAccountId ?? null,
+      title: channel.title,
+      handle: channel.handle,
+      youtubeChannelId: channel.youtubeChannelId,
+      thumbnailUrl: channel.thumbnailUrl,
+    }));
+
+  const socialDestinations = accounts
+    .filter((account) => !supportsChannels(account.provider) && account.status === 'connected')
+    .map((account) => ({
+      platform: account.provider,
+      id: account.id,
+      destinationId: account.id,
+      destinationLabel: account.displayName ?? account.email ?? account.id,
+      connectedAccountId: account.id,
+      email: account.email ?? '',
+      title: account.displayName ?? account.email ?? account.id,
+    }));
+
+  const destinations = [...youtubeDestinations, ...socialDestinations];
+  destinations.sort((left, right) => formatPublishDestinationOptionLabel(left).localeCompare(formatPublishDestinationOptionLabel(right)));
+
+  const failedResponse = channelResponses.find((response) => !response.ok);
+  if (failedResponse && destinations.length === 0) {
+    return {
+      ok: false,
+      status: failedResponse.status,
+      error: failedResponse.error,
+      destinations: [],
+    };
+  }
+
+  return {
+    ok: true,
+    destinations,
+  };
+}
+
 async function renderCampaignDetailPage(campaignId) {
   const [campaignResult, statusResult, jobsResult, auditResult, mediaResult] = await Promise.all([
     api.campaignById(campaignId),
@@ -3222,6 +4143,15 @@ async function renderCampaignDetailPage(campaignId) {
   const auditEvents = auditResult.ok ? auditResult.body?.events : [];
   const canMutateTargets = campaign.status === 'draft' || campaign.status === 'ready';
   const canEditCampaign = campaign.status === 'draft' || campaign.status === 'ready';
+  let connectedChannelsResult = { ok: true, destinations: [] };
+
+  if (canMutateTargets) {
+    connectedChannelsResult = await loadConnectedPublishDestinations();
+    if (!connectedChannelsResult.ok && connectedChannelsResult.status === 401) {
+      unauthorizedRedirect();
+      return;
+    }
+  }
 
   const actions = [];
   if (campaign.status === 'draft' && (campaign.targets?.length ?? 0) > 0) {
@@ -3237,6 +4167,37 @@ async function renderCampaignDetailPage(campaignId) {
   actions.push(`<a class="btn" data-link href="/workspace/campanhas">Back</a>`);
 
   const targets = Array.isArray(campaign.targets) ? campaign.targets : [];
+  const existingChannelIds = new Set(targets.map((target) => `${target.platform ?? 'youtube'}:${target.destinationId ?? target.channelId}`).filter(Boolean));
+  const availableConnectedChannels = connectedChannelsResult.ok
+    ? connectedChannelsResult.destinations.filter((channel) => !existingChannelIds.has(`${channel.platform}:${channel.destinationId}`))
+    : [];
+  const canSubmitConnectedTarget = !connectedChannelsResult.ok || availableConnectedChannels.length > 0;
+  const addTargetChannelFieldHtml = connectedChannelsResult.ok
+    ? `
+          <label>
+            Destination
+            <select name="destinationRef" required ${availableConnectedChannels.length > 0 ? '' : 'disabled'}>
+              <option value="">Select a connected destination</option>
+              ${availableConnectedChannels.map((channel) => (
+                `<option value="${escapeHtml(`${channel.platform}:${channel.destinationId}`)}">${escapeHtml(formatPublishDestinationOptionLabel(channel))}</option>`
+              )).join('')}
+            </select>
+          </label>
+        `
+    : `
+          <label>
+            Destination ID
+            <input name="destinationId" required placeholder="destination-id" />
+          </label>
+        `;
+  let addTargetChannelNoticeHtml = '';
+  if (connectedChannelsResult.ok && connectedChannelsResult.destinations.length === 0) {
+    addTargetChannelNoticeHtml = '<div class="notice warning">No connected publishing destinations are available. Open Accounts to connect channels or accounts before adding a target.</div>';
+  } else if (connectedChannelsResult.ok && availableConnectedChannels.length === 0) {
+    addTargetChannelNoticeHtml = '<div class="notice info">All connected destinations are already attached to this campaign.</div>';
+  } else if (!connectedChannelsResult.ok) {
+    addTargetChannelNoticeHtml = `<div class="notice warning">Connected destinations could not be loaded automatically: ${escapeHtml(connectedChannelsResult.error ?? 'Unknown error')}. You can still enter a destination id manually.</div>`;
+  }
   const targetRows = targets.length === 0
     ? '<tr><td colspan="9" class="muted">No targets configured.</td></tr>'
     : targets.map((target) => {
@@ -3251,11 +4212,11 @@ async function renderCampaignDetailPage(campaignId) {
 
       return `
         <tr>
-          <td>${escapeHtml(target.channelTitle ?? target.channelId ?? target.id)}</td>
+          <td>${escapeHtml(target.destinationLabel ?? target.channelTitle ?? target.channelId ?? target.id)}</td>
           <td>${escapeHtml(target.videoTitle ?? '-')}</td>
           <td>${statusPill(target.status)}</td>
           <td>${target.publishAt ? escapeHtml(formatDate(target.publishAt)) : '-'}</td>
-          <td>${target.youtubeVideoId ? `<a target="_blank" href="https://www.youtube.com/watch?v=${encodeURIComponent(target.youtubeVideoId)}">${escapeHtml(target.youtubeVideoId)}</a>` : '-'}</td>
+          <td>${target.platform === 'youtube' && target.youtubeVideoId ? `<a target="_blank" href="https://www.youtube.com/watch?v=${encodeURIComponent(target.youtubeVideoId)}">${escapeHtml(target.youtubeVideoId)}</a>` : escapeHtml(target.externalPublishId ?? '-')}</td>
           <td>${target.retryCount ?? 0}</td>
           <td>${target.errorMessage ? escapeHtml(target.errorMessage) : '-'}</td>
           <td>${target.reauthRequired ? statusPill('reauth_required') : '-'}</td>
@@ -3337,10 +4298,7 @@ async function renderCampaignDetailPage(campaignId) {
       <section class="card stack">
         <h3>Add target</h3>
         <form id="campaign-add-target-form" class="grid-3">
-          <label>
-            Channel ID
-            <input name="channelId" required placeholder="channel-id" />
-          </label>
+          ${addTargetChannelFieldHtml}
           <label>
             Video title
             <input name="videoTitle" required placeholder="Target title" />
@@ -3374,8 +4332,9 @@ async function renderCampaignDetailPage(campaignId) {
             Thumbnail asset ID
             <input name="thumbnailAssetId" />
           </label>
+          ${addTargetChannelNoticeHtml}
           <div class="inline-actions">
-            <button class="btn-primary" type="submit">Add target</button>
+            <button class="btn-primary" type="submit" ${canSubmitConnectedTarget ? '' : 'disabled'}>Add target</button>
           </div>
         </form>
       </section>
@@ -3385,7 +4344,7 @@ async function renderCampaignDetailPage(campaignId) {
         <table>
           <thead>
             <tr>
-              <th>Channel</th>
+              <th>Destination</th>
               <th>Video title</th>
               <th>Status</th>
               <th>Publish at</th>
@@ -3468,7 +4427,23 @@ async function renderCampaignDetailPage(campaignId) {
       .map((entry) => entry.trim())
       .filter(Boolean);
     const payload = {
-      channelId: String(data.get('channelId') ?? ''),
+      ...(data.get('destinationRef')
+        ? (() => {
+            const destinationRef = String(data.get('destinationRef') ?? '');
+            const [platform, destinationId] = destinationRef.split(':');
+            const destination = availableConnectedChannels.find((entry) => entry.platform === platform && entry.destinationId === destinationId);
+            return {
+              platform,
+              destinationId,
+              destinationLabel: destination?.destinationLabel ?? destination?.title ?? destinationId,
+              connectedAccountId: destination?.connectedAccountId ?? null,
+              channelId: platform === 'youtube' ? destinationId : undefined,
+            };
+          })()
+        : {
+            destinationId: String(data.get('destinationId') ?? ''),
+            channelId: String(data.get('destinationId') ?? ''),
+          }),
       videoTitle: String(data.get('videoTitle') ?? ''),
       videoDescription: String(data.get('videoDescription') ?? ''),
       tags: tags.length > 0 ? tags : undefined,
@@ -3724,12 +4699,37 @@ async function renderRoute() {
     if (path === '/') {
       renderLoading('Checking session...');
       const me = await ensureAuthenticated();
-      navigate(me ? '/workspace/dashboard' : '/login', true);
+      navigate(me ? (me.needsPlanSelection ? '/onboarding/plan' : '/workspace/dashboard') : '/login', true);
       return;
     }
 
     if (path === '/login') {
-      renderLoginPage();
+      const me = await ensureAuthenticated();
+      if (me) {
+        navigate(me.needsPlanSelection ? '/onboarding/plan' : '/workspace/dashboard', true);
+        return;
+      }
+      const query = parseCurrentQuery();
+      renderLoginPage({ mode: query.get('mode') === 'register' ? 'register' : 'login' });
+      return;
+    }
+
+    if (path === '/login/callback') {
+      await renderGoogleAuthCallbackPage();
+      return;
+    }
+
+    if (path === '/onboarding/plan') {
+      const me = await ensureAuthenticated();
+      if (!me) {
+        unauthorizedRedirect();
+        return;
+      }
+      if (!me.needsPlanSelection) {
+        navigate('/workspace/dashboard', true);
+        return;
+      }
+      await renderPlanSelectionPage();
       return;
     }
 
@@ -3737,6 +4737,10 @@ async function renderRoute() {
       const me = await ensureAuthenticated();
       if (!me) {
         unauthorizedRedirect();
+        return;
+      }
+      if (me.needsPlanSelection) {
+        navigate('/onboarding/plan', true);
         return;
       }
 

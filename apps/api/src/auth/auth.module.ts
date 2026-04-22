@@ -12,7 +12,7 @@ export interface AuthModuleInstance {
 
 export function createAuthModule(options: AuthServiceOptions = {}): AuthModuleInstance {
   const authService = new AuthService(options);
-  const sessionGuard = new SessionGuard();
+  const sessionGuard = new SessionGuard({ allowPendingPlanSelection: true });
   const sessionStore = new SessionStore({
     secret: options.env?.OAUTH_TOKEN_KEY ?? process.env.OAUTH_TOKEN_KEY ?? '',
   });

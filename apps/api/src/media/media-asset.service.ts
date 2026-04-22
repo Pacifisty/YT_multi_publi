@@ -4,6 +4,7 @@ export type MediaAssetType = 'video' | 'thumbnail';
 
 export interface MediaAsset {
   id: string;
+  ownerEmail?: string | null;
   assetType: MediaAssetType;
   originalName: string;
   storagePath: string;
@@ -15,6 +16,7 @@ export interface MediaAsset {
 }
 
 export interface CreateMediaAssetDto {
+  ownerEmail?: string | null;
   assetType: string;
   originalName: string;
   storagePath: string;
@@ -92,6 +94,7 @@ export class InMemoryMediaAssetRepository implements MediaAssetRepository {
   async create(dto: CreateMediaAssetDto): Promise<MediaAsset> {
     const asset: MediaAsset = {
       id: randomUUID(),
+      ownerEmail: dto.ownerEmail ?? null,
       assetType: dto.assetType as MediaAssetType,
       originalName: dto.originalName,
       storagePath: dto.storagePath,

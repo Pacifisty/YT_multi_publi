@@ -181,10 +181,11 @@ export class MediaController {
       }
     }
 
+    const ownerEmail = request.session?.adminUser?.email;
     const asset = await this.mediaService.createAsset({
       video: videoFiles[0],
       thumbnail: thumbnailFiles[0],
-    });
+    }, ownerEmail);
 
     return {
       status: 201,
@@ -206,7 +207,7 @@ export class MediaController {
 
     return {
       status: 200,
-      body: await this.mediaService.listAssets(),
+      body: await this.mediaService.listAssets(request.session?.adminUser?.email),
     };
   }
 
@@ -221,7 +222,7 @@ export class MediaController {
       return { status: 400, body: { error: 'Missing asset id' } };
     }
 
-    const asset = await this.mediaService.getAsset(id);
+    const asset = await this.mediaService.getAsset(id, request.session?.adminUser?.email);
     if (!asset) {
       return { status: 404, body: { error: 'Asset not found' } };
     }
@@ -240,7 +241,7 @@ export class MediaController {
       return { status: 400, body: { error: 'Missing asset id' } };
     }
 
-    const ok = await this.mediaService.deleteAsset(id);
+    const ok = await this.mediaService.deleteAsset(id, request.session?.adminUser?.email);
     if (!ok) {
       return { status: 404, body: { error: 'Asset not found' } };
     }
@@ -264,7 +265,7 @@ export class MediaController {
       return { status: 400, body: { error: 'Missing required field: videoAssetId' } };
     }
 
-    const ok = await this.mediaService.linkThumbnail(thumbnailId, body.videoAssetId);
+    const ok = await this.mediaService.linkThumbnail(thumbnailId, body.videoAssetId, request.session?.adminUser?.email);
     if (!ok) {
       return { status: 404, body: { error: 'Thumbnail or video asset not found' } };
     }

@@ -4,7 +4,10 @@ import type { ConnectedAccountRecord } from '../accounts/accounts.service';
 function toRecord(account: ConnectedAccount): ConnectedAccountRecord {
   return {
     id: account.id,
+    ownerEmail: account.ownerEmail ?? null,
     provider: account.provider,
+    googleSubject: account.googleSubject ?? undefined,
+    providerSubject: account.providerSubject ?? account.googleSubject ?? undefined,
     email: account.email ?? undefined,
     displayName: account.displayName ?? undefined,
     accessTokenEnc: account.accessTokenEnc,
@@ -19,7 +22,10 @@ function toRecord(account: ConnectedAccount): ConnectedAccountRecord {
 
 function toPartialAccount(updates: Partial<ConnectedAccountRecord>): Partial<ConnectedAccount> {
   const result: Partial<ConnectedAccount> = {};
+  if (updates.ownerEmail !== undefined) result.ownerEmail = updates.ownerEmail ?? null;
   if (updates.provider !== undefined) result.provider = updates.provider;
+  if (updates.googleSubject !== undefined) result.googleSubject = updates.googleSubject ?? null;
+  if (updates.providerSubject !== undefined) result.googleSubject = updates.providerSubject ?? null;
   if (updates.email !== undefined) result.email = updates.email ?? null;
   if (updates.displayName !== undefined) result.displayName = updates.displayName ?? null;
   if (updates.accessTokenEnc !== undefined) result.accessTokenEnc = updates.accessTokenEnc;
@@ -36,7 +42,10 @@ function toPartialAccount(updates: Partial<ConnectedAccountRecord>): Partial<Con
 
 function toCreateDto(record: ConnectedAccountRecord) {
   return {
+    ownerEmail: record.ownerEmail ?? null,
     provider: record.provider,
+    googleSubject: record.providerSubject ?? record.googleSubject ?? null,
+    providerSubject: record.providerSubject ?? record.googleSubject ?? null,
     email: record.email ?? null,
     displayName: record.displayName ?? null,
     accessTokenEnc: record.accessTokenEnc,
@@ -46,9 +55,54 @@ function toCreateDto(record: ConnectedAccountRecord) {
   };
 }
 
+function normalizeComparableEmail(value: string | undefined): string | null {
+  const normalized = value?.trim().toLowerCase();
+  return normalized ? normalized : null;
+}
+
+function normalizeComparableGoogleSubject(value: string | undefined): string | null {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+
 export function createAccountRepoAdapter(repo: ConnectedAccountRepository) {
   return {
     createConnectedAccount: async (record: ConnectedAccountRecord): Promise<ConnectedAccountRecord> => {
+      const comparableGoogleSubject = normalizeComparableGoogleSubject(record.providerSubject ?? record.googleSubject);
+      const comparableEmail = normalizeComparableEmail(record.email);
+      if (comparableGoogleSubject || comparableEmail) {
+        const existingAccounts = await repo.findByProvider(record.provider);
+        const existing = existingAccounts.find((account) => {
+          if (normalizeComparableEmail(account.ownerEmail ?? undefined) !== normalizeComparableEmail(record.ownerEmail ?? undefined)) {
+            return false;
+          }
+
+          const existingGoogleSubject = normalizeComparableGoogleSubject(account.googleSubject ?? undefined);
+          if (comparableGoogleSubject && existingGoogleSubject === comparableGoogleSubject) {
+            return true;
+          }
+
+          return comparableEmail !== null && normalizeComparableEmail(account.email ?? undefined) === comparableEmail;
+        });
+        if (existing) {
+          const updated = await repo.update(existing.id, {
+            googleSubject: record.googleSubject ?? null,
+            providerSubject: record.providerSubject ?? record.googleSubject ?? null,
+            email: record.email ?? null,
+            displayName: record.displayName ?? null,
+            accessTokenEnc: record.accessTokenEnc,
+            refreshTokenEnc: record.refreshTokenEnc,
+            scopes: record.scopes,
+            tokenExpiresAt: record.tokenExpiresAt ? new Date(record.tokenExpiresAt) : null,
+            status: 'connected',
+            updatedAt: new Date(record.updatedAt),
+          });
+          if (updated) {
+            return toRecord(updated);
+          }
+        }
+      }
+
       const created = await repo.create(toCreateDto(record));
       return toRecord(created);
     },
@@ -64,6 +118,9 @@ export function createAccountRepoAdapter(repo: ConnectedAccountRepository) {
       const result = await repo.update(id, toPartialAccount(updates));
       if (!result) throw new Error(`Account ${id} not found`);
       return toRecord(result);
+    },
+    deleteConnectedAccount: async (id: string): Promise<boolean> => {
+      return repo.delete(id);
     },
   };
 }

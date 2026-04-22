@@ -6,6 +6,7 @@ import { CampaignsController } from './campaigns.controller';
 import { DashboardService } from './dashboard.service';
 import { LaunchService } from './launch.service';
 import { PublishJobService, type PublishJobServiceOptions } from './publish-job.service';
+import type { AccountPlanService } from '../account-plan/account-plan.service';
 
 export interface CampaignsModuleInstance {
   campaignService: CampaignService;
@@ -21,6 +22,7 @@ export interface CampaignsModuleInstance {
 export interface CampaignsModuleOptions extends CampaignServiceOptions {
   jobServiceOptions?: PublishJobServiceOptions;
   auditRepository?: AuditEventRepository;
+  accountPlanService?: AccountPlanService;
 }
 
 export function createCampaignsModule(options: CampaignsModuleOptions = {}): CampaignsModuleInstance {
@@ -34,7 +36,16 @@ export function createCampaignsModule(options: CampaignsModuleOptions = {}): Cam
   const launchService = new LaunchService({ campaignService, jobService, now: options.now });
   const statusService = new CampaignStatusService({ campaignService, jobService, now: options.now });
   const dashboardService = new DashboardService({ campaignService, jobService, auditService });
-  const campaignsController = new CampaignsController(campaignService, sessionGuard, launchService, statusService, jobService, dashboardService, auditService);
+  const campaignsController = new CampaignsController(
+    campaignService,
+    sessionGuard,
+    launchService,
+    statusService,
+    jobService,
+    dashboardService,
+    auditService,
+    options.accountPlanService,
+  );
 
   return {
     campaignService,

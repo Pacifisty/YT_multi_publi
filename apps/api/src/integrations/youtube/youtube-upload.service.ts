@@ -2,11 +2,10 @@ import type { UploadContext, UploadResult, YouTubeUploadFn } from '../../campaig
 import {
   isChannelTokenResolverError,
   type ChannelTokenResolverErrorCode,
+  type ChannelTokenResolutionOptions,
+  type ChannelTokenResolver,
 } from './channel-token-resolver';
-
-export interface ChannelTokenResolver {
-  resolve(channelId: string): Promise<{ accessToken: string }>;
-}
+export type { ChannelTokenResolver, ChannelTokenResolutionOptions } from './channel-token-resolver';
 
 export interface VideoFileResolver {
   resolve(videoAssetId: string): Promise<string>;
@@ -54,7 +53,9 @@ export class YouTubeUploadService {
   async upload(input: UploadInput): Promise<UploadServiceResult> {
     let accessToken: string;
     try {
-      const resolved = await this.channelTokenResolver.resolve(input.channelId);
+      const resolved = input.playlistId
+        ? await this.channelTokenResolver.resolve(input.channelId, { requirePlaylistWriteScope: true })
+        : await this.channelTokenResolver.resolve(input.channelId);
       accessToken = resolved.accessToken;
     } catch (error) {
       return { ok: false, ...this.normalizeTokenResolutionError(error) };
@@ -97,8 +98,10 @@ export class YouTubeUploadService {
     }
   }
 
-  async getAccessToken(channelId: string): Promise<string> {
-    const resolved = await this.channelTokenResolver.resolve(channelId);
+  async getAccessToken(channelId: string, options?: ChannelTokenResolutionOptions): Promise<string> {
+    const resolved = options
+      ? await this.channelTokenResolver.resolve(channelId, options)
+      : await this.channelTokenResolver.resolve(channelId);
     return resolved.accessToken;
   }
 

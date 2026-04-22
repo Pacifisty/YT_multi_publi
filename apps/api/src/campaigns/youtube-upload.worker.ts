@@ -35,7 +35,10 @@ export interface YouTubeUploadWorkerOptions {
   campaignService: CampaignService;
   auditService?: AuditEventService;
   uploadFn: YouTubeUploadFn;
-  getAccessToken: (channelId: string) => Promise<string>;
+  getAccessToken: (
+    channelId: string,
+    options?: { requirePlaylistWriteScope?: boolean },
+  ) => Promise<string>;
   getVideoFilePath: (videoAssetId: string) => Promise<string>;
   getThumbnailFilePath?: (thumbnailAssetId: string) => Promise<string>;
 }
@@ -61,7 +64,10 @@ export class YouTubeUploadWorker {
   private readonly campaignService: CampaignService;
   private readonly auditService?: AuditEventService;
   private readonly uploadFn: YouTubeUploadFn;
-  private readonly getAccessToken: (channelId: string) => Promise<string>;
+  private readonly getAccessToken: (
+    channelId: string,
+    options?: { requirePlaylistWriteScope?: boolean },
+  ) => Promise<string>;
   private readonly getVideoFilePath: (videoAssetId: string) => Promise<string>;
   private readonly getThumbnailFilePath?: (thumbnailAssetId: string) => Promise<string>;
 
@@ -91,9 +97,27 @@ export class YouTubeUploadWorker {
       return this.jobService.markFailed(job.id, 'Campaign not found');
     }
 
+    return this.processPickedJob(job, target, campaignResult.campaign.videoAssetId);
+  }
+
+  async processPickedJob(
+    job: PublishJobRecord,
+    target: CampaignTargetRecord,
+    campaignVideoAssetId: string,
+  ): Promise<PublishJobRecord | null> {
+    if (!target.channelId) {
+      const failedJob = await this.jobService.markFailed(job.id, 'YouTube target is missing channelId');
+      await this.campaignService.updateTargetStatus(target.campaignId, target.id, 'erro', {
+        errorMessage: 'YouTube target is missing channelId',
+      });
+      return failedJob;
+    }
+
     try {
-      const accessToken = await this.getAccessToken(target.channelId);
-      const filePath = await this.getVideoFilePath(campaignResult.campaign.videoAssetId);
+      const accessToken = target.playlistId
+        ? await this.getAccessToken(target.channelId, { requirePlaylistWriteScope: true })
+        : await this.getAccessToken(target.channelId);
+      const filePath = await this.getVideoFilePath(campaignVideoAssetId);
       const thumbnailFilePath = target.thumbnailAssetId && this.getThumbnailFilePath
         ? await this.getThumbnailFilePath(target.thumbnailAssetId)
         : null;
@@ -109,11 +133,9 @@ export class YouTubeUploadWorker {
         privacy: target.privacy,
       });
 
-      // Mark job completed
       const completedJob = await this.jobService.markCompleted(job.id, result.videoId);
-
-      // Update target status
       await this.campaignService.updateTargetStatus(target.campaignId, target.id, 'publicado', {
+        externalPublishId: result.videoId,
         youtubeVideoId: result.videoId,
       });
 
@@ -133,12 +155,10 @@ export class YouTubeUploadWorker {
         ? error.videoId
         : undefined;
 
-      // Mark job failed
       const failedJob = await this.jobService.markFailed(job.id, errorMessage, uploadedVideoId);
-
-      // Update target status
       await this.campaignService.updateTargetStatus(target.campaignId, target.id, 'erro', {
         errorMessage,
+        externalPublishId: uploadedVideoId,
         youtubeVideoId: uploadedVideoId,
       });
 

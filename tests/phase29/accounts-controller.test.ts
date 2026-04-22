@@ -23,6 +23,7 @@ function createConnectedAccount(
 ): ConnectedAccountRecord {
   return {
     id: 'acct-1',
+    ownerEmail: 'admin@test.com',
     provider: 'google',
     googleSubject: 'google-sub-1',
     email: 'ops@example.com',
@@ -157,6 +158,7 @@ describe('AccountsController', () => {
       const account = createConnectedAccount(crypto);
       const service = new AccountsService({
         tokenCryptoService: crypto,
+        getConnectedAccount: async (id: string) => (id === account.id ? account : null),
         youtubeChannelsService: { listMineChannels: async () => MOCK_CHANNELS },
       });
       await service.syncChannelsForAccount(account);
@@ -207,6 +209,7 @@ describe('AccountsController', () => {
       const account = createConnectedAccount(crypto);
       const service = new AccountsService({
         tokenCryptoService: crypto,
+        getConnectedAccount: async (id: string) => (id === account.id ? account : null),
         youtubeChannelsService: { listMineChannels: async () => MOCK_CHANNELS },
       });
       const channels = await service.syncChannelsForAccount(account);
@@ -249,13 +252,111 @@ describe('AccountsController', () => {
     });
 
     it('disconnects with valid confirmation', async () => {
-      const service = new AccountsService({ tokenCryptoService: crypto });
+      const account = createConnectedAccount(crypto, { id: 'acc1' });
+      const service = new AccountsService({
+        tokenCryptoService: crypto,
+        getConnectedAccount: async (id: string) => (id === account.id ? account : null),
+      });
       const controller = new AccountsController(service, new SessionGuard());
       const res = await controller.disconnectAccount(
-        authedRequest({ params: { accountId: 'acc1' }, body: { confirm: 'DISCONNECT' } }),
+        authedRequest({ params: { accountId: account.id }, body: { confirm: 'DISCONNECT' } }),
       );
       expect(res.status).toBe(200);
       expect(res.body.disconnected).toBe(true);
+    });
+  });
+
+  describe('deleteAccount', () => {
+    it('returns 401 for unauthenticated request', async () => {
+      const service = new AccountsService({ tokenCryptoService: crypto });
+      const controller = new AccountsController(service, new SessionGuard());
+      const res = await controller.deleteAccount(
+        unauthedRequest({ params: { accountId: 'x' }, body: { confirm: 'DELETE' } }),
+      );
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 400 if accountId is missing', async () => {
+      const service = new AccountsService({ tokenCryptoService: crypto });
+      const controller = new AccountsController(service, new SessionGuard());
+      const res = await controller.deleteAccount(
+        authedRequest({ body: { confirm: 'DELETE' } }),
+      );
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 400 without confirmation body', async () => {
+      const service = new AccountsService({ tokenCryptoService: crypto });
+      const controller = new AccountsController(service, new SessionGuard());
+      const res = await controller.deleteAccount(
+        authedRequest({ params: { accountId: 'acc1' }, body: {} }),
+      );
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 404 for unknown account', async () => {
+      const service = new AccountsService({
+        tokenCryptoService: crypto,
+        getConnectedAccount: async () => null,
+      });
+      const controller = new AccountsController(service, new SessionGuard());
+      const res = await controller.deleteAccount(
+        authedRequest({ params: { accountId: 'missing' }, body: { confirm: 'DELETE' } }),
+      );
+      expect(res.status).toBe(404);
+    });
+
+    it('deletes an existing account with valid confirmation', async () => {
+      const account = createConnectedAccount(crypto);
+      const service = new AccountsService({
+        tokenCryptoService: crypto,
+        getConnectedAccount: async (id: string) => (id === account.id ? account : null),
+        deleteConnectedAccount: async (id: string) => id === account.id,
+      });
+      const controller = new AccountsController(service, new SessionGuard());
+
+      const res = await controller.deleteAccount(
+        authedRequest({ params: { accountId: account.id }, body: { confirm: 'DELETE' } }),
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.deleted).toBe(true);
+      expect(res.body.removedChannels).toBe(0);
+    });
+
+    it('returns 409 when the account cannot be deleted because channels are in campaigns', async () => {
+      const account = createConnectedAccount(crypto);
+      const service = new AccountsService({
+        tokenCryptoService: crypto,
+        getConnectedAccount: async (id: string) => (id === account.id ? account : null),
+        channelStore: {
+          upsert: async () => {
+            throw new Error('not implemented');
+          },
+          findByAccountId: async () => [{
+            id: 'ch-1',
+            connectedAccountId: account.id,
+            youtubeChannelId: 'UC_blocked',
+            title: 'Blocked Channel',
+            isActive: true,
+            lastSyncedAt: new Date().toISOString(),
+          }],
+          findById: async () => null,
+          update: async () => null,
+          delete: async () => {
+            const error = new Error('Foreign key constraint failed');
+            (error as Error & { code?: string }).code = 'P2003';
+            throw error;
+          },
+          deactivateAllForAccount: async () => undefined,
+        },
+      });
+      const controller = new AccountsController(service, new SessionGuard());
+
+      const res = await controller.deleteAccount(
+        authedRequest({ params: { accountId: account.id }, body: { confirm: 'DELETE' } }),
+      );
+      expect(res.status).toBe(409);
+      expect(res.body.error).toMatch(/campaign/i);
     });
   });
 
@@ -305,6 +406,58 @@ describe('AccountsController', () => {
       const res = await controller.startYouTubeOauth(authedRequest());
       expect(res.status).toBe(200);
       expect(res.body.redirectUrl).toContain('google');
+    });
+  });
+
+  describe('startInstagramOauth', () => {
+    it('returns 200 with redirect URL', async () => {
+      const service = new AccountsService({
+        tokenCryptoService: crypto,
+        instagramOauthService: {
+          createAuthorizationRedirect: async () => 'https://www.instagram.com/oauth/authorize?client_id=test',
+          validateCallbackState: () => true,
+          exchangeCodeForTokens: async () => ({
+            accessToken: 'ig-token',
+            scopes: ['instagram_business_basic'],
+            tokenExpiresAt: null,
+            profile: {
+              providerSubject: 'ig-user-1',
+              displayName: 'Instagram User',
+            },
+          }),
+        } as any,
+      });
+      const controller = new AccountsController(service, new SessionGuard());
+
+      const res = await controller.startInstagramOauth(authedRequest());
+      expect(res.status).toBe(200);
+      expect(res.body.redirectUrl).toContain('instagram.com');
+    });
+  });
+
+  describe('startTikTokOauth', () => {
+    it('returns 200 with redirect URL', async () => {
+      const service = new AccountsService({
+        tokenCryptoService: crypto,
+        tikTokOauthService: {
+          createAuthorizationRedirect: async () => 'https://www.tiktok.com/v2/auth/authorize/?client_key=test',
+          validateCallbackState: () => true,
+          exchangeCodeForTokens: async () => ({
+            accessToken: 'tt-token',
+            scopes: ['user.info.basic'],
+            tokenExpiresAt: null,
+            profile: {
+              providerSubject: 'tt-user-1',
+              displayName: 'TikTok User',
+            },
+          }),
+        } as any,
+      });
+      const controller = new AccountsController(service, new SessionGuard());
+
+      const res = await controller.startTikTokOauth(authedRequest());
+      expect(res.status).toBe(200);
+      expect(res.body.redirectUrl).toContain('tiktok.com');
     });
   });
 
@@ -455,6 +608,82 @@ describe('AccountsController', () => {
       );
       expect(res.status).toBe(200);
       expect(res.body.account!.id).toBe(account.id);
+    });
+  });
+
+  describe('handleInstagramOauthCallback', () => {
+    it('returns 200 with account on success without sync summary', async () => {
+      const account = createConnectedAccount(crypto, {
+        id: 'ig-acct-1',
+        provider: 'instagram',
+        providerSubject: 'ig-user-1',
+        googleSubject: 'ig-user-1',
+        displayName: 'Instagram User',
+        email: undefined,
+      });
+      const service = new AccountsService({
+        tokenCryptoService: crypto,
+        instagramOauthService: {
+          createAuthorizationRedirect: async () => 'https://www.instagram.com/oauth/authorize?client_id=test&state=valid',
+          validateCallbackState: () => true,
+          exchangeCodeForTokens: async () => ({
+            accessToken: 'ig-token',
+            scopes: ['instagram_business_basic'],
+            tokenExpiresAt: null,
+            profile: {
+              providerSubject: 'ig-user-1',
+              displayName: 'Instagram User',
+            },
+          }),
+        } as any,
+      });
+      service.createPersistenceRecord = () => account;
+      const controller = new AccountsController(service, new SessionGuard());
+
+      const res = await controller.handleInstagramOauthCallback(
+        authedRequest({ query: { code: 'valid', state: 'valid' } }),
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.account!.provider).toBe('instagram');
+      expect(res.body.sync).toBeUndefined();
+    });
+  });
+
+  describe('handleTikTokOauthCallback', () => {
+    it('returns 200 with account on success without sync summary', async () => {
+      const account = createConnectedAccount(crypto, {
+        id: 'tt-acct-1',
+        provider: 'tiktok',
+        providerSubject: 'tt-user-1',
+        googleSubject: 'tt-user-1',
+        displayName: 'TikTok User',
+        email: undefined,
+      });
+      const service = new AccountsService({
+        tokenCryptoService: crypto,
+        tikTokOauthService: {
+          createAuthorizationRedirect: async () => 'https://www.tiktok.com/v2/auth/authorize/?client_key=test&state=valid',
+          validateCallbackState: () => true,
+          exchangeCodeForTokens: async () => ({
+            accessToken: 'tt-token',
+            scopes: ['user.info.basic'],
+            tokenExpiresAt: null,
+            profile: {
+              providerSubject: 'tt-user-1',
+              displayName: 'TikTok User',
+            },
+          }),
+        } as any,
+      });
+      service.createPersistenceRecord = () => account;
+      const controller = new AccountsController(service, new SessionGuard());
+
+      const res = await controller.handleTikTokOauthCallback(
+        authedRequest({ query: { code: 'valid', state: 'valid' } }),
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.account!.provider).toBe('tiktok');
+      expect(res.body.sync).toBeUndefined();
     });
   });
 });

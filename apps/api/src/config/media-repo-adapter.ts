@@ -3,6 +3,7 @@ import type { MediaRepository } from '../media/media.service';
 
 interface MediaAssetRecord {
   id: string;
+  owner_email?: string | null;
   asset_type: 'video' | 'thumbnail';
   original_name: string;
   storage_path: string;
@@ -16,6 +17,7 @@ interface MediaAssetRecord {
 function toRecord(asset: MediaAsset): MediaAssetRecord {
   return {
     id: asset.id,
+    owner_email: asset.ownerEmail ?? null,
     asset_type: asset.assetType,
     original_name: asset.originalName,
     storage_path: asset.storagePath,
@@ -31,6 +33,7 @@ export function createMediaRepoAdapter(repo: MediaAssetRepository): MediaReposit
   return {
     async create(record: MediaAssetRecord): Promise<MediaAssetRecord> {
       const asset = await repo.create({
+        ownerEmail: record.owner_email ?? null,
         assetType: record.asset_type,
         originalName: record.original_name,
         storagePath: record.storage_path,
@@ -44,6 +47,13 @@ export function createMediaRepoAdapter(repo: MediaAssetRepository): MediaReposit
     async findById(id: string): Promise<MediaAssetRecord | null> {
       const asset = await repo.findById(id);
       return asset ? toRecord(asset) : null;
+    },
+
+    async findAllNewestFirst(): Promise<MediaAssetRecord[]> {
+      const assets = await repo.findAll();
+      return assets
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+        .map(toRecord);
     },
 
     async findVideosNewestFirst(): Promise<MediaAssetRecord[]> {
@@ -72,6 +82,7 @@ export function createMediaRepoAdapter(repo: MediaAssetRepository): MediaReposit
       if (data.duration_seconds !== undefined) partialAsset.durationSeconds = data.duration_seconds;
       if (data.linked_video_asset_id !== undefined) partialAsset.linkedVideoAssetId = data.linked_video_asset_id;
       if (data.asset_type !== undefined) partialAsset.assetType = data.asset_type;
+      if (data.owner_email !== undefined) partialAsset.ownerEmail = data.owner_email;
 
       const result = await repo.update(id, partialAsset);
       return result ? toRecord(result) : null;

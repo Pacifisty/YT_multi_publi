@@ -3,10 +3,13 @@ import type { AuthFetch } from './auth-client';
 export interface CampaignStatusTarget {
   targetId: string;
   channelId: string;
+  platform?: string;
+  destinationLabel?: string | null;
   videoTitle: string;
   status: string;
   publishAt: string | null;
   scheduledPending: boolean;
+  externalPublishId: string | null;
   youtubeVideoId: string | null;
   errorMessage: string | null;
   latestJobStatus: string | null;
@@ -68,7 +71,9 @@ export interface CampaignAuditEvent {
 export interface CampaignTargetData {
   id: string;
   campaignId: string;
-  channelId: string;
+  platform?: string;
+  destinationLabel?: string | null;
+  channelId: string | null;
   videoTitle: string;
   videoDescription: string;
   tags: string[];
@@ -77,6 +82,7 @@ export interface CampaignTargetData {
   privacy: string;
   thumbnailAssetId: string | null;
   status: 'aguardando' | 'enviando' | 'publicado' | 'erro';
+  externalPublishId: string | null;
   youtubeVideoId: string | null;
   errorMessage: string | null;
   retryCount: number;

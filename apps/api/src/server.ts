@@ -6,15 +6,19 @@ import type { AdminSession } from './auth/session.guard';
 import type { CampaignsModuleOptions } from './campaigns/campaigns.module';
 import type { AccountsServiceOptions } from './accounts/accounts.service';
 import type { MediaServiceOptions } from './media/media.service';
+import type { AuthServiceOptions } from './auth/auth.service';
+import type { AccountPlanStore } from './account-plan/account-plan.service';
 
 export interface ServerConfig extends EnvConfig {}
 
 export interface ServerOptions {
   env: Record<string, string | undefined>;
   sessionResolver?: (cookieHeader: string | undefined) => AdminSession | null;
+  authModuleOptions?: AuthServiceOptions;
   campaignsModuleOptions?: CampaignsModuleOptions;
   accountsModuleOptions?: AccountsServiceOptions;
   mediaModuleOptions?: MediaServiceOptions;
+  accountPlanStore?: AccountPlanStore;
 }
 
 export interface ServerInstance {
@@ -34,9 +38,11 @@ export function createServer(options: ServerOptions): ServerInstance {
 
   const app = createApp({
     env: options.env,
+    authModuleOptions: options.authModuleOptions,
     campaignsModuleOptions: options.campaignsModuleOptions,
     accountsModuleOptions: options.accountsModuleOptions,
     mediaModuleOptions: options.mediaModuleOptions,
+    accountPlanStore: options.accountPlanStore,
   });
 
   const requestHandler = createRequestHandler({

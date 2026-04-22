@@ -1,5 +1,14 @@
 import { describe, expect, test, vi } from 'vitest';
 
+async function hasPrismaClientInstalled(): Promise<boolean> {
+  try {
+    await import('@prisma/client');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ── Prisma Connected Account Repository ──────────────────────────────────────
 
 describe('PrismaConnectedAccountRepository', () => {
@@ -398,6 +407,13 @@ describe('database-provider wiring for accounts + channels', () => {
     );
 
     const provider = createDatabaseProvider({ databaseUrl: 'postgresql://localhost/test' });
+    const hasPrisma = await hasPrismaClientInstalled();
+
+    if (hasPrisma) {
+      expect(provider.connectedAccountRepository).not.toBeNull();
+      expect(provider.youtubeChannelRepository).not.toBeNull();
+      return;
+    }
 
     expect(provider.connectedAccountRepository).toBeNull();
     expect(provider.youtubeChannelRepository).toBeNull();
@@ -447,6 +463,13 @@ describe('bootstrap passes account + channel repos through', () => {
     const { bootstrap } = await import('../../apps/api/src/bootstrap');
 
     const result = bootstrap({ env: baseEnv });
+    const hasPrisma = await hasPrismaClientInstalled();
+
+    if (hasPrisma) {
+      expect(result.databaseProvider.connectedAccountRepository).not.toBeNull();
+      expect(result.databaseProvider.youtubeChannelRepository).not.toBeNull();
+      return;
+    }
 
     expect(result.databaseProvider.connectedAccountRepository).toBeNull();
     expect(result.databaseProvider.youtubeChannelRepository).toBeNull();

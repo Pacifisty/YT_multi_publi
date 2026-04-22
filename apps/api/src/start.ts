@@ -31,6 +31,16 @@ export async function startServer(options: StartServerOptions): Promise<StartSer
   // Connect database if configured
   await bootstrapResult.databaseProvider.connect();
 
+  const backgroundProcessorInterval = bootstrapResult.server.app.backgroundProcessor
+    ? setInterval(() => {
+        void bootstrapResult.server.app.backgroundProcessor?.kick();
+      }, 15_000)
+    : null;
+
+  if (backgroundProcessorInterval) {
+    backgroundProcessorInterval.unref?.();
+  }
+
   const httpServer = createHttpServer((req, res) => {
     bootstrapResult.handler(req, res).catch(() => {
       if (res.writableEnded) {
@@ -66,6 +76,9 @@ export async function startServer(options: StartServerOptions): Promise<StartSer
       });
     });
   } catch (error) {
+    if (backgroundProcessorInterval) {
+      clearInterval(backgroundProcessorInterval);
+    }
     await bootstrapResult.databaseProvider.disconnect();
     throw error;
   }
@@ -86,6 +99,10 @@ export async function startServer(options: StartServerOptions): Promise<StartSer
     await new Promise<void>((resolve, reject) => {
       httpServer.close((err) => (err ? reject(err) : resolve()));
     });
+
+    if (backgroundProcessorInterval) {
+      clearInterval(backgroundProcessorInterval);
+    }
 
     await bootstrapResult.databaseProvider.disconnect();
   });

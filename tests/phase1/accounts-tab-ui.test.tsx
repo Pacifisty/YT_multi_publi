@@ -13,8 +13,14 @@ describe('accounts tab empty state', () => {
 
     expect(view.emptyState).toBeDefined();
     expect(view.emptyState!.heading).toBe('No accounts connected');
-    expect(view.emptyState!.cta).toBe('Connect Google Account');
-    expect(view.connectUrl).toBe('/accounts/oauth/google/start');
+    expect(view.emptyState!.ctas).toEqual([
+      'Connect YouTube Account',
+      'Connect Instagram Account',
+      'Connect TikTok Account',
+    ]);
+    expect(view.connectUrls.youtube).toBe('/accounts/oauth/youtube/start');
+    expect(view.connectUrls.instagram).toBe('/accounts/oauth/instagram/start');
+    expect(view.connectUrls.tiktok).toBe('/accounts/oauth/tiktok/start');
   });
 });
 

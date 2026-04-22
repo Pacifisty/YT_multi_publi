@@ -127,7 +127,7 @@ describe('createChannelRepoAdapter', () => {
   });
 
   it('upsert updates existing channel when found', async () => {
-    const updatedChannel = { ...testChannel, title: 'Updated Title' };
+    const updatedChannel = { ...testChannel, title: 'Updated Title', isActive: true };
     const repo = makeMockRepo({
       findByAccountAndChannelId: vi.fn(async () => testChannel),
       update: vi.fn(async () => updatedChannel),
@@ -146,7 +146,7 @@ describe('createChannelRepoAdapter', () => {
     const result = await adapter.upsert(record);
 
     expect(repo.findByAccountAndChannelId).toHaveBeenCalledWith('acc-1', 'UC_test');
-    expect(repo.update).toHaveBeenCalledWith('ch-1', expect.objectContaining({ title: 'Updated Title' }));
+    expect(repo.update).toHaveBeenCalledWith('ch-1', expect.objectContaining({ title: 'Updated Title', isActive: true }));
     expect(repo.create).not.toHaveBeenCalled();
     expect(result.title).toBe('Updated Title');
   });
@@ -165,6 +165,16 @@ describe('createChannelRepoAdapter', () => {
     expect(repo.update).toHaveBeenCalledTimes(2);
     expect(repo.update).toHaveBeenCalledWith('ch-1', { isActive: false });
     expect(repo.update).toHaveBeenCalledWith('ch-2', { isActive: false });
+  });
+
+  it('delete delegates to repo.delete', async () => {
+    const repo = makeMockRepo({ delete: vi.fn(async () => true) });
+    const adapter = createChannelRepoAdapter(repo);
+
+    const result = await adapter.delete('ch-1');
+
+    expect(repo.delete).toHaveBeenCalledWith('ch-1');
+    expect(result).toBe(true);
   });
 
   it('converts null handle/thumbnailUrl to undefined in ChannelRecord', async () => {

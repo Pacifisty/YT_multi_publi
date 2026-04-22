@@ -74,6 +74,20 @@ describe('SessionStore — token creation and verification', () => {
     expect(session!.adminUser!.authenticatedAt).toBeDefined();
     expect(session!.adminUser!.authenticatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
+
+  test('token preserves full name and plan-selection state', () => {
+    const store = new SessionStore({ secret: SECRET });
+
+    const token = store.createToken({
+      email: 'admin@test.com',
+      fullName: 'Admin Test',
+      needsPlanSelection: true,
+    });
+    const session = store.verifyToken(token);
+
+    expect(session!.adminUser!.fullName).toBe('Admin Test');
+    expect(session!.adminUser!.needsPlanSelection).toBe(true);
+  });
 });
 
 describe('SessionStore — createSessionResolver', () => {

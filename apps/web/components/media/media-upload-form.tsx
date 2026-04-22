@@ -2,7 +2,8 @@
 const VALIDATION_RULES = {
   VIDEO_MAX_SIZE_BYTES: 2 * 1024 * 1024 * 1024,
   THUMBNAIL_MAX_SIZE_BYTES: 5 * 1024 * 1024,
-  VIDEO_MAX_DURATION_SECONDS: 21600,
+  SHORT_FORM_MAX_DURATION_SECONDS: 180,
+  VIDEO_MAX_DURATION_SECONDS: 2147483647,
   ACCEPTED_VIDEO_MIMES: ['video/mp4', 'video/quicktime'] as readonly string[],
   ACCEPTED_THUMBNAIL_MIMES: ['image/jpeg', 'image/png'] as readonly string[],
 } as const;

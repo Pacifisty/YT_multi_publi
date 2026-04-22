@@ -1,12 +1,12 @@
 import type { PublishJobRecord } from './publish-job.service';
-import type { YouTubeUploadWorker } from './youtube-upload.worker';
+import type { PlatformDispatchWorker } from './platform-dispatch.worker';
 
 export interface JobRunnerOptions {
-  worker: YouTubeUploadWorker;
+  worker: PlatformDispatchWorker;
 }
 
 export class JobRunner {
-  private readonly worker: YouTubeUploadWorker;
+  private readonly worker: PlatformDispatchWorker;
 
   constructor(options: JobRunnerOptions) {
     this.worker = options.worker;

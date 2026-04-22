@@ -1,9 +1,15 @@
 import { randomUUID } from 'node:crypto';
 
+export type CampaignTargetPlatform = 'youtube' | 'instagram' | 'tiktok';
+
 export interface CampaignTargetRecord {
   id: string;
   campaignId: string;
-  channelId: string;
+  platform: CampaignTargetPlatform;
+  destinationId: string;
+  destinationLabel: string | null;
+  connectedAccountId: string | null;
+  channelId: string | null;
   videoTitle: string;
   videoDescription: string;
   tags: string[];
@@ -12,6 +18,7 @@ export interface CampaignTargetRecord {
   privacy: string;
   thumbnailAssetId: string | null;
   status: 'aguardando' | 'enviando' | 'publicado' | 'erro';
+  externalPublishId: string | null;
   youtubeVideoId: string | null;
   errorMessage: string | null;
   retryCount: number;
@@ -21,6 +28,7 @@ export interface CampaignTargetRecord {
 
 export interface CampaignRecord {
   id: string;
+  ownerEmail?: string | null;
   title: string;
   videoAssetId: string;
   status: 'draft' | 'ready' | 'launching' | 'completed' | 'failed';
@@ -31,13 +39,18 @@ export interface CampaignRecord {
 }
 
 export interface CreateCampaignInput {
+  ownerEmail?: string;
   title: string;
   videoAssetId: string;
   scheduledAt?: string;
 }
 
 export interface AddTargetInput {
-  channelId: string;
+  platform?: CampaignTargetPlatform;
+  destinationId?: string;
+  destinationLabel?: string;
+  connectedAccountId?: string;
+  channelId?: string;
   videoTitle: string;
   videoDescription: string;
   tags?: string[];
@@ -120,6 +133,7 @@ export interface CampaignServiceOptions {
 }
 
 export const DUPLICATE_CAMPAIGN_TARGET_CHANNEL_ERROR = 'Target for this channel already exists in the campaign';
+export const DUPLICATE_CAMPAIGN_TARGET_DESTINATION_ERROR = DUPLICATE_CAMPAIGN_TARGET_CHANNEL_ERROR;
 
 export class CampaignService {
   private readonly repository: CampaignRepository;
@@ -134,10 +148,58 @@ export class CampaignService {
     return status === 'draft' || status === 'ready';
   }
 
+  private normalizeOwnerEmail(value: string | null | undefined): string | null {
+    const normalized = value?.trim().toLowerCase();
+    return normalized ? normalized : null;
+  }
+
+  private matchesOwner(campaign: Pick<CampaignRecord, 'ownerEmail'>, ownerEmail?: string): boolean {
+    const normalizedOwnerEmail = this.normalizeOwnerEmail(ownerEmail);
+    if (!normalizedOwnerEmail) {
+      return true;
+    }
+
+    return this.normalizeOwnerEmail(campaign.ownerEmail) === normalizedOwnerEmail;
+  }
+
+  private filterCampaignsByOwner(campaigns: CampaignRecord[], ownerEmail?: string): CampaignRecord[] {
+    const normalizedOwnerEmail = this.normalizeOwnerEmail(ownerEmail);
+    if (!normalizedOwnerEmail) {
+      return campaigns;
+    }
+
+    const hasOwnedCampaigns = campaigns.some((campaign) => this.normalizeOwnerEmail(campaign.ownerEmail) !== null);
+    if (!hasOwnedCampaigns) {
+      return campaigns;
+    }
+
+    return campaigns.filter((campaign) => this.matchesOwner(campaign, ownerEmail));
+  }
+
+  private async resolveCampaign(campaignId: string, ownerEmail?: string): Promise<CampaignRecord | null> {
+    const campaign = await this.repository.findById(campaignId);
+    if (!campaign) {
+      return null;
+    }
+
+    if (this.matchesOwner(campaign, ownerEmail)) {
+      return campaign;
+    }
+
+    const hasOwnedCampaigns = (await this.repository.findAllNewestFirst())
+      .some((record) => this.normalizeOwnerEmail(record.ownerEmail) !== null);
+    if (!hasOwnedCampaigns && this.normalizeOwnerEmail(campaign.ownerEmail) === null) {
+      return campaign;
+    }
+
+    return null;
+  }
+
   async createCampaign(input: CreateCampaignInput): Promise<{ campaign: CampaignRecord }> {
     const nowIso = this.now().toISOString();
     const record: CampaignRecord = {
       id: randomUUID(),
+      ownerEmail: this.normalizeOwnerEmail(input.ownerEmail),
       title: input.title,
       videoAssetId: input.videoAssetId,
       status: 'draft',
@@ -150,23 +212,33 @@ export class CampaignService {
     return { campaign: await this.repository.create(record) };
   }
 
-  async addTarget(campaignId: string, input: AddTargetInput): Promise<{ target: CampaignTargetRecord }> {
-    const campaign = await this.repository.findById(campaignId);
+  async addTarget(campaignId: string, input: AddTargetInput, ownerEmail?: string): Promise<{ target: CampaignTargetRecord }> {
+    const campaign = await this.resolveCampaign(campaignId, ownerEmail);
     if (!campaign) {
       throw new Error(`Campaign ${campaignId} not found`);
     }
     if (!this.canMutateTargets(campaign.status)) {
       throw new Error('Cannot add targets to an active campaign');
     }
-    if (campaign.targets.some((target) => target.channelId === input.channelId)) {
-      throw new Error(DUPLICATE_CAMPAIGN_TARGET_CHANNEL_ERROR);
+    const platform = input.platform ?? 'youtube';
+    const destinationId = input.destinationId ?? input.channelId;
+    if (!destinationId) {
+      throw new Error('Missing target destination id');
+    }
+
+    if (campaign.targets.some((target) => target.platform === platform && target.destinationId === destinationId)) {
+      throw new Error(DUPLICATE_CAMPAIGN_TARGET_DESTINATION_ERROR);
     }
 
     const nowIso = this.now().toISOString();
     const target: CampaignTargetRecord = {
       id: randomUUID(),
       campaignId,
-      channelId: input.channelId,
+      platform,
+      destinationId,
+      destinationLabel: input.destinationLabel ?? null,
+      connectedAccountId: input.connectedAccountId ?? null,
+      channelId: platform === 'youtube' ? destinationId : null,
       videoTitle: input.videoTitle,
       videoDescription: input.videoDescription,
       tags: input.tags ?? [],
@@ -175,6 +247,7 @@ export class CampaignService {
       privacy: input.privacy ?? 'private',
       thumbnailAssetId: input.thumbnailAssetId ?? null,
       status: 'aguardando',
+      externalPublishId: null,
       youtubeVideoId: null,
       errorMessage: null,
       retryCount: 0,
@@ -190,8 +263,8 @@ export class CampaignService {
     return { target: result };
   }
 
-  async removeTarget(campaignId: string, targetId: string): Promise<boolean> {
-    const campaign = await this.repository.findById(campaignId);
+  async removeTarget(campaignId: string, targetId: string, ownerEmail?: string): Promise<boolean> {
+    const campaign = await this.resolveCampaign(campaignId, ownerEmail);
     if (!campaign || !this.canMutateTargets(campaign.status)) {
       return false;
     }
@@ -216,8 +289,9 @@ export class CampaignService {
     campaignId: string,
     targetId: string,
     updates: { videoTitle?: string; videoDescription?: string; tags?: string[]; publishAt?: string; playlistId?: string; privacy?: string; thumbnailAssetId?: string },
+    ownerEmail?: string,
   ): Promise<{ target: CampaignTargetRecord } | { error: 'NOT_FOUND' | 'CAMPAIGN_ACTIVE' }> {
-    const campaign = await this.repository.findById(campaignId);
+    const campaign = await this.resolveCampaign(campaignId, ownerEmail);
     if (!campaign) return { error: 'NOT_FOUND' };
     if (!this.canMutateTargets(campaign.status)) return { error: 'CAMPAIGN_ACTIVE' };
 
@@ -236,8 +310,12 @@ export class CampaignService {
     return { target };
   }
 
-  async listCampaigns(filters?: { status?: string; search?: string; limit?: number; offset?: number }): Promise<{ campaigns: CampaignRecord[]; total: number; limit: number; offset: number }> {
+  async listCampaigns(filters?: { status?: string; search?: string; limit?: number; offset?: number; ownerEmail?: string }): Promise<{ campaigns: CampaignRecord[]; total: number; limit: number; offset: number }> {
     let campaigns = await this.repository.findAllNewestFirst();
+
+    if (filters?.ownerEmail) {
+      campaigns = this.filterCampaignsByOwner(campaigns, filters.ownerEmail);
+    }
 
     if (filters?.status) {
       campaigns = campaigns.filter((c) => c.status === filters.status);
@@ -256,20 +334,24 @@ export class CampaignService {
     return { campaigns, total, limit, offset };
   }
 
-  async getCampaign(id: string): Promise<{ campaign: CampaignRecord } | null> {
-    const campaign = await this.repository.findById(id);
+  async getCampaign(id: string, ownerEmail?: string): Promise<{ campaign: CampaignRecord } | null> {
+    const campaign = await this.resolveCampaign(id, ownerEmail);
     if (!campaign) return null;
     return { campaign };
   }
 
-  async cloneCampaign(id: string, options?: { title?: string }): Promise<{ campaign: CampaignRecord } | { error: 'NOT_FOUND' }> {
-    const original = await this.repository.findById(id);
+  async cloneCampaign(id: string, options?: { title?: string; ownerEmail?: string }): Promise<{ campaign: CampaignRecord } | { error: 'NOT_FOUND' }> {
+    const original = await this.resolveCampaign(id, options?.ownerEmail);
     if (!original) return { error: 'NOT_FOUND' };
 
     const nowIso = this.now().toISOString();
     const clonedTargets: CampaignTargetRecord[] = original.targets.map((t) => ({
       id: randomUUID(),
       campaignId: '',
+      platform: t.platform ?? 'youtube',
+      destinationId: t.destinationId ?? t.channelId,
+      destinationLabel: t.destinationLabel ?? null,
+      connectedAccountId: t.connectedAccountId ?? null,
       channelId: t.channelId,
       videoTitle: t.videoTitle,
       videoDescription: t.videoDescription,
@@ -279,6 +361,7 @@ export class CampaignService {
       privacy: t.privacy,
       thumbnailAssetId: t.thumbnailAssetId,
       status: 'aguardando' as const,
+      externalPublishId: null,
       youtubeVideoId: null,
       errorMessage: null,
       retryCount: 0,
@@ -288,6 +371,7 @@ export class CampaignService {
 
     const cloned: CampaignRecord = {
       id: randomUUID(),
+      ownerEmail: original.ownerEmail ?? null,
       title: options?.title ?? `Copy of ${original.title}`,
       videoAssetId: original.videoAssetId,
       status: 'draft',
@@ -306,8 +390,8 @@ export class CampaignService {
     return { campaign: (await this.repository.findById(created.id))! };
   }
 
-  async markReady(campaignId: string): Promise<{ campaign: CampaignRecord } | { error: 'NO_TARGETS' | 'NOT_FOUND' | 'INVALID_STATUS' }> {
-    const campaign = await this.repository.findById(campaignId);
+  async markReady(campaignId: string, ownerEmail?: string): Promise<{ campaign: CampaignRecord } | { error: 'NO_TARGETS' | 'NOT_FOUND' | 'INVALID_STATUS' }> {
+    const campaign = await this.resolveCampaign(campaignId, ownerEmail);
     if (!campaign) return { error: 'NOT_FOUND' };
     if (campaign.targets.length === 0) return { error: 'NO_TARGETS' };
     if (campaign.status !== 'draft') return { error: 'INVALID_STATUS' };
@@ -320,8 +404,8 @@ export class CampaignService {
     return { campaign: updated! };
   }
 
-  async launch(campaignId: string): Promise<{ campaign: CampaignRecord } | { error: 'NOT_FOUND' | 'NOT_READY' }> {
-    const campaign = await this.repository.findById(campaignId);
+  async launch(campaignId: string, ownerEmail?: string): Promise<{ campaign: CampaignRecord } | { error: 'NOT_FOUND' | 'NOT_READY' }> {
+    const campaign = await this.resolveCampaign(campaignId, ownerEmail);
     if (!campaign) return { error: 'NOT_FOUND' };
     if (campaign.status !== 'ready') return { error: 'NOT_READY' };
 
@@ -337,7 +421,7 @@ export class CampaignService {
     campaignId: string,
     targetId: string,
     status: CampaignTargetRecord['status'],
-    extra?: { youtubeVideoId?: string; errorMessage?: string | null; retryCount?: number },
+    extra?: { externalPublishId?: string; youtubeVideoId?: string; errorMessage?: string | null; retryCount?: number },
   ): Promise<{ target: CampaignTargetRecord } | null> {
     const campaign = await this.repository.findById(campaignId);
     if (!campaign) return null;
@@ -345,10 +429,14 @@ export class CampaignService {
     const existingTarget = campaign.targets.find((t) => t.id === targetId);
     if (!existingTarget) return null;
 
-    const nextPublishedVideoId = status === 'publicado'
-      ? (typeof extra?.youtubeVideoId === 'string' && extra.youtubeVideoId.trim()
-          ? extra.youtubeVideoId.trim()
-          : existingTarget.youtubeVideoId)
+    const requestedExternalId = typeof extra?.externalPublishId === 'string' && extra.externalPublishId.trim()
+      ? extra.externalPublishId.trim()
+      : typeof extra?.youtubeVideoId === 'string' && extra.youtubeVideoId.trim()
+        ? extra.youtubeVideoId.trim()
+        : null;
+
+    const nextPublishedExternalId = status === 'publicado'
+      ? (requestedExternalId ?? existingTarget.externalPublishId ?? existingTarget.youtubeVideoId)
       : null;
 
     const nextErrorMessage = status === 'erro'
@@ -357,7 +445,7 @@ export class CampaignService {
           : existingTarget.errorMessage)
       : null;
 
-    if (status === 'publicado' && !nextPublishedVideoId) {
+    if (status === 'publicado' && !nextPublishedExternalId) {
       return null;
     }
 
@@ -371,12 +459,15 @@ export class CampaignService {
     };
 
     if (status === 'publicado') {
-      updates.youtubeVideoId = nextPublishedVideoId;
+      updates.externalPublishId = nextPublishedExternalId;
+      updates.youtubeVideoId = existingTarget.platform === 'youtube' ? nextPublishedExternalId : null;
     } else if (status === 'erro') {
-      updates.youtubeVideoId = typeof extra?.youtubeVideoId === 'string' && extra.youtubeVideoId.trim()
-        ? extra.youtubeVideoId.trim()
+      updates.externalPublishId = requestedExternalId;
+      updates.youtubeVideoId = existingTarget.platform === 'youtube' && requestedExternalId
+        ? requestedExternalId
         : null;
     } else {
+      updates.externalPublishId = null;
       updates.youtubeVideoId = null;
     }
 
@@ -394,9 +485,14 @@ export class CampaignService {
     // Check if target progress changed overall campaign lifecycle state
     const refreshedCampaign = await this.repository.findById(campaignId);
     if (refreshedCampaign) {
-      const allDone = refreshedCampaign.targets.every((t) => (t.status === 'publicado' && Boolean(t.youtubeVideoId)) || (t.status === 'erro' && Boolean(t.errorMessage)));
+      const allDone = refreshedCampaign.targets.every((t) => (
+        (t.status === 'publicado' && Boolean(t.externalPublishId ?? t.youtubeVideoId))
+        || (t.status === 'erro' && Boolean(t.errorMessage))
+      ));
       if (allDone) {
-        const anySuccess = refreshedCampaign.targets.some((t) => t.status === 'publicado' && Boolean(t.youtubeVideoId));
+        const anySuccess = refreshedCampaign.targets.some((t) => (
+          t.status === 'publicado' && Boolean(t.externalPublishId ?? t.youtubeVideoId)
+        ));
         await this.repository.update(campaignId, {
           status: anySuccess ? 'completed' : 'failed',
           updatedAt: this.now().toISOString(),
@@ -417,8 +513,8 @@ export class CampaignService {
     return { target };
   }
 
-  async deleteCampaign(campaignId: string): Promise<{ deleted: boolean } | { error: 'NOT_FOUND' | 'CAMPAIGN_ACTIVE' }> {
-    const campaign = await this.repository.findById(campaignId);
+  async deleteCampaign(campaignId: string, ownerEmail?: string): Promise<{ deleted: boolean } | { error: 'NOT_FOUND' | 'CAMPAIGN_ACTIVE' }> {
+    const campaign = await this.resolveCampaign(campaignId, ownerEmail);
     if (!campaign) return { error: 'NOT_FOUND' };
     if (campaign.status !== 'draft' && campaign.status !== 'ready') return { error: 'CAMPAIGN_ACTIVE' };
 
@@ -428,8 +524,9 @@ export class CampaignService {
   async updateCampaign(
     campaignId: string,
     updates: { title?: string; scheduledAt?: string },
+    ownerEmail?: string,
   ): Promise<{ campaign: CampaignRecord } | { error: 'NOT_FOUND' | 'CAMPAIGN_ACTIVE' }> {
-    const campaign = await this.repository.findById(campaignId);
+    const campaign = await this.resolveCampaign(campaignId, ownerEmail);
     if (!campaign) return { error: 'NOT_FOUND' };
     if (campaign.status !== 'draft' && campaign.status !== 'ready') return { error: 'CAMPAIGN_ACTIVE' };
 

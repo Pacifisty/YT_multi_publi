@@ -1,6 +1,6 @@
 import { SessionGuard, type SessionRequestLike } from '../auth/session.guard';
-import type { ConnectedAccountRecord, ChannelRecord } from './accounts.service';
-import { AccountsService } from './accounts.service';
+import type { ConnectedAccountRecord, ChannelRecord, SupportedOauthProvider } from './accounts.service';
+import { AccountDeletionBlockedError, AccountsService } from './accounts.service';
 import { isValidToggleChannelDto } from './dto/toggle-channel.dto';
 
 interface OAuthQuery {
@@ -38,7 +38,8 @@ export class AccountsController {
       return { status: guardResult.status, body: { error: guardResult.reason } };
     }
 
-    const accounts = await this.accountsService.listAccounts();
+    const ownerEmail = request.session?.adminUser?.email;
+    const accounts = await this.accountsService.listAccounts(ownerEmail);
     return { status: 200, body: { accounts } };
   }
 
@@ -64,6 +65,21 @@ export class AccountsController {
   }
 
   async startGoogleOauth(request: SessionRequestLike): Promise<AccountsControllerResponse<{ error?: string; redirectUrl?: string }>> {
+    return this.startOauthForProvider('google', request);
+  }
+
+  async startInstagramOauth(request: SessionRequestLike): Promise<AccountsControllerResponse<{ error?: string; redirectUrl?: string }>> {
+    return this.startOauthForProvider('instagram', request);
+  }
+
+  async startTikTokOauth(request: SessionRequestLike): Promise<AccountsControllerResponse<{ error?: string; redirectUrl?: string }>> {
+    return this.startOauthForProvider('tiktok', request);
+  }
+
+  private async startOauthForProvider(
+    provider: SupportedOauthProvider,
+    request: SessionRequestLike,
+  ): Promise<AccountsControllerResponse<{ error?: string; redirectUrl?: string }>> {
     const guardResult = this.sessionGuard.check(request);
 
     if (!guardResult.allowed) {
@@ -76,7 +92,10 @@ export class AccountsController {
     }
 
     try {
-      const redirectUrl = await this.accountsService.createAuthorizationRedirect(request.session);
+      const redirectUrl = await this.accountsService.createAuthorizationRedirectForProvider(
+        provider,
+        request.session as unknown as Record<string, unknown> | null | undefined,
+      );
 
       return {
         status: 200,
@@ -85,7 +104,8 @@ export class AccountsController {
         },
       };
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Google OAuth start failed.';
+      const label = provider === 'tiktok' ? 'TikTok' : provider === 'instagram' ? 'Instagram' : 'Google';
+      const message = error instanceof Error ? error.message : `${label} OAuth start failed.`;
       return {
         status: 500,
         body: {
@@ -96,10 +116,29 @@ export class AccountsController {
   }
 
   async startYouTubeOauth(request: SessionRequestLike): Promise<AccountsControllerResponse<{ error?: string; redirectUrl?: string }>> {
-    return this.startGoogleOauth(request);
+    return this.startOauthForProvider('youtube', request);
   }
 
   async handleGoogleOauthCallback(
+    request: AccountsRequest,
+  ): Promise<AccountsControllerResponse<{ error?: string; account?: ConnectedAccountRecord; sync?: ChannelSyncSummary }>> {
+    return this.handleOauthCallbackForProvider('google', request);
+  }
+
+  async handleInstagramOauthCallback(
+    request: AccountsRequest,
+  ): Promise<AccountsControllerResponse<{ error?: string; account?: ConnectedAccountRecord; sync?: ChannelSyncSummary }>> {
+    return this.handleOauthCallbackForProvider('instagram', request);
+  }
+
+  async handleTikTokOauthCallback(
+    request: AccountsRequest,
+  ): Promise<AccountsControllerResponse<{ error?: string; account?: ConnectedAccountRecord; sync?: ChannelSyncSummary }>> {
+    return this.handleOauthCallbackForProvider('tiktok', request);
+  }
+
+  private async handleOauthCallbackForProvider(
+    provider: SupportedOauthProvider,
     request: AccountsRequest,
   ): Promise<AccountsControllerResponse<{ error?: string; account?: ConnectedAccountRecord; sync?: ChannelSyncSummary }>> {
     const guardResult = this.sessionGuard.check(request);
@@ -127,13 +166,14 @@ export class AccountsController {
 
     let result;
     try {
-      result = await this.accountsService.handleOauthCallback({
+      result = await this.accountsService.handleOauthCallbackForProvider(provider, {
         code,
         state,
-        session: request.session,
+        session: request.session as unknown as Record<string, unknown> | null | undefined,
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Google OAuth callback failed.';
+      const label = provider === 'tiktok' ? 'TikTok' : provider === 'instagram' ? 'Instagram' : 'Google';
+      const message = error instanceof Error ? error.message : `${label} OAuth callback failed.`;
       return {
         status: 500,
         body: {
@@ -152,11 +192,13 @@ export class AccountsController {
     }
 
     let syncSummary: ChannelSyncSummary | undefined;
-    try {
-      const channels = await this.accountsService.syncChannelsForAccount(result.account);
-      syncSummary = buildChannelSyncSummary(channels.length);
-    } catch {
-      // Keep the OAuth connection successful even if channel sync fails.
+    if (provider === 'google' || provider === 'youtube') {
+      try {
+        const channels = await this.accountsService.syncChannelsForAccount(result.account);
+        syncSummary = buildChannelSyncSummary(channels.length);
+      } catch {
+        // Keep the OAuth connection successful even if channel sync fails.
+      }
     }
 
     return {
@@ -182,14 +224,20 @@ export class AccountsController {
       return { status: 400, body: { error: 'Missing accountId parameter.' } };
     }
 
-    const channels = await this.accountsService.getChannelsForAccount(accountId);
+    const ownerEmail = request.session?.adminUser?.email;
+    const account = await this.accountsService.getAccount(accountId, ownerEmail);
+    if (!account) {
+      return { status: 404, body: { error: 'Account not found.' } };
+    }
+
+    const channels = await this.accountsService.getChannelsForAccount(account.id);
     return { status: 200, body: { channels } };
   }
 
   async handleYouTubeOauthCallback(
     request: AccountsRequest,
   ): Promise<AccountsControllerResponse<{ error?: string; account?: ConnectedAccountRecord; sync?: ChannelSyncSummary }>> {
-    return this.handleGoogleOauthCallback(request);
+    return this.handleOauthCallbackForProvider('youtube', request);
   }
 
   async syncChannels(
@@ -206,7 +254,8 @@ export class AccountsController {
       return { status: 400, body: { error: 'Missing accountId parameter.' } };
     }
 
-    const account = await this.accountsService.getAccount(accountId);
+    const ownerEmail = request.session?.adminUser?.email;
+    const account = await this.accountsService.getAccount(accountId, ownerEmail);
     if (!account) {
       return { status: 404, body: { error: 'Account not found.' } };
     }
@@ -238,7 +287,8 @@ export class AccountsController {
       return { status: 400, body: { error: 'Invalid request body. Expected { isActive: boolean }.' } };
     }
 
-    const channel = await this.accountsService.toggleChannel(channelId, request.body.isActive);
+    const ownerEmail = request.session?.adminUser?.email;
+    const channel = await this.accountsService.toggleChannel(channelId, request.body.isActive, ownerEmail);
 
     if (!channel) {
       return { status: 404, body: { error: 'Channel not found.' } };
@@ -265,9 +315,51 @@ export class AccountsController {
       return { status: 400, body: { error: 'Confirmation required. Send { confirm: "DISCONNECT" } in the request body.' } };
     }
 
-    const result = await this.accountsService.disconnectAccountAsync(accountId);
+    const ownerEmail = request.session?.adminUser?.email;
+    const result = await this.accountsService.disconnectAccountAsync(accountId, ownerEmail);
+
+    if (!result.disconnected) {
+      return { status: 404, body: { error: 'Account not found.' } };
+    }
 
     return { status: 200, body: { disconnected: result.disconnected } };
+  }
+
+  async deleteAccount(
+    request: AccountsRequest,
+  ): Promise<AccountsControllerResponse<{ error?: string; deleted?: boolean; removedChannels?: number }>> {
+    const guardResult = this.sessionGuard.check(request);
+
+    if (!guardResult.allowed) {
+      return { status: 401, body: { error: guardResult.reason } };
+    }
+
+    const accountId = request.params?.accountId;
+    if (!accountId) {
+      return { status: 400, body: { error: 'Missing accountId parameter.' } };
+    }
+
+    if (typeof request.body !== 'object' || request.body === null || (request.body as Record<string, unknown>).confirm !== 'DELETE') {
+      return { status: 400, body: { error: 'Confirmation required. Send { confirm: "DELETE" } in the request body.' } };
+    }
+
+    const ownerEmail = request.session?.adminUser?.email;
+    const account = await this.accountsService.getAccount(accountId, ownerEmail);
+    if (!account) {
+      return { status: 404, body: { error: 'Account not found.' } };
+    }
+
+    try {
+      const result = await this.accountsService.deleteAccountAsync(accountId, ownerEmail);
+      return { status: 200, body: { deleted: result.deleted, removedChannels: result.removedChannels } };
+    } catch (error) {
+      if (error instanceof AccountDeletionBlockedError) {
+        return { status: 409, body: { error: error.message } };
+      }
+
+      const message = error instanceof Error ? error.message : 'Unable to delete account.';
+      return { status: 500, body: { error: message } };
+    }
   }
 }
 

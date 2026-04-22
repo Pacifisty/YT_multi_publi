@@ -1,6 +1,6 @@
 import type { AuditEventService, AuditEventType } from './audit-event.service';
 import type { CampaignService, CampaignRecord, CampaignTargetRecord } from './campaign.service';
-import type { PublishJobService } from './publish-job.service';
+import type { PublishJobRecord, PublishJobService } from './publish-job.service';
 
 export interface ChannelStats {
   channelId: string;
@@ -90,6 +90,43 @@ export class DashboardService {
     this.auditService = options.auditService;
   }
 
+  private isTerminalTarget(target: Pick<CampaignTargetRecord, 'status' | 'youtubeVideoId' | 'errorMessage'>): boolean {
+    return (target.status === 'publicado' && Boolean(target.youtubeVideoId)) ||
+      (target.status === 'erro' && Boolean(target.errorMessage));
+  }
+
+  private resolveEffectiveCampaignStatus(
+    campaign: CampaignRecord,
+    jobsByTargetId: Map<string, PublishJobRecord[]>,
+  ): CampaignRecord['status'] {
+    if (campaign.targets.length === 0) {
+      return campaign.status;
+    }
+
+    const allTargetsTerminal = campaign.targets.every((target) => this.isTerminalTarget(target));
+    if (allTargetsTerminal) {
+      return campaign.targets.some((target) => target.status === 'publicado' && Boolean(target.youtubeVideoId))
+        ? 'completed'
+        : 'failed';
+    }
+
+    const hasActiveJobs = campaign.targets.some((target) => {
+      const jobs = jobsByTargetId.get(target.id) ?? [];
+      const latestJob = jobs[jobs.length - 1];
+      return latestJob?.status === 'queued' || latestJob?.status === 'processing';
+    });
+    if (hasActiveJobs) {
+      return 'launching';
+    }
+
+    const hasInFlightTargets = campaign.targets.some((target) => target.status === 'enviando');
+    if (hasInFlightTargets) {
+      return 'launching';
+    }
+
+    return campaign.status;
+  }
+
   private classifyFailureReason(errorMessage: string | null): 'quota_exceeded' | 'post_upload_step_failed' | 'other_failure' | null {
     if (!errorMessage || errorMessage === 'REAUTH_REQUIRED') {
       return null;
@@ -103,17 +140,29 @@ export class DashboardService {
     return 'other_failure';
   }
 
-  async getStats(): Promise<DashboardStats> {
-    const { campaigns } = await this.campaignService.listCampaigns();
+  async getStats(ownerEmail?: string): Promise<DashboardStats> {
+    const { campaigns } = await this.campaignService.listCampaigns({ ownerEmail });
     const allJobs = await this.jobService.getAllJobs();
-    const auditEvents = this.auditService ? await this.auditService.listEvents() : [];
+    const auditEvents = this.auditService
+      ? await this.auditService.listEvents()
+      : [];
+    const scopedAuditEvents = ownerEmail
+      ? auditEvents.filter((event) => campaigns.some((campaign) => campaign.id === event.campaignId))
+      : auditEvents;
+    const jobsByTargetId = new Map<string, PublishJobRecord[]>();
+    for (const job of allJobs) {
+      const existing = jobsByTargetId.get(job.campaignTargetId) ?? [];
+      existing.push(job);
+      jobsByTargetId.set(job.campaignTargetId, existing);
+    }
 
     // Campaign breakdown
     const campaignByStatus: Record<CampaignRecord['status'], number> = {
       draft: 0, ready: 0, launching: 0, completed: 0, failed: 0,
     };
     for (const c of campaigns) {
-      campaignByStatus[c.status]++;
+      const effectiveStatus = this.resolveEffectiveCampaignStatus(c, jobsByTargetId);
+      campaignByStatus[effectiveStatus]++;
     }
 
     // Target breakdown + per-channel aggregation
@@ -249,10 +298,10 @@ export class DashboardService {
       publish_failed: 0,
       publish_partial_failure: 0,
     };
-    for (const event of auditEvents) {
+    for (const event of scopedAuditEvents) {
       auditByType[event.eventType] += 1;
     }
-    const latestAuditEvent = auditEvents[0] ?? null;
+    const latestAuditEvent = scopedAuditEvents[0] ?? null;
 
     // Channel stats
     const channels: ChannelStats[] = [];
@@ -294,7 +343,7 @@ export class DashboardService {
         hotspotRetryCount,
       },
       audit: {
-        totalEvents: auditEvents.length,
+        totalEvents: scopedAuditEvents.length,
         byType: auditByType,
         lastEventAt: latestAuditEvent?.createdAt ?? null,
         lastEventType: latestAuditEvent?.eventType ?? null,

@@ -8,7 +8,9 @@ export interface SessionStoreOptions {
 
 interface TokenPayload {
   email: string;
+  fullName?: string;
   authenticatedAt: string;
+  needsPlanSelection?: boolean;
 }
 
 export class SessionStore {
@@ -18,10 +20,12 @@ export class SessionStore {
     this.secret = options.secret;
   }
 
-  createToken(user: { email: string }): string {
+  createToken(user: { email: string; fullName?: string; needsPlanSelection?: boolean }): string {
     const payload: TokenPayload = {
       email: user.email,
+      fullName: user.fullName,
       authenticatedAt: new Date().toISOString(),
+      needsPlanSelection: Boolean(user.needsPlanSelection),
     };
 
     const data = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -53,7 +57,9 @@ export class SessionStore {
       return {
         adminUser: {
           email: payload.email,
+          fullName: payload.fullName,
           authenticatedAt: payload.authenticatedAt,
+          needsPlanSelection: Boolean(payload.needsPlanSelection),
         },
       };
     } catch {

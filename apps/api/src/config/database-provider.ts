@@ -1,5 +1,7 @@
 import { createRequire } from 'node:module';
 import { PrismaConnectedAccountRepository } from '../accounts/prisma-connected-account.repository';
+import { PrismaAccountPlanRepository } from '../account-plan/prisma-account-plan.repository';
+import { PrismaAuthUserRepository } from '../auth/prisma-auth-user.repository';
 import { PrismaAuditEventRepository } from '../campaigns/prisma-audit-event.repository';
 import { PrismaCampaignRepository } from '../campaigns/prisma-campaign.repository';
 import { PrismaPublishJobRepository } from '../campaigns/prisma-publish-job.repository';
@@ -28,6 +30,8 @@ export interface DatabaseProviderInstance {
   campaignRepository: PrismaCampaignRepository | null;
   publishJobRepository: PrismaPublishJobRepository | null;
   auditEventRepository: PrismaAuditEventRepository | null;
+  authUserRepository: PrismaAuthUserRepository | null;
+  accountPlanRepository: PrismaAccountPlanRepository | null;
   connectedAccountRepository: PrismaConnectedAccountRepository | null;
   youtubeChannelRepository: PrismaYouTubeChannelRepository | null;
   mediaAssetRepository: PrismaMediaAssetRepository | null;
@@ -38,6 +42,7 @@ export interface DatabaseProviderInstance {
 
 const REQUIRED_POSTGRES_TABLES = [
   'admin_users',
+  'account_plans',
   'connected_accounts',
   'youtube_channels',
   'media_assets',
@@ -125,6 +130,8 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
   let campaignRepository: PrismaCampaignRepository | null = null;
   let publishJobRepository: PrismaPublishJobRepository | null = null;
   let auditEventRepository: PrismaAuditEventRepository | null = null;
+  let authUserRepository: PrismaAuthUserRepository | null = null;
+  let accountPlanRepository: PrismaAccountPlanRepository | null = null;
   let connectedAccountRepository: PrismaConnectedAccountRepository | null = null;
   let youtubeChannelRepository: PrismaYouTubeChannelRepository | null = null;
   let mediaAssetRepository: PrismaMediaAssetRepository | null = null;
@@ -136,6 +143,8 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
       campaignRepository = new PrismaCampaignRepository(prismaClient);
       publishJobRepository = new PrismaPublishJobRepository(prismaClient);
       auditEventRepository = new PrismaAuditEventRepository(prismaClient);
+      authUserRepository = new PrismaAuthUserRepository(prismaClient);
+      accountPlanRepository = new PrismaAccountPlanRepository(prismaClient);
       connectedAccountRepository = new PrismaConnectedAccountRepository(prismaClient);
       youtubeChannelRepository = new PrismaYouTubeChannelRepository(prismaClient);
       mediaAssetRepository = new PrismaMediaAssetRepository(prismaClient);
@@ -155,6 +164,14 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
 
     get auditEventRepository() {
       return auditEventRepository;
+    },
+
+    get authUserRepository() {
+      return authUserRepository;
+    },
+
+    get accountPlanRepository() {
+      return accountPlanRepository;
     },
 
     get connectedAccountRepository() {

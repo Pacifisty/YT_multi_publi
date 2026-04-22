@@ -36,6 +36,18 @@ describe('MediaValidationService', () => {
       expect(result.valid).toBe(true);
     });
 
+    test('accepts long-form video beyond the old 6 hour limit', () => {
+      const result = validator.validateVideo({
+        originalname: 'long-form.mp4',
+        mimetype: 'video/mp4',
+        buffer: Buffer.alloc(100),
+        size: 100,
+        durationSeconds: 21601,
+      });
+      expect(result.valid).toBe(true);
+      expect(result.errors).toEqual([]);
+    });
+
     test('rejects unsupported video MIME type with INVALID_VIDEO_TYPE', () => {
       const result = validator.validateVideo({
         originalname: 'file.avi',
@@ -223,6 +235,27 @@ describe('media controller validation gate', () => {
     expect(response.body).toHaveProperty('code', 'VIDEO_DURATION_EXCEEDED');
   });
 
+  test('allows long-form video beyond the old 6 hour limit to persist', async () => {
+    const storageRoot = await mkdtemp(join(tmpdir(), 'gsd-media-'));
+    tempRoots.push(storageRoot);
+
+    const mediaModule = createMediaModule({ storageRoot });
+    const response = await mediaModule.mediaController.createAsset({
+      session: AUTHENTICATED_SESSION,
+      files: {
+        video: [{
+          originalname: 'feature-length.mp4',
+          mimetype: 'video/mp4',
+          buffer: Buffer.from('video-content'),
+          durationSeconds: 21601,
+        }],
+      },
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toHaveProperty('asset');
+  });
+
   test('rejects invalid thumbnail MIME before persistence', async () => {
     const storageRoot = await mkdtemp(join(tmpdir(), 'gsd-media-'));
     tempRoots.push(storageRoot);
@@ -314,8 +347,12 @@ describe('validation rules constants', () => {
     expect(VALIDATION_RULES.THUMBNAIL_MAX_SIZE_BYTES).toBe(5 * 1024 * 1024);
   });
 
-  test('video max duration is 21600 seconds', () => {
-    expect(VALIDATION_RULES.VIDEO_MAX_DURATION_SECONDS).toBe(21600);
+  test('short-form max duration is 180 seconds', () => {
+    expect(VALIDATION_RULES.SHORT_FORM_MAX_DURATION_SECONDS).toBe(180);
+  });
+
+  test('video max duration storage safeguard matches 32-bit integer range', () => {
+    expect(VALIDATION_RULES.VIDEO_MAX_DURATION_SECONDS).toBe(2147483647);
   });
 
   test('accepted video MIME types include mp4 and quicktime', () => {

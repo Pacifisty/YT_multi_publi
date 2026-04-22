@@ -5,6 +5,8 @@ import type { AccountsController, AccountsRequest } from './accounts/accounts.co
 import type { MediaController, MediaRequest } from './media/media.controller';
 import type { UploadProgressService } from './campaigns/upload-progress.service';
 import type { AuthController } from './auth/auth.controller';
+import type { BackgroundProcessor } from './app';
+import type { AccountPlanController, AccountPlanRequest } from './account-plan/account-plan.controller';
 
 export interface ApiRequest {
   method: string;
@@ -37,8 +39,18 @@ export function createApiRouter(options: {
   mediaController?: MediaController;
   uploadProgressService?: UploadProgressService;
   authController?: AuthController;
+  backgroundProcessor?: BackgroundProcessor | null;
+  accountPlanController?: AccountPlanController;
 }): ApiRouter {
-  const { campaignsModule, accountsController, mediaController, uploadProgressService, authController } = options;
+  const {
+    campaignsModule,
+    accountsController,
+    mediaController,
+    uploadProgressService,
+    authController,
+    backgroundProcessor,
+    accountPlanController,
+  } = options;
   const ctrl = campaignsModule.campaignsController;
 
   const routes: Route[] = [];
@@ -48,9 +60,27 @@ export function createApiRouter(options: {
     routes.push(
       {
         method: 'POST',
+        pattern: /^\/auth\/register$/,
+        paramNames: [],
+        handler: (req) => authController.register(req),
+      },
+      {
+        method: 'POST',
         pattern: /^\/auth\/login$/,
         paramNames: [],
         handler: (req) => authController.login(req),
+      },
+      {
+        method: 'GET',
+        pattern: /^\/auth\/google\/start$/,
+        paramNames: [],
+        handler: () => authController.startGoogleOauth(),
+      },
+      {
+        method: 'GET',
+        pattern: /^\/auth\/google\/callback$/,
+        paramNames: [],
+        handler: (req) => authController.handleGoogleOauthCallback(req),
       },
       {
         method: 'POST',
@@ -63,6 +93,29 @@ export function createApiRouter(options: {
         pattern: /^\/auth\/me$/,
         paramNames: [],
         handler: (req) => authController.me(req),
+      },
+    );
+  }
+
+  if (accountPlanController) {
+    routes.push(
+      {
+        method: 'GET',
+        pattern: /^\/api\/account\/plan$/,
+        paramNames: [],
+        handler: (req: AccountPlanRequest) => accountPlanController.getCurrentPlan(req),
+      },
+      {
+        method: 'POST',
+        pattern: /^\/api\/account\/plan\/visit$/,
+        paramNames: [],
+        handler: (req: AccountPlanRequest) => accountPlanController.claimDailyVisit(req),
+      },
+      {
+        method: 'POST',
+        pattern: /^\/api\/account\/plan\/select$/,
+        paramNames: [],
+        handler: (req: AccountPlanRequest) => accountPlanController.selectPlan(req),
       },
     );
   }
@@ -91,7 +144,13 @@ export function createApiRouter(options: {
       method: 'POST',
       pattern: /^\/api\/campaigns\/([^/]+)\/targets\/([^/]+)\/retry$/,
       paramNames: ['id', 'targetId'],
-      handler: (req) => ctrl.retryTarget(req),
+      handler: async (req) => {
+        const response = await ctrl.retryTarget(req);
+        if (response.status === 200) {
+          void backgroundProcessor?.kick();
+        }
+        return response;
+      },
     },
     {
       method: 'GET',
@@ -121,7 +180,13 @@ export function createApiRouter(options: {
       method: 'POST',
       pattern: /^\/api\/campaigns\/([^/]+)\/launch$/,
       paramNames: ['id'],
-      handler: (req) => ctrl.launch(req),
+      handler: async (req) => {
+        const response = await ctrl.launch(req);
+        if (response.status === 200) {
+          void backgroundProcessor?.kick();
+        }
+        return response;
+      },
     },
     {
       method: 'GET',
@@ -196,9 +261,33 @@ export function createApiRouter(options: {
       },
       {
         method: 'GET',
+        pattern: /^\/api\/accounts\/oauth\/instagram\/start$/,
+        paramNames: [],
+        handler: (req: AccountsRequest) => accountsController.startInstagramOauth(req),
+      },
+      {
+        method: 'GET',
+        pattern: /^\/api\/accounts\/oauth\/tiktok\/start$/,
+        paramNames: [],
+        handler: (req: AccountsRequest) => accountsController.startTikTokOauth(req),
+      },
+      {
+        method: 'GET',
         pattern: /^\/api\/accounts\/oauth\/google\/callback$/,
         paramNames: [],
         handler: (req: AccountsRequest) => accountsController.handleGoogleOauthCallback(req),
+      },
+      {
+        method: 'GET',
+        pattern: /^\/api\/accounts\/oauth\/instagram\/callback$/,
+        paramNames: [],
+        handler: (req: AccountsRequest) => accountsController.handleInstagramOauthCallback(req),
+      },
+      {
+        method: 'GET',
+        pattern: /^\/api\/accounts\/oauth\/tiktok\/callback$/,
+        paramNames: [],
+        handler: (req: AccountsRequest) => accountsController.handleTikTokOauthCallback(req),
       },
       {
         method: 'GET',
@@ -229,6 +318,12 @@ export function createApiRouter(options: {
         pattern: /^\/api\/accounts\/([^/]+)$/,
         paramNames: ['accountId'],
         handler: (req: AccountsRequest) => accountsController.getAccount(req),
+      },
+      {
+        method: 'DELETE',
+        pattern: /^\/api\/accounts\/([^/]+)\/permanent$/,
+        paramNames: ['accountId'],
+        handler: (req: AccountsRequest) => accountsController.deleteAccount(req),
       },
       {
         method: 'DELETE',

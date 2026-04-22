@@ -14,6 +14,7 @@ interface PrismaClient {
 function toMediaAsset(row: any): MediaAsset {
   return {
     id: row.id,
+    ownerEmail: row.ownerEmail ?? null,
     assetType: row.assetType as MediaAssetType,
     originalName: row.originalName,
     storagePath: row.storagePath,
@@ -32,6 +33,7 @@ export class PrismaMediaAssetRepository implements MediaAssetRepository {
     const row = await this.prisma.mediaAsset.create({
       data: {
         id: randomUUID(),
+        ownerEmail: dto.ownerEmail ?? null,
         assetType: dto.assetType,
         originalName: dto.originalName,
         storagePath: dto.storagePath,

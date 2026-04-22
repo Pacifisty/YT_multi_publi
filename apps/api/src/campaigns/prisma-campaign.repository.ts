@@ -18,6 +18,7 @@ interface PrismaClient {
 function toCampaignRecord(row: any): CampaignRecord {
   return {
     id: row.id,
+    ownerEmail: row.ownerEmail ?? null,
     title: row.title,
     videoAssetId: row.videoAssetId,
     status: row.status,
@@ -32,7 +33,11 @@ function toTargetRecord(row: any): CampaignTargetRecord {
   return {
     id: row.id,
     campaignId: row.campaignId,
-    channelId: row.channelId,
+    platform: row.platform ?? 'youtube',
+    destinationId: row.destinationId ?? row.channelId,
+    destinationLabel: row.destinationLabel ?? null,
+    connectedAccountId: row.connectedAccountId ?? null,
+    channelId: row.channelId ?? null,
     videoTitle: row.videoTitle,
     videoDescription: row.videoDescription,
     tags: row.tags ?? [],
@@ -41,6 +46,7 @@ function toTargetRecord(row: any): CampaignTargetRecord {
     privacy: row.privacy ?? 'private',
     thumbnailAssetId: row.thumbnailAssetId ?? null,
     status: row.status,
+    externalPublishId: row.externalPublishId ?? row.youtubeVideoId ?? null,
     youtubeVideoId: row.youtubeVideoId ?? null,
     errorMessage: row.errorMessage ?? null,
     retryCount: row.retryCount ?? 0,
@@ -56,6 +62,7 @@ export class PrismaCampaignRepository {
     const row = await this.prisma.campaign.create({
       data: {
         id: record.id,
+        ownerEmail: record.ownerEmail ?? null,
         title: record.title,
         videoAssetId: record.videoAssetId,
         status: record.status,
@@ -108,6 +115,10 @@ export class PrismaCampaignRepository {
       data: {
         id: target.id,
         campaignId: target.campaignId,
+        platform: target.platform,
+        destinationId: target.destinationId,
+        destinationLabel: target.destinationLabel,
+        connectedAccountId: target.connectedAccountId,
         channelId: target.channelId,
         videoTitle: target.videoTitle,
         videoDescription: target.videoDescription,
@@ -117,6 +128,7 @@ export class PrismaCampaignRepository {
         privacy: target.privacy,
         thumbnailAssetId: target.thumbnailAssetId,
         status: target.status,
+        externalPublishId: target.externalPublishId,
         youtubeVideoId: target.youtubeVideoId,
         errorMessage: target.errorMessage,
         retryCount: target.retryCount,

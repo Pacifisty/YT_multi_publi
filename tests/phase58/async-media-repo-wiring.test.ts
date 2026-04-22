@@ -85,6 +85,20 @@ describe('createMediaRepoAdapter', () => {
     expect(result).toBeNull();
   });
 
+  it('findAllNewestFirst delegates to findAll and sorts descending', async () => {
+    const olderAsset: MediaAsset = { ...testAsset, id: 'old', createdAt: new Date('2024-01-01T00:00:00Z') };
+    const newerAsset: MediaAsset = { ...testThumbnail, id: 'new-thumb', createdAt: new Date('2024-06-01T00:00:00Z') };
+    const repo = makeMockAssetRepo({ findAll: vi.fn(async () => [olderAsset, newerAsset]) });
+    const adapter = createMediaRepoAdapter(repo);
+
+    const results = await adapter.findAllNewestFirst();
+
+    expect(repo.findAll).toHaveBeenCalled();
+    expect(results).toHaveLength(2);
+    expect(results[0].id).toBe('new-thumb');
+    expect(results[1].id).toBe('old');
+  });
+
   it('findVideosNewestFirst delegates to findByType and sorts descending', async () => {
     const olderVideo: MediaAsset = { ...testAsset, id: 'old', createdAt: new Date('2024-01-01T00:00:00Z') };
     const newerVideo: MediaAsset = { ...testAsset, id: 'new', createdAt: new Date('2024-06-01T00:00:00Z') };
@@ -180,6 +194,10 @@ describe('MediaController with async repository', () => {
         return record;
       }),
       findById: vi.fn(async (id) => records.get(id) ?? null),
+      findAllNewestFirst: vi.fn(async () =>
+        Array.from(records.values())
+          .sort((a: any, b: any) => (a.created_at < b.created_at ? 1 : -1)),
+      ),
       findVideosNewestFirst: vi.fn(async () =>
         Array.from(records.values())
           .filter((r: any) => r.asset_type === 'video')
@@ -205,7 +223,7 @@ describe('MediaController with async repository', () => {
     const service = new MediaService({}, asyncRepo);
     const controller = new MediaController(service, new SessionGuard());
 
-    // Seed a video record
+    // Seed a video + thumbnail pair
     await asyncRepo.create({
       id: 'v-1',
       asset_type: 'video',
@@ -217,6 +235,17 @@ describe('MediaController with async repository', () => {
       linked_video_asset_id: null,
       created_at: new Date().toISOString(),
     });
+    await asyncRepo.create({
+      id: 'thumb-1',
+      asset_type: 'thumbnail',
+      original_name: 'thumb.jpg',
+      storage_path: '/thumb.jpg',
+      size_bytes: 200,
+      mime_type: 'image/jpeg',
+      duration_seconds: 0,
+      linked_video_asset_id: 'v-1',
+      created_at: new Date(Date.now() + 1000).toISOString(),
+    });
 
     const res = await controller.listAssets(authedRequest());
 
@@ -224,6 +253,9 @@ describe('MediaController with async repository', () => {
     const body = res.body as any;
     expect(body.assets).toBeDefined();
     expect(Array.isArray(body.assets)).toBe(true);
+    expect(body.assets).toHaveLength(2);
+    expect(body.assets.find((asset: any) => asset.asset_type === 'thumbnail')?.id).toBe('thumb-1');
+    expect(body.assets.find((asset: any) => asset.id === 'v-1')?.thumbnail?.id).toBe('thumb-1');
   });
 
   it('getAsset returns resolved asset from async repo', async () => {

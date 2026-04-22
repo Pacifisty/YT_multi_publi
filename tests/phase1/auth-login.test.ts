@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 
 import { AuthController } from '../../apps/api/src/auth/auth.controller';
 import { AuthService } from '../../apps/api/src/auth/auth.service';
+import { InMemoryAuthUserRepository } from '../../apps/api/src/auth/auth-user.repository';
 import { SessionGuard } from '../../apps/api/src/auth/session.guard';
 import { createSessionCookieOptions } from '../../apps/api/src/main';
 import { getSeedAdminUser } from '../../prisma/seed';
@@ -66,6 +67,7 @@ describe('seeded admin session authentication boundary', () => {
       }),
     );
     expect(response.body.user?.email).toBe('admin@example.com');
+    expect(response.body.user?.needsPlanSelection).toBe(false);
   });
 
   test('returns 401 and no session cookie for invalid credentials', async () => {
@@ -87,6 +89,57 @@ describe('seeded admin session authentication boundary', () => {
 
     expect(response.status).toBe(401);
     expect(response.cookies).toEqual([]);
+  });
+
+  test('registers a new account and flags plan selection as required', async () => {
+    const controller = new AuthController(new AuthService(), createSessionCookieOptions({ NODE_ENV: 'test' }));
+
+    const response = await controller.register({
+      body: {
+        email: 'creator@example.com',
+        password: 'secret123',
+        fullName: 'Creator User',
+      },
+      session: createSession(),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.user).toEqual({
+      email: 'creator@example.com',
+      fullName: 'Creator User',
+      needsPlanSelection: true,
+    });
+  });
+
+  test('logs in an existing Google-linked account only via Google sign-in', async () => {
+    const repo = new InMemoryAuthUserRepository([
+      {
+        id: 'user-1',
+        email: 'google-user@example.com',
+        fullName: 'Google User',
+        passwordHash: null,
+        googleSubject: 'google-sub-123',
+        isActive: true,
+        planSelectionCompleted: false,
+        createdAt: new Date('2026-04-22T00:00:00.000Z'),
+        updatedAt: new Date('2026-04-22T00:00:00.000Z'),
+      },
+    ]);
+    const controller = new AuthController(
+      new AuthService({ userStore: repo }),
+      createSessionCookieOptions({ NODE_ENV: 'test' }),
+    );
+
+    const response = await controller.login({
+      body: {
+        email: 'google-user@example.com',
+        password: 'whatever',
+      },
+      session: createSession(),
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.body.error).toContain('Google');
   });
 
   test('session guard blocks unauthenticated requests with 401', () => {

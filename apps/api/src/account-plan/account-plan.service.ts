@@ -20,6 +20,7 @@ export interface AccountPlanRecord {
   plan: AccountPlanType;
   tokens: number;
   lastDailyVisitAt: string | null;
+  lastMonthlyGrantAt: string | null;
   billingStartedAt: string | null;
   billingExpiresAt: string | null;
   selectedAt: string | null;
@@ -41,8 +42,15 @@ export interface AccountPlanSummary {
   billingExpiresAt: string | null;
   expiresSoon: boolean;
   dailyVisitClaimedToday: boolean;
+  monthlyGrantClaimedThisMonth: boolean;
   allowedPlatforms: string[];
   depthProfile: AccountDepthProfile;
+}
+
+export interface MonthlyGrantResult {
+  claimed: boolean;
+  grantedTokens: number;
+  account: AccountPlanSummary;
 }
 
 export interface AccountPlanStore {
@@ -61,8 +69,8 @@ export const ACCOUNT_PLAN_DEFINITIONS: Record<AccountPlanType, AccountPlanDefini
     label: 'Free',
     priceBrl: null,
     durationDays: null,
-    maxTokens: 80,
-    dailyVisitTokens: 10,
+    maxTokens: 150,
+    dailyVisitTokens: 15,
     campaignPublishCostTokens: 5,
     allowedPlatforms: ['youtube'],
     depthProfile: 'light',
@@ -72,8 +80,8 @@ export const ACCOUNT_PLAN_DEFINITIONS: Record<AccountPlanType, AccountPlanDefini
     label: 'Basic',
     priceBrl: 9.99,
     durationDays: 30,
-    maxTokens: 250,
-    dailyVisitTokens: 25,
+    maxTokens: 400,
+    dailyVisitTokens: 40,
     campaignPublishCostTokens: 5,
     allowedPlatforms: ['youtube'],
     depthProfile: 'balanced',
@@ -83,8 +91,8 @@ export const ACCOUNT_PLAN_DEFINITIONS: Record<AccountPlanType, AccountPlanDefini
     label: 'Pro',
     priceBrl: 19.99,
     durationDays: 30,
-    maxTokens: 600,
-    dailyVisitTokens: 50,
+    maxTokens: 800,
+    dailyVisitTokens: 80,
     campaignPublishCostTokens: 5,
     allowedPlatforms: ['youtube', 'instagram', 'tiktok'],
     depthProfile: 'deep',
@@ -189,6 +197,27 @@ export class AccountPlanService {
     return { account: this.toSummary(updated) };
   }
 
+  async claimMonthlyGrant(email: string): Promise<MonthlyGrantResult> {
+    const record = await this.getOrCreateRecord(email);
+    const definition = ACCOUNT_PLAN_DEFINITIONS[record.plan];
+    const thisMonth = this.getBusinessMonth();
+    const alreadyClaimed = this.toBusinessMonth(record.lastMonthlyGrantAt) === thisMonth;
+
+    if (alreadyClaimed) {
+      return { claimed: false, grantedTokens: 0, account: this.toSummary(record) };
+    }
+
+    const grantedTokens = definition.maxTokens;
+    const updated = await this.store.save({
+      ...record,
+      tokens: record.tokens + grantedTokens,
+      lastMonthlyGrantAt: this.now().toISOString(),
+      updatedAt: this.now().toISOString(),
+    });
+
+    return { claimed: true, grantedTokens, account: this.toSummary(updated) };
+  }
+
   async assertPlatformAccess(email: string, platform: string): Promise<void> {
     const account = await this.getAccount(email);
     if (account.allowedPlatforms.includes(platform)) {
@@ -247,6 +276,7 @@ export class AccountPlanService {
         plan: 'FREE',
         tokens: 0,
         lastDailyVisitAt: null,
+        lastMonthlyGrantAt: null,
         billingStartedAt: null,
         billingExpiresAt: null,
         selectedAt: null,
@@ -257,11 +287,9 @@ export class AccountPlanService {
     }
 
     if (this.isExpired(existing)) {
-      const free = ACCOUNT_PLAN_DEFINITIONS.FREE;
       return this.store.save({
         ...existing,
         plan: 'FREE',
-        tokens: Math.min(existing.tokens, free.maxTokens),
         billingStartedAt: null,
         billingExpiresAt: null,
         updatedAt: this.now().toISOString(),
@@ -297,6 +325,7 @@ export class AccountPlanService {
       billingExpiresAt: record.billingExpiresAt,
       expiresSoon: expiryMs !== null && expiryMs - this.now().getTime() <= 3 * 24 * 60 * 60 * 1000,
       dailyVisitClaimedToday: this.toBusinessDate(record.lastDailyVisitAt) === this.getBusinessDate(),
+      monthlyGrantClaimedThisMonth: this.toBusinessMonth(record.lastMonthlyGrantAt) === this.getBusinessMonth(),
       allowedPlatforms: [...definition.allowedPlatforms],
       depthProfile: definition.depthProfile,
     };
@@ -311,19 +340,25 @@ export class AccountPlanService {
   }
 
   private toBusinessDate(value: string | null): string | null {
-    if (!value) {
-      return null;
-    }
-
+    if (!value) return null;
     const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) {
-      return null;
-    }
-
+    if (Number.isNaN(parsed.getTime())) return null;
     const year = parsed.getFullYear();
     const month = String(parsed.getMonth() + 1).padStart(2, '0');
     const day = String(parsed.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  }
+
+  private getBusinessMonth(): string {
+    const now = this.now();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  private toBusinessMonth(value: string | null): string | null {
+    if (!value) return null;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}`;
   }
 }
 

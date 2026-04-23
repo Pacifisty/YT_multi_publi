@@ -117,6 +117,12 @@ export function createApiRouter(options: {
         paramNames: [],
         handler: (req: AccountPlanRequest) => accountPlanController.selectPlan(req),
       },
+      {
+        method: 'POST',
+        pattern: /^\/api\/account\/plan\/monthly$/,
+        paramNames: [],
+        handler: (req: AccountPlanRequest) => accountPlanController.claimMonthlyGrant(req),
+      },
     );
   }
 
@@ -360,6 +366,12 @@ export function createApiRouter(options: {
         pattern: /^\/api\/media\/([^/]+)$/,
         paramNames: ['id'],
         handler: (req: MediaRequest) => mediaController.getAsset(req),
+      },
+      {
+        method: 'PATCH',
+        pattern: /^\/api\/media\/([^/]+)$/,
+        paramNames: ['id'],
+        handler: (req: MediaRequest) => mediaController.updateAssetMetadata(req),
       },
       {
         method: 'DELETE',

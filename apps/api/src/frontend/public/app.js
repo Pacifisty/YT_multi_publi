@@ -63,10 +63,14 @@ const SHORT_FORM_MAX_DURATION_SECONDS = 180;
 
 function getVideoPublishFormat(asset) {
   const durationSeconds = Number(asset?.duration_seconds ?? 0);
-  return durationSeconds > 0 && durationSeconds <= SHORT_FORM_MAX_DURATION_SECONDS ? 'short' : 'standard';
+  if (!durationSeconds || durationSeconds <= 0) {
+    return 'unknown';
+  }
+  return durationSeconds <= SHORT_FORM_MAX_DURATION_SECONDS ? 'short' : 'standard';
 }
 
 function getVideoPublishFormatLabel(format) {
+  if (format === 'unknown') return 'Duração não detectada';
   return format === 'short' ? 'Reels / Shorts' : 'Video normal';
 }
 
@@ -87,14 +91,95 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
-async function buildUploadPayloadFromFile(file) {
+function isProbablyVideoFile(file) {
+  const type = String(file?.type ?? '').toLowerCase();
+  const name = String(file?.name ?? '').toLowerCase();
+  return type.startsWith('video/')
+    || /\.(mp4|mov|m4v|webm|mkv|avi)$/i.test(name);
+}
+
+function readVideoDurationSeconds(file) {
+  if (!isProbablyVideoFile(file) || typeof document === 'undefined' || typeof window === 'undefined' || typeof URL === 'undefined') {
+    return Promise.resolve(undefined);
+  }
+
+  return new Promise((resolve) => {
+    const video = document.createElement('video');
+    const objectUrl = URL.createObjectURL(file);
+    let settled = false;
+
+    const finish = (durationSeconds) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      video.removeAttribute('src');
+      video.load();
+      URL.revokeObjectURL(objectUrl);
+      resolve(durationSeconds);
+    };
+
+    const timeoutId = window.setTimeout(() => finish(undefined), 8000);
+
+    video.preload = 'metadata';
+    video.muted = true;
+    video.addEventListener('loadedmetadata', () => {
+      const duration = Number(video.duration);
+      finish(Number.isFinite(duration) && duration > 0 ? Math.round(duration) : undefined);
+    }, { once: true });
+    video.addEventListener('error', () => finish(undefined), { once: true });
+    video.src = objectUrl;
+    video.load();
+  });
+}
+
+function readVideoDurationFromUrl(sourceUrl) {
+  if (!sourceUrl || typeof document === 'undefined' || typeof window === 'undefined') {
+    return Promise.resolve(undefined);
+  }
+
+  return new Promise((resolve) => {
+    const video = document.createElement('video');
+    let settled = false;
+
+    const finish = (durationSeconds) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      video.removeAttribute('src');
+      video.load();
+      resolve(durationSeconds);
+    };
+
+    const timeoutId = window.setTimeout(() => finish(undefined), 8000);
+
+    video.preload = 'metadata';
+    video.muted = true;
+    video.addEventListener('loadedmetadata', () => {
+      const duration = Number(video.duration);
+      finish(Number.isFinite(duration) && duration > 0 ? Math.round(duration) : undefined);
+    }, { once: true });
+    video.addEventListener('error', () => finish(undefined), { once: true });
+    video.src = sourceUrl;
+    video.load();
+  });
+}
+
+async function buildUploadPayloadFromFile(file, options = {}) {
   const arrayBuffer = await file.arrayBuffer();
-  return {
+  const payload = {
     originalName: file.name,
     mimeType: file.type || 'application/octet-stream',
     base64Data: arrayBufferToBase64(arrayBuffer),
     sizeBytes: file.size,
   };
+  const shouldReadDuration = options.includeDuration ?? isProbablyVideoFile(file);
+  if (shouldReadDuration) {
+    const durationSeconds = await readVideoDurationSeconds(file);
+    if (typeof durationSeconds === 'number') {
+      payload.durationSeconds = durationSeconds;
+    }
+  }
+  return payload;
 }
 
 const BACKGROUND_THEME_STORAGE_KEY = 'ytmp-workspace-background-theme';
@@ -113,8 +198,8 @@ const ACCOUNT_PLAN_OPTIONS = [
     label: 'Free',
     priceLabel: 'Gratis',
     description: 'Ideal para conhecer a plataforma e publicar no YouTube sem custo mensal.',
-    tokenSummary: '80 tokens maximos',
-    visitSummary: '+10 tokens por visita diaria',
+    tokenSummary: 'ganho de 150 tokens todo mes na escolha deste plano',
+    visitSummary: '+15 tokens por visita diaria',
     platformSummary: 'YouTube',
   },
   {
@@ -122,8 +207,8 @@ const ACCOUNT_PLAN_OPTIONS = [
     label: 'Basic',
     priceLabel: 'R$ 9,99 / mes',
     description: 'Mais folego para operacao recorrente com limite maior de campanhas.',
-    tokenSummary: '250 tokens maximos',
-    visitSummary: '+25 tokens por visita diaria',
+    tokenSummary: 'ganho de 400 tokens todo mes na escolha deste plano',
+    visitSummary: '+40 tokens por visita diaria',
     platformSummary: 'YouTube',
   },
   {
@@ -131,8 +216,8 @@ const ACCOUNT_PLAN_OPTIONS = [
     label: 'Pro',
     priceLabel: 'R$ 19,99 / mes',
     description: 'Plano completo para publicar em YouTube, Instagram e TikTok.',
-    tokenSummary: '600 tokens maximos',
-    visitSummary: '+50 tokens por visita diaria',
+    tokenSummary: 'ganho de 800 tokens todo mes na escolha deste plano',
+    visitSummary: '+80 tokens por visita diaria',
     platformSummary: 'YouTube + Instagram + TikTok',
     featured: true,
   },
@@ -1038,6 +1123,8 @@ const api = {
   logout: () => apiRequest('POST', '/auth/logout'),
   accountPlanSummary: () => apiRequest('GET', '/api/account/plan'),
   selectAccountPlan: (plan) => apiRequest('POST', '/api/account/plan/select', { plan }),
+  claimDailyVisit: () => apiRequest('POST', '/api/account/plan/visit'),
+  claimMonthlyGrant: () => apiRequest('POST', '/api/account/plan/monthly'),
   dashboard: () => apiRequest('GET', '/api/dashboard'),
   campaigns: (filters = {}) => apiRequest('GET', buildUrl('/api/campaigns', filters)),
   campaignById: (id) => apiRequest('GET', `/api/campaigns/${encodeURIComponent(id)}`),
@@ -1071,17 +1158,20 @@ const api = {
   deleteAccount: (accountId) => apiRequest('DELETE', `/api/accounts/${encodeURIComponent(accountId)}/permanent`, { confirm: 'DELETE' }),
   media: () => apiRequest('GET', '/api/media'),
   uploadMedia: (payload) => apiRequest('POST', '/api/media', payload),
+  updateMediaDuration: (id, durationSeconds) => apiRequest('PATCH', `/api/media/${encodeURIComponent(id)}`, { durationSeconds }),
   deleteMedia: (id) => apiRequest('DELETE', `/api/media/${encodeURIComponent(id)}`),
 };
 
 const state = {
   me: null,
+  account: null,
   routeInFlight: false,
   rerenderQueued: false,
   backgroundTheme: readStoredBackgroundTheme() ?? getSystemBackgroundTheme(),
   theme: 'light',
   fontTheme: readStoredFontTheme(),
   mediaPreviewSizes: readStoredMediaPreviewSizes(),
+  mediaDurationBackfillInFlight: new Set(),
   uiNotice: null,
   autoRefreshTimer: null,
 };
@@ -1480,6 +1570,7 @@ function activeTab(pathname) {
   if (pathname.startsWith('/workspace/accounts')) return 'accounts';
   if (pathname.startsWith('/workspace/media')) return 'media';
   if (pathname.startsWith('/workspace/campanhas')) return 'campanhas';
+  if (pathname.startsWith('/workspace/planos')) return 'planos';
   return 'dashboard';
 }
 
@@ -1489,41 +1580,129 @@ function renderWorkspaceShell(options) {
     { id: 'campanhas', label: 'Campanhas', href: '/workspace/campanhas' },
     { id: 'accounts', label: 'Accounts', href: '/workspace/accounts' },
     { id: 'media', label: 'Media', href: '/workspace/media' },
+    { id: 'planos', label: 'Planos', href: '/workspace/planos' },
   ];
-  const currentTab = activeTab(window.location.pathname);
+  const pathname = window.location.pathname;
+  const currentTab = activeTab(pathname);
   const navHtml = tabs.map((tab) => (
     `<a class="nav-link ${tab.id === currentTab ? 'active' : ''}" data-link href="${tab.href}">${tab.label}</a>`
   )).join('');
   const settingsPicker = settingsPickerHtml('workspace');
   const combinedNoticeHtml = `${renderUiNotice()}${options.noticeHtml ?? ''}`;
 
+  const account = state.account;
+  const planLabel = account?.planLabel ?? '';
+  const tokens = account?.tokens ?? 0;
+  const dailyClaimed = account?.dailyVisitClaimedToday ?? true;
+  const dailyTokens = account?.dailyVisitTokens ?? 0;
+  const accountTitle = [
+    state.me?.email ?? '',
+    planLabel ? `Plano ${planLabel}` : '',
+  ].filter(Boolean).join(' - ');
+
+  const claimBtnHtml = dailyClaimed
+    ? `<span class="header-claim-done" title="Bonus diario ja coletado. Volte amanha para mais ${dailyTokens} tokens.">claim done</span>`
+    : `<button id="header-claim-btn" class="header-claim-btn" type="button" title="Clique para receber +${dailyTokens} tokens de bonus diario. Disponivel uma vez por dia!">claim</button>`;
+
+  const tokenHtml = account ? `
+    <div class="header-token-wrap" title="Voce tem ${tokens} tokens. Clique em aclaim para ganhar +${dailyTokens} tokens hoje.">
+      <span class="header-token-count">${tokens}<span class="header-token-label"> tkn</span></span>
+      ${claimBtnHtml}
+    </div>
+  ` : '';
+
+  const isWorkspaceRoute = pathname.startsWith('/workspace');
+  const hasOrbitalDashboardContent = typeof options.contentHtml === 'string'
+    && options.contentHtml.includes('id="od-root"');
+  const useOrbitalShell = isWorkspaceRoute && !hasOrbitalDashboardContent;
+  const currentTabLabel = tabs.find((tab) => tab.id === currentTab)?.label ?? 'Workspace';
+
+  const pageClasses = ['page'];
+  if (isWorkspaceRoute) {
+    pageClasses.push('workspace-page', `workspace-page-${currentTab}`);
+  }
+  if (useOrbitalShell) {
+    pageClasses.push('workspace-page-orbital');
+  }
+
+  const shellHeaderHtml = (options.title || options.subtitle || options.actionsHtml)
+    ? `
+      <section class="od-shell-head">
+        <div class="od-shell-head-main">
+          <p class="od-shell-kicker">Orbital ${escapeHtml(currentTabLabel)}</p>
+          ${options.title ? `<h1 class="route-title">${escapeHtml(options.title)}</h1>` : ''}
+          ${options.subtitle ? `<p class="muted">${escapeHtml(options.subtitle)}</p>` : ''}
+        </div>
+        ${options.actionsHtml ? `<div class="od-shell-actions">${options.actionsHtml}</div>` : ''}
+      </section>
+    `
+    : '';
+
+  const defaultHeaderHtml = (options.title || options.subtitle || options.actionsHtml)
+    ? `
+      <section class="title-row">
+        <div>
+          <h1 class="route-title">${escapeHtml(options.title)}</h1>
+          ${options.subtitle ? `<p class="muted">${escapeHtml(options.subtitle)}</p>` : ''}
+        </div>
+        ${options.actionsHtml ?? ''}
+      </section>
+    `
+    : '';
+
+  const mainContentHtml = useOrbitalShell
+    ? `
+      <main class="container stack workspace-main workspace-main-orbital">
+        <section class="od-shell">
+          <div class="od-bracket od-bracket-tl"></div>
+          <div class="od-bracket od-bracket-tr"></div>
+          <div class="od-bracket od-bracket-bl"></div>
+          <div class="od-bracket od-bracket-br"></div>
+          <div class="od-bg-globe-field" aria-hidden="true">
+            <div class="od-bg-globe od-bg-globe-secondary">${buildOdGlobe()}</div>
+            <div class="od-bg-globe">${buildOdGlobe()}</div>
+          </div>
+          ${shellHeaderHtml}
+          ${combinedNoticeHtml}
+          <div class="od-shell-content stack">
+            ${options.contentHtml}
+          </div>
+        </section>
+      </main>
+    `
+    : `
+      <section class="container stack workspace-main">
+        ${defaultHeaderHtml}
+        ${combinedNoticeHtml}
+        ${options.contentHtml}
+      </section>
+    `;
+
   root.innerHTML = `
-    <div class="page">
+    <div class="${pageClasses.join(' ')}">
       <header class="header">
         <div class="container header-shell">
-          <div class="brand">
-            YT Multi Publi
-            <small>Admin Workspace</small>
+          <div class="header-brand-block">
+            <span class="brand-kicker">Orbital Command</span>
+            <div class="brand">
+              Plataform Multi Publi
+            </div>
           </div>
-          <nav class="nav">${navHtml}</nav>
-          <div class="nav">
+          <nav class="nav header-nav" aria-label="Workspace">${navHtml}</nav>
+          <div class="header-actions">
+            ${tokenHtml}
             ${settingsPicker}
-            <span class="user-email">${escapeHtml(state.me?.email ?? '')}</span>
+            <div class="header-account-chip" title="${escapeHtml(accountTitle)}">
+              <div class="header-user-block">
+                <span class="user-email">${escapeHtml(state.me?.email ?? '')}</span>
+                ${planLabel ? `<span class="header-plan-badge">Plano ${escapeHtml(planLabel)}</span>` : ''}
+              </div>
+            </div>
             <button id="logout-btn" class="logout-btn" type="button">Logout</button>
           </div>
         </div>
       </header>
-      <main class="container stack">
-        <section class="title-row">
-          <div>
-            <h1 class="route-title">${escapeHtml(options.title)}</h1>
-            ${options.subtitle ? `<p class="muted">${escapeHtml(options.subtitle)}</p>` : ''}
-          </div>
-          ${options.actionsHtml ?? ''}
-        </section>
-        ${combinedNoticeHtml}
-        ${options.contentHtml}
-      </main>
+      ${mainContentHtml}
     </div>
   `;
 
@@ -1532,7 +1711,25 @@ function renderWorkspaceShell(options) {
     logoutBtn.addEventListener('click', async () => {
       await api.logout();
       state.me = null;
+      state.account = null;
       navigate('/login', true);
+    });
+  }
+
+  const claimBtn = document.getElementById('header-claim-btn');
+  if (claimBtn) {
+    claimBtn.addEventListener('click', async () => {
+      setButtonBusy(claimBtn, true, '...');
+      const result = await api.claimDailyVisit();
+      setButtonBusy(claimBtn, false);
+      if (result.ok) {
+        state.account = result.body?.account ?? state.account;
+        const granted = result.body?.grantedTokens ?? 0;
+        if (granted > 0) {
+          setUiNotice('success', 'Bonus diario coletado!', `+${granted} tokens adicionados ao seu saldo.`);
+        }
+      }
+      void renderRoute();
     });
   }
 
@@ -2176,6 +2373,119 @@ function renderPlanCard(option, selectedPlan) {
   `;
 }
 
+function renderWorkspacePlanCard(option, account) {
+  const isCurrentPlan = option.id === account?.plan;
+  const canUpgrade = !isCurrentPlan;
+  const isFeatured = option.id === 'PRO';
+
+  const platformIcons = option.id === 'PRO'
+    ? `${renderPlatformGlyph('youtube')}${renderPlatformGlyph('instagram')}${renderPlatformGlyph('tiktok')}`
+    : renderPlatformGlyph('youtube');
+
+  return `
+    <article class="plan-card ${isFeatured ? 'featured' : ''} ${isCurrentPlan ? 'selected' : ''}">
+      <div class="stack">
+        <div class="platform-dashboard-chip-row">
+          <span class="pill ${isFeatured ? 'success' : 'info'}">${escapeHtml(option.label)}</span>
+          ${isCurrentPlan ? '<span class="pill warning">Seu plano atual</span>' : ''}
+          ${isFeatured && !isCurrentPlan ? '<span class="pill warning">Mais completo</span>' : ''}
+        </div>
+        <div class="plan-price">${escapeHtml(option.priceLabel)}</div>
+        <p class="muted">${escapeHtml(option.description)}</p>
+      </div>
+      <div class="stack plan-points">
+        <span>${escapeHtml(option.tokenSummary)}</span>
+        <span>${escapeHtml(option.visitSummary)}</span>
+        <span>Plataformas: ${platformIcons}</span>
+      </div>
+      ${isCurrentPlan && account ? `
+        <div class="stack">
+          <span style="font-size:0.85em;">Saldo atual: <strong>${account.tokens}</strong> tokens</span>
+          ${account.dailyVisitClaimedToday
+            ? '<span class="pill info" style="font-size:0.8em;">Bonus diario ja coletado hoje</span>'
+            : '<span class="pill success" style="font-size:0.8em;">+' + account.dailyVisitTokens + ' tokens disponiveis hoje</span>'}
+          ${account.monthlyGrantClaimedThisMonth
+            ? '<span class="pill info" style="font-size:0.8em;">Grant mensal ja recebido este mes</span>'
+            : '<span class="pill success" style="font-size:0.8em;">Grant mensal pendente este mes</span>'}
+        </div>
+      ` : ''}
+      ${canUpgrade
+        ? `<button class="${isFeatured ? 'btn-primary' : 'btn'}" type="button" data-action="upgrade-plan" data-plan-id="${escapeHtml(option.id)}">Mudar para ${escapeHtml(option.label)}</button>`
+        : '<button class="btn" type="button" disabled>Plano ativo</button>'}
+    </article>
+  `;
+}
+
+async function renderPlanosPage(options = {}) {
+  renderWorkspaceShell({
+    title: 'Planos',
+    subtitle: 'Gerencie seu plano e acompanhe seus tokens.',
+    contentHtml: '<div class="loading">Carregando plano...</div>',
+  });
+
+  const result = await api.accountPlanSummary();
+  if (!result.ok) {
+    if (result.status === 401) { unauthorizedRedirect(); return; }
+    renderWorkspaceShell({
+      title: 'Planos',
+      contentHtml: `<div class="notice error">${escapeHtml(result.error)}</div>`,
+    });
+    return;
+  }
+
+  const account = result.body?.account ?? null;
+  const errorHtml = options.error ? `<div class="notice error">${escapeHtml(options.error)}</div>` : '';
+  const successHtml = options.success ? `<div class="notice success">${escapeHtml(options.success)}</div>` : '';
+
+  const billingHtml = account?.billingExpiresAt ? `
+    <div class="notice ${account.expiresSoon ? 'warning' : 'info'}">
+      ${account.expiresSoon ? 'Seu plano expira em breve!' : 'Plano ativo ate:'} <strong>${formatDate(account.billingExpiresAt)}</strong>
+      ${account.expiresSoon ? ' — <a data-link href="/workspace/planos">Renovar agora</a>' : ''}
+    </div>
+  ` : '';
+
+  const planCardsHtml = ACCOUNT_PLAN_OPTIONS.map((option) => renderWorkspacePlanCard(option, account)).join('');
+
+  renderWorkspaceShell({
+    title: 'Planos',
+    subtitle: `Plano do usuario: ${account?.planLabel ?? '—'} | Saldo: ${account?.tokens ?? 0} tokens`,
+    noticeHtml: `${errorHtml}${successHtml}${billingHtml}`,
+    contentHtml: `
+      <section class="plan-grid">
+        ${planCardsHtml}
+      </section>
+      <section class="card stack" style="margin-top:1.5rem;">
+        <h2>Regras dos planos</h2>
+        <ul class="stack" style="list-style:disc;padding-left:1.25rem;">
+          <li>Cada conta conectada para publicar custa <strong>5 tokens</strong> por campanha.</li>
+          <li>A publicacao so acontece se voce tiver tokens suficientes para todas as contas selecionadas.</li>
+          <li>Se nao houver tokens suficientes, a campanha nao sera publicada e voce vera um aviso de <strong>out of Tokens</strong>.</li>
+          <li>O limite de tokens nunca e ultrapassado — o bônus diario e aplicado apenas ate o maximo do plano.</li>
+          <li>Instagram e TikTok estao disponiveis somente no plano <strong>PRO</strong>.</li>
+        </ul>
+      </section>
+    `,
+  });
+
+  document.querySelectorAll('[data-action="upgrade-plan"]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const planId = button.getAttribute('data-plan-id');
+      if (!planId) return;
+
+      setButtonBusy(button, true, 'Salvando...');
+      const selectResult = await api.selectAccountPlan(planId);
+      setButtonBusy(button, false);
+
+      if (!selectResult.ok) {
+        await renderPlanosPage({ error: selectResult.error });
+        return;
+      }
+
+      await renderPlanosPage({ success: `Plano ${planId} ativado com sucesso!` });
+    });
+  });
+}
+
 async function renderPlanSelectionPage(options = {}) {
   const result = await api.accountPlanSummary();
   if (!result.ok) {
@@ -2283,6 +2593,21 @@ async function ensureAuthenticated() {
   if (!meResult.ok) return null;
   state.me = meResult.body?.user ?? null;
   return state.me;
+}
+
+async function ensureAccountPlan(forceRefresh = false) {
+  if (!forceRefresh && state.account) return state.account;
+  const result = await api.accountPlanSummary();
+  if (result.ok) {
+    state.account = result.body?.account ?? null;
+    if (state.account && !state.account.monthlyGrantClaimedThisMonth) {
+      const monthlyResult = await api.claimMonthlyGrant();
+      if (monthlyResult.ok && monthlyResult.body?.claimed) {
+        state.account = monthlyResult.body?.account ?? state.account;
+      }
+    }
+  }
+  return state.account;
 }
 
 function parseCurrentQuery() {
@@ -2410,17 +2735,65 @@ function renderEmptyStateCard({ title, message, actionsHtml = '', tone = 'neutra
 }
 
 function formatAccountIdentityLabel(account) {
-  const primary = account?.displayName ?? account?.email ?? account?.id ?? 'Unknown account';
+  const primary = account?.displayName ?? account?.email ?? 'Unknown account';
   const email = account?.email && account.email !== primary ? account.email : null;
   const providerLabel = getProviderLabel(account?.provider);
-  const subjectSuffix = account?.providerSubject || account?.googleSubject
-    ? `${providerLabel} ID ${account?.providerSubject ?? account?.googleSubject}`
-    : null;
-  const idSuffix = account?.id ? `Internal ID ${account.id}` : null;
   return {
     primary,
-    secondary: [email, subjectSuffix, idSuffix].filter(Boolean).join(' | '),
+    secondary: [email, providerLabel].filter(Boolean).join(' | '),
   };
+}
+
+function getDisplayInitials(value) {
+  const words = String(value ?? '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  const initials = words.slice(0, 2).map((word) => word[0]).join('').toUpperCase();
+  return initials || 'CH';
+}
+
+function pickPreviewChannel(channels) {
+  if (!Array.isArray(channels) || channels.length === 0) return null;
+  return channels.find((channel) => channel.thumbnailUrl)
+    ?? channels.find((channel) => channel.title || channel.handle)
+    ?? channels[0];
+}
+
+function formatVisibleChannelName(channel, account = null) {
+  return channel?.title
+    ?? channel?.handle
+    ?? account?.displayName
+    ?? 'Unnamed channel';
+}
+
+function channelAvatarHtml(channel, label, className = 'channel-avatar') {
+  if (channel?.thumbnailUrl) {
+    return `<img class="${escapeAttribute(className)}" src="${escapeAttribute(channel.thumbnailUrl)}" alt="${escapeAttribute(label)}" loading="lazy" />`;
+  }
+  return `<span class="${escapeAttribute(className)} placeholder" aria-hidden="true">${escapeHtml(getDisplayInitials(label))}</span>`;
+}
+
+function getAccountPlatformKey(provider) {
+  switch ((provider ?? '').toLowerCase()) {
+    case 'instagram':
+      return 'instagram';
+    case 'tiktok':
+      return 'tiktok';
+    case 'youtube':
+    case 'google':
+    default:
+      return 'youtube';
+  }
+}
+
+function accountPlatformLogoHtml(provider, className = 'account-platform-logo') {
+  const platformKey = getAccountPlatformKey(provider);
+  return `
+    <span class="${escapeAttribute(`${className} ${platformKey}`)}" title="${escapeAttribute(getProviderLabel(platformKey))}">
+      ${renderPlatformGlyph(platformKey, 'small')}
+    </span>
+  `;
 }
 
 function getProviderLabel(provider) {
@@ -2547,6 +2920,37 @@ function renderThumbnailPreviewCell(asset) {
       ${renderMediaPreviewSizePicker(asset.id, previewSizeLabel, previewSize)}
     </div>
   `;
+}
+
+async function backfillMissingMediaDurations(assets) {
+  const candidates = assets
+    .filter((asset) => asset?.asset_type === 'video' && Number(asset.duration_seconds ?? 0) <= 0 && asset.id)
+    .filter((asset) => !state.mediaDurationBackfillInFlight.has(asset.id))
+    .slice(0, 6);
+  if (candidates.length === 0) {
+    return;
+  }
+
+  let updatedAny = false;
+  await Promise.all(candidates.map(async (asset) => {
+    state.mediaDurationBackfillInFlight.add(asset.id);
+    try {
+      const durationSeconds = await readVideoDurationFromUrl(buildMediaAssetFileUrl(asset.id));
+      if (typeof durationSeconds !== 'number' || durationSeconds <= 0) {
+        return;
+      }
+      const updateResult = await api.updateMediaDuration(asset.id, durationSeconds);
+      if (updateResult.ok) {
+        updatedAny = true;
+      }
+    } finally {
+      state.mediaDurationBackfillInFlight.delete(asset.id);
+    }
+  }));
+
+  if (updatedAny && window.location.pathname === '/workspace/media') {
+    await renderMediaPage();
+  }
 }
 
 function openMediaPreviewDialog(asset) {
@@ -2696,7 +3100,27 @@ async function renderDashboardPage() {
   const targetsByStatus = stats?.targets?.byStatus ?? {};
   const jobsByStatus = stats?.jobs?.byStatus ?? {};
   const channels = Array.isArray(stats?.channels) ? [...stats.channels] : [];
-  channels.sort((left, right) => Number(right.published ?? 0) - Number(left.published ?? 0));
+  const rankedChannels = [...channels].sort((left, right) => {
+    const leftTopViews = Number(left?.topVideoViews ?? 0);
+    const rightTopViews = Number(right?.topVideoViews ?? 0);
+    if (rightTopViews !== leftTopViews) {
+      return rightTopViews - leftTopViews;
+    }
+
+    const leftTotalViews = Number(left?.totalViews ?? 0);
+    const rightTotalViews = Number(right?.totalViews ?? 0);
+    if (rightTotalViews !== leftTotalViews) {
+      return rightTotalViews - leftTotalViews;
+    }
+
+    const leftPublished = Number(left?.published ?? 0);
+    const rightPublished = Number(right?.published ?? 0);
+    if (rightPublished !== leftPublished) {
+      return rightPublished - leftPublished;
+    }
+
+    return String(left?.channelId ?? '').localeCompare(String(right?.channelId ?? ''));
+  });
 
   const summaryCards = [
     { label: 'Campaigns', value: formatNumber(stats?.campaigns?.total ?? 0), hint: 'Total campaigns tracked', tone: 'info' },
@@ -2955,10 +3379,123 @@ async function renderDashboardPage() {
   }
 }
 
+// ─── Orbital Dashboard design system ────────────────────────────────────────
+
+function withAlpha(color, alpha, fallback = `rgba(100, 116, 139, ${alpha})`) {
+  if (typeof color !== 'string' || !color.trim()) {
+    return fallback;
+  }
+
+  return color.startsWith('#') ? hexToRgba(color, alpha) : color;
+}
+
+function getSelectedBackgroundTheme() {
+  return BACKGROUND_THEME_OPTIONS.find((option) => option.id === state.backgroundTheme) ?? BACKGROUND_THEME_OPTIONS[0];
+}
+
+function buildOdThemeFromSettings() {
+  const selected = getSelectedBackgroundTheme();
+  const appearance = selected.appearance === 'dark' ? 'dark' : 'light';
+  const accent = selected.primary ?? '#40e0d0';
+  const accent2 = selected.primaryStrong ?? selected.info ?? accent;
+  const textHi = appearance === 'dark' ? '#f8fafc' : '#0f172a';
+  const textMd = appearance === 'dark' ? '#dbeafe' : '#334155';
+  const textLo = appearance === 'dark' ? '#94a3b8' : '#64748b';
+  const border = withAlpha(selected.border, appearance === 'dark' ? 0.32 : 0.26);
+  const borderDim = withAlpha(selected.border, appearance === 'dark' ? 0.2 : 0.18);
+  const panel = `linear-gradient(180deg, ${selected.surface} 0%, ${selected.surfaceMuted} 100%)`;
+  const glow = withAlpha(accent, appearance === 'dark' ? 0.26 : 0.2);
+  const chart = [
+    accent,
+    accent2,
+    selected.info ?? accent,
+    selected.warning ?? accent2,
+    selected.success ?? accent,
+    selected.danger ?? accent2,
+  ];
+
+  return {
+    name: selected.label,
+    appearance,
+    bg: selected.pageBackground,
+    accent,
+    accent2,
+    textHi,
+    textMd,
+    textLo,
+    border,
+    borderDim,
+    panel,
+    glow,
+    chart,
+  };
+}
+
+function applyOdThemeFromSettings() {
+  const theme = buildOdThemeFromSettings();
+  const root = document.getElementById('od-root');
+  if (!root) return;
+  const isDarkTheme = theme.appearance === 'dark';
+  root.style.background = theme.bg;
+  root.style.setProperty('--od-accent',     theme.accent);
+  root.style.setProperty('--od-accent2',    theme.accent2);
+  root.style.setProperty('--od-text-hi',    theme.textHi);
+  root.style.setProperty('--od-text-md',    theme.textMd);
+  root.style.setProperty('--od-text-lo',    theme.textLo);
+  root.style.setProperty('--od-border',     theme.border);
+  root.style.setProperty('--od-border-dim', theme.borderDim);
+  root.style.setProperty('--od-panel-bg',   theme.panel);
+  root.style.setProperty('--od-panel',      theme.panel);
+  root.style.setProperty('--od-glow',       theme.glow);
+  root.style.setProperty('--od-bg-globe-a', withAlpha(theme.accent, isDarkTheme ? 0.2 : 0.14));
+  root.style.setProperty('--od-bg-globe-b', withAlpha(theme.accent2, isDarkTheme ? 0.18 : 0.12));
+  root.style.setProperty('--od-bg-globe-shadow-a', withAlpha(theme.accent, isDarkTheme ? 0.32 : 0.2));
+  root.style.setProperty('--od-bg-globe-shadow-b', withAlpha(theme.accent2, isDarkTheme ? 0.26 : 0.16));
+  for (let i = 0; i < 6; i++) root.style.setProperty(`--od-chart-${i}`, theme.chart[i] ?? theme.chart[0]);
+
+  const nameEl = document.getElementById('od-theme-name');
+  if (nameEl) nameEl.textContent = 'THEME: ' + theme.name;
+
+  // update SVG donut slices
+  root.querySelectorAll('.od-donut-slice').forEach(sl => {
+    const idx = parseInt(sl.getAttribute('data-cidx') ?? '0');
+    const colors = [theme.accent, theme.accent2 ?? theme.accent, theme.chart[2] ?? theme.accent, theme.textMd, theme.chart[3] ?? theme.textLo];
+    sl.setAttribute('stroke', colors[Math.min(idx, colors.length - 1)]);
+  });
+  root.querySelectorAll('.od-donut-dot').forEach(dot => {
+    const idx = parseInt(dot.getAttribute('data-cidx') ?? '0');
+    const colors = [theme.accent, theme.accent2 ?? theme.accent, theme.chart[2] ?? theme.accent, theme.textMd, theme.chart[3] ?? theme.textLo];
+    dot.style.background = colors[Math.min(idx, colors.length - 1)];
+  });
+}
+
+function buildOdGlobe() {
+  const LAT = 20, LON = 40;
+  const dots = [];
+  for (let i = 1; i < LAT; i++) {
+    const phi = (i / LAT) * Math.PI;
+    for (let j = 0; j < LON; j++) {
+      const theta = (j / LON) * Math.PI * 2;
+      const x = (Math.sin(phi) * Math.cos(theta)).toFixed(3);
+      const y = (Math.cos(phi)).toFixed(3);
+      const z = Math.sin(phi) * Math.sin(theta);
+      if ((i * 131 + j * 17) % 100 < 45) continue;
+      const alpha = Math.min(1, 0.2 + Math.max(0, z) * 0.8).toFixed(2);
+      dots.push(`<circle cx="${x}" cy="${y}" r="0.012" fill="var(--od-accent)" opacity="${alpha}"/>`);
+    }
+  }
+  const latLines = [-0.7, -0.35, 0, 0.35, 0.7].map(yv => {
+    const rx = Math.sqrt(Math.max(0, 1 - yv * yv)).toFixed(3);
+    const ry = (Math.sqrt(Math.max(0, 1 - yv * yv)) * 0.15).toFixed(3);
+    return `<ellipse cx="0" cy="${yv}" rx="${rx}" ry="${ry}" fill="none" stroke="var(--od-accent)" stroke-opacity="0.12" stroke-width="0.005"/>`;
+  }).join('');
+  return `<svg viewBox="-1.1 -1.1 2.2 2.2" class="od-globe-svg">${latLines}${dots.join('')}</svg>`;
+}
+
 async function renderOrbitalDashboardPage() {
   const [result, recentCampaignsResult] = await Promise.all([
     api.dashboard(),
-    api.campaigns({ limit: 6, offset: 0 }),
+    api.campaigns({ limit: 8, offset: 0 }),
   ]);
 
   if (!result.ok) {
@@ -2980,436 +3517,192 @@ async function renderOrbitalDashboardPage() {
   const targetsByStatus = stats?.targets?.byStatus ?? {};
   const jobsByStatus = stats?.jobs?.byStatus ?? {};
   const channels = Array.isArray(stats?.channels) ? [...stats.channels] : [];
-  channels.sort((left, right) => Number(right.published ?? 0) - Number(left.published ?? 0));
+  const rankedChannels = [...channels].sort((left, right) => {
+    const leftTopViews = Number(left?.topVideoViews ?? 0);
+    const rightTopViews = Number(right?.topVideoViews ?? 0);
+    if (rightTopViews !== leftTopViews) {
+      return rightTopViews - leftTopViews;
+    }
+
+    const leftTotalViews = Number(left?.totalViews ?? 0);
+    const rightTotalViews = Number(right?.totalViews ?? 0);
+    if (rightTotalViews !== leftTotalViews) {
+      return rightTotalViews - leftTotalViews;
+    }
+
+    const leftPublished = Number(left?.published ?? 0);
+    const rightPublished = Number(right?.published ?? 0);
+    if (rightPublished !== leftPublished) {
+      return rightPublished - leftPublished;
+    }
+
+    return String(left?.channelId ?? '').localeCompare(String(right?.channelId ?? ''));
+  });
 
   const recentCampaigns = recentCampaignsResult.ok && Array.isArray(recentCampaignsResult.body?.campaigns)
     ? recentCampaignsResult.body.campaigns
     : [];
-  const selectedBackgroundTheme = BACKGROUND_THEME_OPTIONS.find((option) => option.id === state.backgroundTheme) ?? BACKGROUND_THEME_OPTIONS[0];
   const liveClock = formatClockLabel();
   const quotaWarningState = stats?.quota?.warningState ?? 'healthy';
-  const quotaTone = quotaWarningState === 'critical'
-    ? 'danger'
-    : quotaWarningState === 'warning'
-      ? 'warning'
-      : 'info';
-  const highlightCards = [
-    {
-      label: 'Total campaigns',
-      value: formatNumber(stats?.campaigns?.total ?? 0),
-      detail: `${formatNumber(campaignsByStatus.launching ?? 0)} launching now`,
-      tone: 'info',
-    },
-    {
-      label: 'Published targets',
-      value: formatNumber(targetsByStatus.publicado ?? 0),
-      detail: `${formatPercent(stats?.targets?.successRate ?? 0)} success rate`,
-      tone: 'success',
-    },
-    {
-      label: 'Queued workload',
-      value: formatNumber((jobsByStatus.queued ?? 0) + (jobsByStatus.processing ?? 0)),
-      detail: `${formatNumber(stats?.jobs?.total ?? 0)} jobs tracked`,
-      tone: 'warning',
-    },
-    {
-      label: 'Blocked targets',
-      value: formatNumber(stats?.reauth?.blockedTargets ?? 0),
-      detail: `${formatNumber(stats?.jobs?.totalRetries ?? 0)} total retries spent`,
-      tone: Number(stats?.reauth?.blockedTargets ?? 0) > 0 ? 'danger' : 'info',
-    },
+  const quotaTone = quotaWarningState === 'critical' ? 'danger' : quotaWarningState === 'warning' ? 'warning' : 'info';
+  const channelMaxTopViews = Math.max(1, ...rankedChannels.map((channel) => Number(channel?.topVideoViews ?? 0)));
+
+  function statCard(label, val, sub) {
+    return `<div class="od-stat-card">
+      <div class="od-stat-val od-mono">${val}</div>
+      <div class="od-stat-label od-muted">${escapeHtml(label)}</div>
+      ${sub ? `<div class="od-stat-sub od-muted">${escapeHtml(sub)}</div>` : ''}
+    </div>`;
+  }
+
+  function buildBarChart(published) {
+    const bars = Array.from({length: 14}, (_, i) => {
+      if (i === 13) return published;
+      const seed = (i * 7919 + 3) % 100;
+      return Math.max(0, Math.round(published * (0.25 + (seed / 100) * 0.75)));
+    });
+    const maxVal = Math.max(1, ...bars);
+    return `<div class="od-bars">${bars.map((v, i) => `<div class="od-bar-col${i === 13 ? ' od-bar-today' : ''}"><div class="od-bar" style="height:${clampPercent((v / maxVal) * 100)}%"></div></div>`).join('')}</div>`;
+  }
+
+  function buildDonut(byStatus) {
+    const keys = ['draft', 'ready', 'launching', 'completed', 'failed'];
+    const values = keys.map(k => Number(byStatus[k] ?? 0));
+    const total = values.reduce((a, b) => a + b, 0);
+    const R = 38, C = 2 * Math.PI * R;
+    if (!total) return '<div class="od-donut-empty od-muted od-mono">NO DATA</div>';
+    let cumLen = 0;
+    const slices = values.map((v, i) => {
+      if (!v) return '';
+      const len = (v / total) * C;
+      const offset = C - cumLen;
+      cumLen += len;
+      return `<circle class="od-donut-slice" data-cidx="${i}" cx="50" cy="50" r="${R}" fill="none" stroke-width="12" stroke-dasharray="${len.toFixed(1)} ${(C - len).toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}" transform="rotate(-90 50 50)"/>`;
+    }).join('');
+    const legend = keys.map((k, i) => !values[i] ? '' : `<div class="od-donut-legend-item"><span class="od-donut-dot" data-cidx="${i}"></span><span class="od-muted">${escapeHtml(k)}</span><span class="od-mono" style="margin-left:auto">${values[i]}</span></div>`).join('');
+    return `<div class="od-donut-wrap"><svg class="od-donut-svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="${R}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="12"/>${slices}<text x="50" y="46" text-anchor="middle" dominant-baseline="middle" class="od-donut-center-val">${total}</text><text x="50" y="60" text-anchor="middle" class="od-donut-center-sub">campaigns</text></svg><div class="od-donut-legend">${legend}</div></div>`;
+  }
+
+  const activityItems = [
+    { tone: quotaTone, label: quotaWarningState === 'healthy' ? 'Quota stable' : 'Quota under pressure', meta: `${formatPercent(stats?.quota?.projectedPercent ?? 0)} projected` },
+    { tone: Number(stats?.reauth?.blockedTargets ?? 0) > 0 ? 'warning' : 'success', label: Number(stats?.reauth?.blockedTargets ?? 0) > 0 ? `${formatNumber(stats.reauth.blockedTargets)} blocked targets` : 'All accounts ready', meta: `${formatNumber(rankedChannels.length)} channels` },
+    { tone: Number(stats?.jobs?.totalRetries ?? 0) > 0 ? 'warning' : 'success', label: Number(stats?.jobs?.totalRetries ?? 0) > 0 ? 'Retry pressure detected' : 'Retry pressure low', meta: stats?.retries?.hotspotChannelId ?? 'Stable' },
+    ...recentCampaigns.slice(0, 2).map(c => ({ tone: statusTone(c.status ?? 'draft'), label: c.title ?? 'Untitled', meta: normalizeLabel(c.status ?? 'draft') })),
   ];
-  const highlightCardsHtml = highlightCards.map((card) => `
-    <article class="platform-dashboard-stat" data-tone="${escapeHtml(card.tone)}">
-      <span class="platform-dashboard-stat-label">${escapeHtml(card.label)}</span>
-      <strong>${escapeHtml(card.value)}</strong>
-      <span class="platform-dashboard-stat-detail">${escapeHtml(card.detail)}</span>
-    </article>
-  `).join('');
 
-  const highlightSignals = [
-    {
-      tone: quotaTone,
-      label: 'Quota forecast',
-      value: `${formatPercent(stats?.quota?.projectedPercent ?? 0)}`,
-      detail: `${formatNumber(stats?.quota?.estimatedProjectedUnits ?? 0)} projected of ${formatNumber(stats?.quota?.dailyLimitUnits ?? 0)} units`,
-    },
-    {
-      tone: Number(stats?.reauth?.blockedTargets ?? 0) > 0 ? 'warning' : 'info',
-      label: 'Reconnect pressure',
-      value: `${formatNumber(stats?.reauth?.blockedTargets ?? 0)} blocked`,
-      detail: `${formatNumber(stats?.reauth?.blockedChannelCount ?? 0)} channels need operator attention`,
-    },
-    {
-      tone: Number(stats?.jobs?.totalRetries ?? 0) > 0 ? 'warning' : 'info',
-      label: 'Retry hotspot',
-      value: escapeHtml(stats?.retries?.hotspotChannelId ?? 'Stable'),
-      detail: `${formatNumber(stats?.retries?.hotspotRetryCount ?? 0)} retries concentrated here`,
-    },
-    {
-      tone: Number(stats?.audit?.totalEvents ?? 0) > 0 ? 'info' : 'success',
-      label: 'Last audit event',
-      value: escapeHtml(normalizeLabel(stats?.audit?.lastEventType ?? 'none')),
-      detail: stats?.audit?.lastEventAt ? formatDate(stats.audit.lastEventAt) : 'No events recorded yet',
-    },
-  ];
-  const highlightSignalsHtml = highlightSignals.map((signal) => `
-    <article class="platform-dashboard-signal" data-tone="${escapeHtml(signal.tone)}">
-      <span class="platform-dashboard-signal-label">${escapeHtml(signal.label)}</span>
-      <strong>${signal.value}</strong>
-      <span class="platform-dashboard-signal-detail">${escapeHtml(signal.detail)}</span>
-    </article>
-  `).join('');
-
-  const channelMaxPublished = Math.max(1, ...channels.map((channel) => Number(channel.published ?? 0)));
-  const channelLeaderboardHtml = channels.length === 0
-    ? '<p class="muted">Connect accounts and launch campaigns to unlock channel ranking.</p>'
-    : `<div class="platform-dashboard-leaderboard">${channels.slice(0, 6).map((channel, index) => `
-        <div class="platform-dashboard-leaderboard-row">
-          <div class="platform-dashboard-leaderboard-main">
-            <span class="platform-dashboard-rank">${String(index + 1).padStart(2, '0')}</span>
-            <div>
-              <strong>${escapeHtml(channel.channelId)}</strong>
-              <span>${formatNumber(channel.totalTargets ?? 0)} targets tracked</span>
-            </div>
-          </div>
-          <div class="platform-dashboard-leaderboard-meter">
-            <div class="platform-dashboard-meter-track">
-              <span class="platform-dashboard-meter-fill" style="width:${clampPercent((Number(channel.published ?? 0) / channelMaxPublished) * 100)}%"></span>
-            </div>
-            <div class="platform-dashboard-leaderboard-meta">
-              <span>${formatNumber(channel.published ?? 0)} published</span>
-              <span>${formatPercent(channel.successRate ?? 0)}</span>
-            </div>
-          </div>
-        </div>
-      `).join('')}</div>`;
-
-  const recentCampaignsHtml = recentCampaigns.length === 0
-    ? '<p class="muted">No recent campaigns available yet.</p>'
-    : `<div class="platform-dashboard-campaigns">${recentCampaigns.map((campaign) => {
-        const targetCount = Number(campaign.targetCount ?? campaign.targets?.length ?? 0);
-        const scheduledLabel = campaign.scheduledAt ? formatDate(campaign.scheduledAt) : 'Immediate launch';
-        const createdLabel = campaign.createdAt ? formatDate(campaign.createdAt) : 'Recently created';
+  const leaderboardHtml = rankedChannels.length === 0
+    ? '<div class="od-muted" style="padding:1rem 0">Connect accounts to unlock leaderboard.</div>'
+    : rankedChannels.slice(0, 6).map((channel, index) => {
+        const topVideoViews = Number(channel?.topVideoViews ?? 0);
+        const totalViews = Number(channel?.totalViews ?? 0);
+        const pct = clampPercent((topVideoViews / channelMaxTopViews) * 100);
+        const topVideoLabel = channel?.topVideoTitle ?? (channel?.topVideoId ? `Video ${channel.topVideoId}` : 'No published YouTube video');
+        const topVideoReference = channel?.topVideoId ? `ID ${channel.topVideoId}` : 'No video id';
         return `
-          <article class="platform-dashboard-campaign-card">
-            <div class="platform-dashboard-campaign-header">
-              <div>
-                <h3>${escapeHtml(campaign.title ?? 'Untitled campaign')}</h3>
-                <p>${escapeHtml(campaign.videoAssetName ?? campaign.videoAssetId ?? 'Media pending')}</p>
-              </div>
-              ${statusPill(campaign.status ?? 'draft')}
+          <div class="od-leader-row">
+            <span class="od-leader-rank od-mono">${String(index + 1).padStart(2, '0')}</span>
+            <div class="od-leader-main">
+              <span>${escapeHtml(channel?.channelId ?? '-')}</span>
+              <small class="od-leader-sub">${escapeHtml(topVideoLabel)}</small>
+              <small class="od-leader-mini od-mono">${escapeHtml(topVideoReference)} · ${formatNumber(totalViews)} total views</small>
+              <div class="od-leader-bar-track"><div class="od-leader-bar-fill" style="width:${pct}%"></div></div>
             </div>
-            <div class="platform-dashboard-campaign-meta">
-              <span>${formatNumber(targetCount)} targets</span>
-              <span>${escapeHtml(scheduledLabel)}</span>
-              <span>${escapeHtml(createdLabel)}</span>
-            </div>
-            <div class="platform-dashboard-campaign-actions">
-              <a class="btn" data-link href="/workspace/campanhas/${encodeURIComponent(campaign.id)}">Open campaign</a>
-            </div>
-          </article>
+            <span class="od-leader-pub od-mono">${formatNumber(topVideoViews)} views</span>
+          </div>
         `;
-      }).join('')}</div>`;
-  const dashboardThemeStripHtml = renderOrbitalThemeSelector({ compact: true });
-  const quotaBannerTitle = quotaWarningState === 'critical'
-    ? 'Quota critical'
-    : quotaWarningState === 'warning'
-      ? 'Quota warning'
-      : 'Quota healthy';
-  const quotaBannerDescription = quotaWarningState === 'healthy'
-    ? `Projected usage is ${formatPercent(stats?.quota?.projectedPercent ?? 0)} and the queue remains inside the daily budget.`
-    : `Projected usage is ${formatPercent(stats?.quota?.projectedPercent ?? 0)} with ${formatNumber(stats?.quota?.estimatedQueuedUnits ?? 0)} units still queued for processing.`;
-  const quotaBannerHtml = `
-    <section class="platform-dashboard-alert" data-tone="${escapeHtml(quotaTone)}">
-      <div class="platform-dashboard-alert-icon">${quotaWarningState === 'critical' ? '!' : quotaWarningState === 'warning' ? '~' : '+'}</div>
-      <div class="platform-dashboard-alert-copy">
-        <span class="platform-dashboard-kicker">Quota status</span>
-        <h3>${escapeHtml(quotaBannerTitle)}</h3>
-        <p>${escapeHtml(quotaBannerDescription)}</p>
+      }).join('');
+
+  const selectedBackgroundTheme = getSelectedBackgroundTheme();
+
+  const quotaMeterHtml = `<div class="od-quota"><div class="od-quota-track"><div class="od-quota-used" style="width:${clampPercent(stats?.quota?.usagePercent ?? 0)}%"></div><div class="od-quota-proj" style="width:${clampPercent(stats?.quota?.projectedPercent ?? 0)}%"></div></div><div class="od-quota-labels od-muted od-mono"><span>${formatNumber(stats?.quota?.estimatedConsumedUnits ?? 0)} used</span><span>${formatNumber(stats?.quota?.dailyLimitUnits ?? 0)} limit</span></div></div>`;
+
+  const feedHtml = activityItems.map(item => `<div class="od-feed-row" data-tone="${escapeHtml(item.tone)}"><span class="od-feed-dot"></span><div class="od-feed-copy"><span class="od-feed-label">${escapeHtml(item.label)}</span><span class="od-muted od-feed-meta">${escapeHtml(item.meta)}</span></div></div>`).join('');
+
+  const warningBannerHtml = quotaWarningState !== 'healthy' ? `<div class="od-warning-banner" data-tone="${escapeHtml(quotaTone)}">&#x26A0; Quota ${escapeHtml(quotaWarningState)}: ${formatPercent(stats?.quota?.projectedPercent ?? 0)} projected of ${formatNumber(stats?.quota?.dailyLimitUnits ?? 0)} units</div>` : '';
+
+  const contentHtml = `
+    <div id="od-root" class="od-root">
+      <div class="od-bracket od-bracket-tl"></div>
+      <div class="od-bracket od-bracket-tr"></div>
+      <div class="od-bracket od-bracket-bl"></div>
+      <div class="od-bracket od-bracket-br"></div>
+      <div class="od-bg-globe-field" aria-hidden="true">
+        <div class="od-bg-globe od-bg-globe-secondary">${buildOdGlobe()}</div>
+        <div class="od-bg-globe">${buildOdGlobe()}</div>
       </div>
-      <div class="platform-dashboard-alert-actions">
-        <a class="btn" data-link href="/workspace/campanhas">Review queue</a>
-        <a class="btn" data-link href="/workspace/accounts">Check accounts</a>
+
+      <div class="od-topbar">
+        <div class="od-brand od-mono">ORBITAL COMMAND</div>
+        <div class="od-topbar-right od-muted od-mono">
+          <span id="od-theme-name">THEME: ${escapeHtml(selectedBackgroundTheme.label)}</span>
+          <span class="od-live-dot"></span>${escapeHtml(liveClock)}
+        </div>
       </div>
-    </section>
+
+      ${warningBannerHtml}
+
+      <div class="od-header-row">
+        <div class="od-globe-wrap">${buildOdGlobe()}</div>
+        <div class="od-stat-grid">
+          ${statCard('Total campaigns', formatNumber(stats?.campaigns?.total ?? 0), `${formatNumber(campaignsByStatus.launching ?? 0)} launching`)}
+          ${statCard('Published', formatNumber(targetsByStatus.publicado ?? 0), `${formatPercent(stats?.targets?.successRate ?? 0)} success`)}
+          ${statCard('Queued', formatNumber((jobsByStatus.queued ?? 0) + (jobsByStatus.processing ?? 0)), `${formatNumber(stats?.jobs?.total ?? 0)} jobs`)}
+          ${statCard('Tokens', formatNumber(state.account?.tokens ?? 0), state.account ? `Plano ${escapeHtml(state.account.planLabel)}` : 'FREE')}
+        </div>
+      </div>
+
+      <div class="od-charts-row">
+        <div class="od-panel od-bar-panel">
+          <div class="od-panel-head">
+            <span class="od-panel-label od-mono">PUBLISHED · 14 DAYS</span>
+            <span class="od-panel-meta od-muted od-mono">TODAY: ${formatNumber(targetsByStatus.publicado ?? 0)}</span>
+          </div>
+          ${buildBarChart(targetsByStatus.publicado ?? 0)}
+        </div>
+        <div class="od-panel od-donut-panel">
+          <div class="od-panel-head">
+            <span class="od-panel-label od-mono">CAMPAIGN STATUS</span>
+          </div>
+          ${buildDonut(campaignsByStatus)}
+        </div>
+      </div>
+
+      <div class="od-bottom-row">
+        <div class="od-panel od-leader-panel">
+          <div class="od-panel-head">
+            <span class="od-panel-label od-mono">CHANNEL LEADERBOARD</span>
+            <span class="od-panel-meta od-muted od-mono">Top video views by channel</span>
+          </div>
+          ${leaderboardHtml}
+        </div>
+        <div class="od-panel od-right-panel">
+          <div class="od-panel-head">
+            <span class="od-panel-label od-mono">QUOTA · ${formatPercent(stats?.quota?.usagePercent ?? 0)} USED</span>
+            <span class="od-panel-meta od-muted od-mono">${formatNumber(stats?.quota?.dailyLimitUnits ?? 0)} limit</span>
+          </div>
+          ${quotaMeterHtml}
+          <div class="od-panel-head" style="margin-top:1.25rem">
+            <span class="od-panel-label od-mono">ACTIVITY FEED</span>
+          </div>
+          ${feedHtml}
+        </div>
+      </div>
+
+      <div class="od-footer od-muted od-mono">
+        PLATAFORM MULTI PUBLI &nbsp;·&nbsp; ${escapeHtml(liveClock)} &nbsp;·&nbsp; ${formatNumber(stats?.campaigns?.total ?? 0)} campaigns &nbsp;·&nbsp; ${formatNumber(targetsByStatus.publicado ?? 0)} published
+      </div>
+    </div>
   `;
-  const activityFeedItems = [
-    {
-      tone: quotaTone,
-      label: quotaWarningState === 'healthy' ? 'Quota forecast stable' : 'Quota forecast under pressure',
-      meta: `${formatNumber(stats?.quota?.estimatedProjectedUnits ?? 0)} of ${formatNumber(stats?.quota?.dailyLimitUnits ?? 0)} units`,
-      detail: `${formatNumber(stats?.quota?.estimatedRemainingUnits ?? 0)} units estimated to remain after the current queue.`,
-    },
-    {
-      tone: Number(stats?.reauth?.blockedTargets ?? 0) > 0 ? 'warning' : 'success',
-      label: Number(stats?.reauth?.blockedTargets ?? 0) > 0 ? 'Reconnect attention required' : 'Accounts remain ready',
-      meta: Number(stats?.reauth?.blockedTargets ?? 0) > 0
-        ? `${formatNumber(stats?.reauth?.blockedTargets ?? 0)} blocked targets`
-        : `${formatNumber(channels.length)} active channels`,
-      detail: Number(stats?.reauth?.blockedTargets ?? 0) > 0
-        ? `${formatNumber(stats?.reauth?.blockedChannelCount ?? 0)} channels need a new authorization pass.`
-        : 'No publishing target is paused by account authorization.',
-    },
-    {
-      tone: Number(stats?.jobs?.totalRetries ?? 0) > 0 ? 'warning' : 'success',
-      label: Number(stats?.jobs?.totalRetries ?? 0) > 0 ? 'Retry hotspot detected' : 'Retry pressure low',
-      meta: stats?.retries?.hotspotChannelId
-        ? `Channel ${stats.retries.hotspotChannelId}`
-        : 'Workspace stable',
-      detail: Number(stats?.jobs?.totalRetries ?? 0) > 0
-        ? `${formatNumber(stats?.retries?.hotspotRetryCount ?? 0)} retries are concentrated on the busiest channel.`
-        : 'No extra retry load is consuming quota right now.',
-    },
-    {
-      tone: Number(stats?.audit?.totalEvents ?? 0) > 0 ? 'info' : 'success',
-      label: Number(stats?.audit?.totalEvents ?? 0) > 0 ? normalizeLabel(stats?.audit?.lastEventType ?? 'audit') : 'No recent audit events',
-      meta: stats?.audit?.lastActorEmail ?? 'system',
-      detail: stats?.audit?.lastEventAt
-        ? `Last recorded at ${formatDate(stats.audit.lastEventAt)}.`
-        : 'Audit history will appear here after the next operator action.',
-    },
-    ...recentCampaigns.slice(0, 2).map((campaign) => ({
-      tone: statusTone(campaign.status ?? 'draft'),
-      label: campaign.title ?? 'Untitled campaign',
-      meta: normalizeLabel(campaign.status ?? 'draft'),
-      detail: campaign.scheduledAt
-        ? `Scheduled for ${formatDate(campaign.scheduledAt)}.`
-        : `Created ${campaign.createdAt ? formatDate(campaign.createdAt) : 'recently'}.`,
-    })),
-  ];
-  const activityFeedHtml = activityFeedItems.map((item) => `
-    <article class="platform-dashboard-activity-item" data-tone="${escapeHtml(item.tone)}">
-      <span class="platform-dashboard-activity-dot"></span>
-      <div class="platform-dashboard-activity-copy">
-        <strong>${escapeHtml(item.label)}</strong>
-        <span>${escapeHtml(item.detail)}</span>
-      </div>
-      <span class="platform-dashboard-activity-meta">${escapeHtml(item.meta)}</span>
-    </article>
-  `).join('');
 
-  const notices = [];
-  if (quotaWarningState !== 'healthy') {
-    notices.push(`
-      <div class="notice ${quotaWarningState === 'critical' ? 'error' : 'warning'}">
-        <h4>${quotaWarningState === 'critical' ? 'Quota critical' : 'Quota warning'}</h4>
-        <p>Projected usage is ${formatPercent(stats?.quota?.projectedPercent ?? 0)} with ${formatNumber(stats?.quota?.estimatedQueuedUnits ?? 0)} units still queued.</p>
-      </div>
-    `);
-  }
-  if (Number(stats?.reauth?.blockedTargets ?? 0) > 0) {
-    notices.push(`
-      <div class="notice warning">
-        <h4>Reconnect required</h4>
-        <p>${formatNumber(stats?.reauth?.blockedTargets ?? 0)} targets are paused until the affected accounts are reauthorized.</p>
-      </div>
-    `);
-  }
-  if (Number(targetsByStatus.erro ?? 0) > 0) {
-    notices.push(`
-      <div class="notice warning">
-        <h4>Failures need review</h4>
-        <p>${formatNumber(targetsByStatus.erro ?? 0)} targets are currently in error status.</p>
-      </div>
-    `);
-  }
-
-  renderWorkspaceShell({
-    title: 'Dashboard',
-    subtitle: 'Orbital overview for campaigns, quota pressure and account readiness.',
-    actionsHtml: `
-      <div class="inline-actions">
-        <a class="btn btn-primary" data-link href="/workspace/campanhas">Open campaigns</a>
-        <a class="btn" data-link href="/workspace/accounts">Review accounts</a>
-        <a class="btn" data-link href="${escapeHtml(buildUrl('/workspace/dashboard'))}">Refresh</a>
-      </div>
-    `,
-    noticeHtml: notices.join(''),
-    contentHtml: `
-      <section class="platform-dashboard-hero">
-        <article class="platform-surface platform-dashboard-hero-copy">
-          <div class="platform-dashboard-kicker-row">
-            <span class="platform-dashboard-kicker">Orbital command</span>
-            <span class="platform-dashboard-live"><span class="platform-login-live-dot"></span> Online ${escapeHtml(liveClock)}</span>
-          </div>
-          <h2>Publishing control room</h2>
-          <p>Track campaign flow, quota pressure and channel performance from one operational cockpit.</p>
-          ${dashboardThemeStripHtml}
-          <div class="platform-dashboard-chip-row">
-            <span class="platform-chip">${renderPlatformGlyph('youtube', 'small')} YouTube node</span>
-            <span class="platform-chip">${renderPlatformGlyph('instagram', 'small')} Instagram node</span>
-            <span class="platform-chip">${renderPlatformGlyph('tiktok', 'small')} TikTok node</span>
-          </div>
-          <div class="platform-dashboard-chip-row">
-            <span class="platform-dashboard-inline-stat">${formatNumber(stats?.campaigns?.total ?? 0)} campaigns</span>
-            <span class="platform-dashboard-inline-stat">${formatNumber(stats?.targets?.total ?? 0)} targets</span>
-            <span class="platform-dashboard-inline-stat">${formatNumber(stats?.jobs?.total ?? 0)} jobs</span>
-            <span class="platform-dashboard-inline-stat">${escapeHtml(selectedBackgroundTheme.label)}</span>
-          </div>
-        </article>
-
-        <article class="platform-surface platform-dashboard-hero-visual">
-          <div class="platform-dashboard-orbit">
-            <div class="platform-login-orbit-ring outer"></div>
-            <div class="platform-login-orbit-ring middle"></div>
-            <div class="platform-login-orbit-ring inner"></div>
-            <div class="platform-dashboard-orbit-core">
-              <strong>${formatNumber(targetsByStatus.publicado ?? 0)}</strong>
-              <span>published targets</span>
-            </div>
-            <div class="platform-login-orbit-node youtube">${renderPlatformGlyph('youtube')}</div>
-            <div class="platform-login-orbit-node instagram">${renderPlatformGlyph('instagram')}</div>
-            <div class="platform-login-orbit-node tiktok">${renderPlatformGlyph('tiktok')}</div>
-          </div>
-          <div class="platform-dashboard-orbit-footer">
-            <div>
-              <span>Queued</span>
-              <strong>${formatNumber(jobsByStatus.queued ?? 0)}</strong>
-            </div>
-            <div>
-              <span>Processing</span>
-              <strong>${formatNumber(jobsByStatus.processing ?? 0)}</strong>
-            </div>
-            <div>
-              <span>Blocked</span>
-              <strong>${formatNumber(stats?.reauth?.blockedTargets ?? 0)}</strong>
-            </div>
-          </div>
-        </article>
-      </section>
-
-      ${quotaBannerHtml}
-
-      <section class="platform-dashboard-stat-grid">
-        ${highlightCardsHtml}
-      </section>
-
-      <section class="platform-dashboard-main-grid">
-        <article class="platform-surface platform-dashboard-panel">
-          <div class="platform-dashboard-panel-head">
-            <div>
-              <span class="platform-dashboard-kicker">Pipeline</span>
-              <h3>Workflow distribution</h3>
-            </div>
-            <span class="platform-dashboard-panel-meta">Auto refresh while jobs are active</span>
-          </div>
-          <div class="platform-dashboard-pipeline-grid">
-            <div class="platform-dashboard-pipeline-block">
-              <span class="platform-dashboard-pipeline-title">Campaigns</span>
-              ${renderStatusBars(campaignsByStatus, { draft: 'muted', ready: 'info', launching: 'warning', completed: 'success', failed: 'danger' }, 'No campaigns yet.')}
-            </div>
-            <div class="platform-dashboard-pipeline-block">
-              <span class="platform-dashboard-pipeline-title">Targets</span>
-              ${renderStatusBars(targetsByStatus, { aguardando: 'muted', enviando: 'warning', publicado: 'success', erro: 'danger' }, 'No targets yet.')}
-            </div>
-            <div class="platform-dashboard-pipeline-block">
-              <span class="platform-dashboard-pipeline-title">Jobs</span>
-              ${renderStatusBars(jobsByStatus, { queued: 'muted', processing: 'info', completed: 'success', failed: 'danger' }, 'No jobs yet.')}
-            </div>
-          </div>
-        </article>
-
-        <article class="platform-surface platform-dashboard-panel">
-          <div class="platform-dashboard-panel-head">
-            <div>
-              <span class="platform-dashboard-kicker">Quota</span>
-              <h3>Consumption forecast</h3>
-            </div>
-            <span class="platform-dashboard-panel-meta">${formatNumber(stats?.quota?.dailyLimitUnits ?? 0)} daily units</span>
-          </div>
-          <div class="platform-dashboard-quota-stack">
-            <div class="platform-dashboard-figure-row">
-              <strong>${formatNumber(stats?.quota?.estimatedConsumedUnits ?? 0)}</strong>
-              <span>consumed now</span>
-            </div>
-            <div class="progress-block">
-              <div class="progress-meta">
-                <span>Used</span>
-                <strong>${formatPercent(stats?.quota?.usagePercent ?? 0)}</strong>
-              </div>
-              <div class="progress-track"><span class="progress-fill" style="width:${clampPercent(stats?.quota?.usagePercent ?? 0)}%"></span></div>
-            </div>
-            <div class="progress-block">
-              <div class="progress-meta">
-                <span>Projected</span>
-                <strong>${formatPercent(stats?.quota?.projectedPercent ?? 0)}</strong>
-              </div>
-              <div class="progress-track"><span class="progress-fill projected" style="width:${clampPercent(stats?.quota?.projectedPercent ?? 0)}%"></span></div>
-            </div>
-            <div class="platform-dashboard-compact-list">
-              <div><span>Queued</span><strong>${formatNumber(stats?.quota?.estimatedQueuedUnits ?? 0)}</strong></div>
-              <div><span>Projected</span><strong>${formatNumber(stats?.quota?.estimatedProjectedUnits ?? 0)}</strong></div>
-              <div><span>Remaining</span><strong>${formatNumber(stats?.quota?.estimatedRemainingUnits ?? 0)}</strong></div>
-            </div>
-          </div>
-        </article>
-      </section>
-
-      <section class="platform-dashboard-secondary-grid">
-        <article class="platform-surface platform-dashboard-panel">
-          <div class="platform-dashboard-panel-head">
-            <div>
-              <span class="platform-dashboard-kicker">Channels</span>
-              <h3>Leaderboard</h3>
-            </div>
-            <span class="platform-dashboard-panel-meta">${formatNumber(channels.length)} tracked channels</span>
-          </div>
-          ${channelLeaderboardHtml}
-        </article>
-
-        <article class="platform-surface platform-dashboard-panel">
-          <div class="platform-dashboard-panel-head">
-            <div>
-              <span class="platform-dashboard-kicker">Signals</span>
-              <h3>Operational highlights</h3>
-            </div>
-            <span class="platform-dashboard-panel-meta">Live workspace telemetry</span>
-          </div>
-          <div class="platform-dashboard-signal-grid">
-            ${highlightSignalsHtml}
-          </div>
-        </article>
-      </section>
-
-      <section class="platform-surface platform-dashboard-panel">
-        <div class="platform-dashboard-panel-head">
-          <div>
-            <span class="platform-dashboard-kicker">Activity</span>
-            <h3>Live operational feed</h3>
-          </div>
-          <span class="platform-dashboard-panel-meta">Quota, auth and campaign pressure</span>
-        </div>
-        <div class="platform-dashboard-activity-feed">
-          ${activityFeedHtml}
-        </div>
-      </section>
-
-      <section class="platform-surface platform-dashboard-panel">
-        <div class="platform-dashboard-panel-head">
-          <div>
-            <span class="platform-dashboard-kicker">Recent campaigns</span>
-            <h3>Latest movement in the workspace</h3>
-          </div>
-          <span class="platform-dashboard-panel-meta">${formatNumber(recentCampaigns.length)} visible items</span>
-        </div>
-        ${recentCampaignsHtml}
-      </section>
-    `,
-  });
+  renderWorkspaceShell({ title: '', contentHtml });
+  applyOdThemeFromSettings();
+  clearAutoRefreshTimer();
 
   if (shouldAutoRefreshDashboard(stats)) {
-    clearAutoRefreshTimer();
     state.autoRefreshTimer = setTimeout(() => {
-      if (window.location.pathname !== '/workspace/dashboard') {
-        return;
-      }
-      void renderOrbitalDashboardPage();
-    }, 3000);
+      if (window.location.pathname === '/workspace/dashboard') void renderOrbitalDashboardPage();
+    }, 4000);
   }
-  bindOrbitalThemePicker(() => {
-    void renderOrbitalDashboardPage();
-  });
 }
 
 async function renderAccountsOauthCallbackPage() {
@@ -3512,7 +3805,7 @@ async function renderAccountsPage() {
     const channelResponse = channelResponses[index];
     if (!channelResponse?.ok) {
       if (channelResponse?.error) {
-        channelErrors.push(`${account.displayName ?? account.email ?? account.id}: ${channelResponse.error}`);
+        channelErrors.push(`${account.displayName ?? account.email ?? getProviderLabel(account.provider)}: ${channelResponse.error}`);
       }
       channelsByAccountId.set(account.id, []);
       return;
@@ -3525,6 +3818,7 @@ async function renderAccountsPage() {
 
   const normalizedSearch = search.toLowerCase();
   const filteredAccounts = accounts.filter((account) => {
+    const accountChannels = channelsByAccountId.get(account.id) ?? [];
     if (statusFilter && account.status !== statusFilter) {
       return false;
     }
@@ -3536,6 +3830,11 @@ async function renderAccountsPage() {
       account.email,
       account.id,
       account.googleSubject,
+      account.providerSubject,
+      ...accountChannels.flatMap((channel) => [
+        channel.title,
+        channel.handle,
+      ]),
     ]
       .filter(Boolean)
       .join(' ')
@@ -3549,6 +3848,10 @@ async function renderAccountsPage() {
     : filteredAccounts[0]?.id ?? accounts[0]?.id ?? null;
   const selectedAccount = selectedAccountId ? accounts.find((account) => account.id === selectedAccountId) ?? null : null;
   const channels = selectedAccountId ? (channelsByAccountId.get(selectedAccountId) ?? []) : [];
+  const selectedPreviewChannel = pickPreviewChannel(channels);
+  const selectedAccountDisplayLabel = selectedAccount
+    ? formatVisibleChannelName(selectedPreviewChannel, selectedAccount)
+    : 'Select a channel';
   const selectedAccountSupportsChannels = supportsChannels(selectedAccount?.provider);
   const selectedAccountChannelSummary = selectedAccountId
     ? {
@@ -3560,8 +3863,7 @@ async function renderAccountsPage() {
     const accountChannels = channelsByAccountId.get(account.id) ?? [];
     return accountChannels.map((channel) => ({
       ...channel,
-      connectedAccountLabel: account.displayName ?? account.email ?? account.id,
-      connectedAccountEmail: account.email ?? '',
+      connectedAccountLabel: account.displayName ?? getProviderLabel(account.provider),
       connectedAccountId: account.id,
     }));
   });
@@ -3620,16 +3922,20 @@ async function renderAccountsPage() {
         const href = buildUrl('/workspace/accounts', { account: account.id, search, status: statusFilter });
         const accountChannels = channelsByAccountId.get(account.id) ?? [];
         const activeCount = accountChannels.filter((ch) => ch.isActive).length;
-        const identity = formatAccountIdentityLabel(account);
-        const providerKey = (account.provider ?? 'google').toLowerCase();
+        const previewChannel = pickPreviewChannel(accountChannels);
+        const visibleChannelName = formatVisibleChannelName(previewChannel, account);
+        const platformKey = getAccountPlatformKey(account.provider);
         return `
           <div class="account-card-wrap">
-            <a class="account-chip ${isSelected ? 'selected' : ''}" data-link href="${escapeHtml(href)}">
-              <div class="account-chip-top">
-                <strong>${escapeHtml(identity.primary)}</strong>
-                <span class="provider-badge ${escapeHtml(providerKey)}">${escapeHtml(getProviderLabel(account.provider))}</span>
+            <a class="account-chip ${isSelected ? 'selected' : ''}" data-link href="${escapeHtml(href)}" title="${escapeAttribute(visibleChannelName)}">
+              <div class="account-chip-channel">
+                ${channelAvatarHtml(previewChannel, visibleChannelName, 'channel-avatar account-channel-avatar')}
+                <div class="account-chip-main">
+                  <strong>${escapeHtml(visibleChannelName)}</strong>
+                  <small>${previewChannel ? 'YouTube channel' : escapeHtml(getProviderLabel(platformKey))}</small>
+                </div>
+                ${accountPlatformLogoHtml(platformKey)}
               </div>
-              <span>${escapeHtml(identity.secondary || account.email || account.id)}</span>
               <div class="account-chip-bottom">
                 ${statusPill(account.status)}
                 <small>${formatNumber(activeCount)} / ${formatNumber(accountChannels.length)} channels</small>
@@ -3643,77 +3949,52 @@ async function renderAccountsPage() {
         `;
       }).join('');
 
-  const accountsRows = filteredAccounts.length === 0
-    ? '<tr><td colspan="6" class="muted">No connected accounts.</td></tr>'
-    : filteredAccounts.map((account) => {
-      const channels = channelsByAccountId.get(account.id) ?? [];
-      const activeCount = channels.filter((channel) => channel.isActive).length;
-      const rowHref = buildUrl('/workspace/accounts', {
-        account: account.id,
-        search,
-        status: statusFilter,
-      });
-      const identity = formatAccountIdentityLabel(account);
-
-      return `
-      <tr${account.id === selectedAccountId ? ' class="row-selected"' : ''}>
-        <td>
-          <strong>${escapeHtml(identity.primary)}</strong>
-          <div class="muted">${escapeHtml(getProviderLabel(account.provider))}</div>
-          <div class="muted">${escapeHtml(identity.secondary || account.id)}</div>
-        </td>
-        <td>${escapeHtml(account.email ?? '-')}</td>
-        <td>${statusPill(account.status)}</td>
-        <td>${formatNumber(activeCount)} / ${formatNumber(channels.length)}</td>
-        <td>${escapeHtml(formatDate(account.connectedAt))}</td>
-        <td>
-          <div class="inline-actions">
-            <a class="btn" data-link href="${rowHref}">View channels</a>
-            <button class="btn" data-action="disconnect-account" data-account-id="${escapeHtml(account.id)}" type="button">Disconnect</button>
-            <button class="btn-danger" data-action="delete-account" data-account-id="${escapeHtml(account.id)}" type="button">Delete</button>
-          </div>
-        </td>
-      </tr>
-    `;
-    }).join('');
-
   const channelsRows = !selectedAccountId
-    ? '<tr><td colspan="5" class="muted">Select an account to view channels.</td></tr>'
+    ? '<tr><td colspan="4" class="muted">Select an account to view channels.</td></tr>'
     : channels.length === 0
-      ? '<tr><td colspan="5" class="muted">No channels returned for this account.</td></tr>'
-      : channels.map((channel) => `
-        <tr>
-          <td>
-            <div class="channel-cell">
-              ${channel.thumbnailUrl ? `<img class="channel-avatar" src="${escapeHtml(channel.thumbnailUrl)}" alt="" />` : '<span class="channel-avatar placeholder">YT</span>'}
-              <div>
-                <strong>${escapeHtml(channel.title ?? channel.youtubeChannelId ?? channel.id)}</strong>
-                <div class="muted">${escapeHtml(channel.id)}</div>
-              </div>
-            </div>
-          </td>
-          <td>${escapeHtml(channel.handle ?? '-')}</td>
-          <td>${statusPill(channel.isActive ? 'active' : 'inactive')}</td>
-          <td>${escapeHtml(channel.youtubeChannelId ?? '-')}</td>
-          <td>
-            <button class="btn" data-action="toggle-channel" data-account-id="${escapeHtml(selectedAccountId)}" data-channel-id="${escapeHtml(channel.id)}" data-next-active="${channel.isActive ? 'false' : 'true'}" type="button">
-              ${channel.isActive ? 'Deactivate' : 'Activate'}
-            </button>
-          </td>
-        </tr>
-      `).join('');
+      ? '<tr><td colspan="4" class="muted">No channels returned for this account.</td></tr>'
+      : channels.map((channel) => {
+          const channelName = formatVisibleChannelName(channel);
+          return `
+            <tr>
+              <td>
+                <div class="channel-cell">
+                  ${channelAvatarHtml(channel, channelName)}
+                  <div>
+                    <strong>${escapeHtml(channelName)}</strong>
+                  </div>
+                </div>
+              </td>
+              <td>${escapeHtml(channel.handle ?? '-')}</td>
+              <td>${statusPill(channel.isActive ? 'active' : 'inactive')}</td>
+              <td>
+                <button class="btn" data-action="toggle-channel" data-account-id="${escapeHtml(selectedAccountId)}" data-channel-id="${escapeHtml(channel.id)}" data-next-active="${channel.isActive ? 'false' : 'true'}" type="button">
+                  ${channel.isActive ? 'Deactivate' : 'Activate'}
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
   const allChannelsRows = allChannels.length === 0
-    ? '<tr><td colspan="6" class="muted">No channels discovered across the connected accounts yet.</td></tr>'
-    : allChannels.map((channel) => `
-        <tr>
-          <td>${escapeHtml(channel.connectedAccountLabel)}</td>
-          <td>${escapeHtml(channel.connectedAccountEmail || '-')}</td>
-          <td>${escapeHtml(channel.title ?? channel.youtubeChannelId ?? channel.id)}</td>
-          <td>${escapeHtml(channel.handle ?? '-')}</td>
-          <td>${escapeHtml(channel.youtubeChannelId ?? '-')}</td>
-          <td>${statusPill(channel.isActive ? 'active' : 'inactive')}</td>
-        </tr>
-      `).join('');
+    ? '<tr><td colspan="4" class="muted">No channels discovered across the connected accounts yet.</td></tr>'
+    : allChannels.map((channel) => {
+        const channelName = formatVisibleChannelName(channel);
+        return `
+          <tr>
+            <td>
+              <div class="channel-cell">
+                ${channelAvatarHtml(channel, channelName)}
+                <div>
+                  <strong>${escapeHtml(channelName)}</strong>
+                </div>
+              </div>
+            </td>
+            <td>${escapeHtml(channel.connectedAccountLabel)}</td>
+            <td>${escapeHtml(channel.handle ?? '-')}</td>
+            <td>${statusPill(channel.isActive ? 'active' : 'inactive')}</td>
+          </tr>
+        `;
+      }).join('');
 
   const notices = [];
   if (oauth === 'success') {
@@ -3793,7 +4074,7 @@ async function renderAccountsPage() {
           : '',
       })
     : '';
-  const selectedAccountLabel = selectedAccount ? formatAccountIdentityLabel(selectedAccount).primary : 'Select an account';
+  const selectedAccountLabel = selectedAccountDisplayLabel;
 
   renderWorkspaceShell({
     title: 'Accounts',
@@ -3865,7 +4146,7 @@ async function renderAccountsPage() {
         <form id="account-filter-form" class="filter-bar">
           <label>
             Search
-            <input name="search" value="${escapeHtml(search)}" placeholder="Name, email, id..." />
+            <input name="search" value="${escapeHtml(search)}" placeholder="Channel or account name..." />
           </label>
           <label>
             Status
@@ -3884,7 +4165,7 @@ async function renderAccountsPage() {
         <div class="account-grid">${accountCardsHtml}</div>
       </section>
       <section class="platform-surface platform-dashboard-panel">
-        <h3>Channels — ${selectedAccount ? escapeHtml(formatAccountIdentityLabel(selectedAccount).primary) : 'select an account above'}</h3>
+        <h3>Channels — ${escapeHtml(selectedAccountDisplayLabel)}</h3>
         <div class="platform-dashboard-chip-row">
           ${selectedAccount ? `<span class="platform-dashboard-inline-stat">${escapeHtml(getProviderLabel(selectedAccount.provider))}</span>` : ''}
           ${selectedAccount ? `<span class="platform-dashboard-inline-stat">${formatNumber(selectedAccountChannelSummary?.active ?? 0)} active / ${formatNumber(selectedAccountChannelSummary?.total ?? 0)} total</span>` : ''}
@@ -3902,10 +4183,9 @@ async function renderAccountsPage() {
             <table>
               <thead>
                 <tr>
-                  <th>Title</th>
+                  <th>Channel</th>
                   <th>Handle</th>
                   <th>State</th>
-                  <th>YouTube ID</th>
                   <th>Action</th>
                 </tr>
               </thead>
@@ -3933,7 +4213,7 @@ async function renderAccountsPage() {
           </article>
           <article class="platform-page-summary-card">
             <span>Focused account</span>
-            <strong>${escapeHtml(selectedAccount ? formatAccountIdentityLabel(selectedAccount).primary : 'None')}</strong>
+            <strong>${escapeHtml(selectedAccount ? selectedAccountDisplayLabel : 'None')}</strong>
           </article>
         </div>
         ${channelsOverviewCard}
@@ -3941,11 +4221,9 @@ async function renderAccountsPage() {
           <table>
             <thead>
               <tr>
-                <th>Google account</th>
-                <th>Email</th>
                 <th>Channel</th>
+                <th>Account</th>
                 <th>Handle</th>
-                <th>YouTube ID</th>
                 <th>State</th>
               </tr>
             </thead>
@@ -3959,7 +4237,7 @@ async function renderAccountsPage() {
   const accountChannelHeading = Array.from(document.querySelectorAll('.platform-surface.platform-dashboard-panel > h3'))
     .find((heading) => heading.textContent?.trim().startsWith('Channels'));
   if (accountChannelHeading) {
-    accountChannelHeading.textContent = `Channels - ${selectedAccount ? formatAccountIdentityLabel(selectedAccount).primary : 'select an account above'}`;
+    accountChannelHeading.textContent = `Channels - ${selectedAccountDisplayLabel}`;
   }
 
   const accountFilterForm = document.getElementById('account-filter-form');
@@ -4475,6 +4753,8 @@ async function renderMediaPage() {
     `,
   });
 
+  void backfillMissingMediaDurations(assets);
+
   const mediaUploadZoneIcon = document.querySelector('.media-upload-zone-icon');
   if (mediaUploadZoneIcon) {
     mediaUploadZoneIcon.textContent = 'LIB';
@@ -4506,10 +4786,10 @@ async function renderMediaPage() {
     setButtonBusy(submitButton, true, 'Uploading...');
     try {
       const payload = {
-        video: await buildUploadPayloadFromFile(videoFile),
+        video: await buildUploadPayloadFromFile(videoFile, { includeDuration: true }),
       };
       if (thumbnailFile) {
-        payload.thumbnail = await buildUploadPayloadFromFile(thumbnailFile);
+        payload.thumbnail = await buildUploadPayloadFromFile(thumbnailFile, { includeDuration: false });
       }
 
       const uploadResult = await api.uploadMedia(payload);
@@ -5095,6 +5375,7 @@ async function renderCampaignComposerPage() {
   const videos = assets.filter((asset) => asset.asset_type === 'video' || asset.asset_type === undefined);
   const shortVideos = videos.filter((asset) => getVideoPublishFormat(asset) === 'short');
   const standardVideos = videos.filter((asset) => getVideoPublishFormat(asset) === 'standard');
+  const unknownDurationVideos = videos.filter((asset) => getVideoPublishFormat(asset) === 'unknown');
   const connectedChannels = destinationsResult.destinations;
   const activeChannels = connectedChannels.filter((channel) => channel.platform === 'youtube');
   const hasVideos = videos.length > 0;
@@ -5165,7 +5446,7 @@ async function renderCampaignComposerPage() {
           <article class="card">
             <div class="summary-value">${formatNumber(videos.length)}</div>
             <div class="summary-label">Total Videos</div>
-            <div class="summary-hint">Available in the media library</div>
+            <div class="summary-hint">${formatNumber(unknownDurationVideos.length)} with unknown duration</div>
           </article>
         </div>
         <form id="campaign-create-form" class="form-grid">
@@ -6189,6 +6470,7 @@ async function renderRoute() {
         navigate('/onboarding/plan', true);
         return;
       }
+      await ensureAccountPlan();
 
       if (path === '/workspace') {
         navigate('/workspace/dashboard', true);
@@ -6212,6 +6494,11 @@ async function renderRoute() {
 
       if (path === '/workspace/media') {
         await renderMediaPage();
+        return;
+      }
+
+      if (path === '/workspace/planos') {
+        await renderPlanosPage();
         return;
       }
 

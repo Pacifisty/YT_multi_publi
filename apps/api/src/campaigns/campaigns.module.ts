@@ -7,6 +7,7 @@ import { DashboardService } from './dashboard.service';
 import { LaunchService } from './launch.service';
 import { PublishJobService, type PublishJobServiceOptions } from './publish-job.service';
 import type { AccountPlanService } from '../account-plan/account-plan.service';
+import type { ChannelTokenResolutionOptions } from '../integrations/youtube/channel-token-resolver';
 
 export interface CampaignsModuleInstance {
   campaignService: CampaignService;
@@ -23,6 +24,10 @@ export interface CampaignsModuleOptions extends CampaignServiceOptions {
   jobServiceOptions?: PublishJobServiceOptions;
   auditRepository?: AuditEventRepository;
   accountPlanService?: AccountPlanService;
+  getAccessTokenForChannel?: (
+    channelId: string,
+    options?: ChannelTokenResolutionOptions,
+  ) => Promise<string>;
 }
 
 export function createCampaignsModule(options: CampaignsModuleOptions = {}): CampaignsModuleInstance {
@@ -35,7 +40,12 @@ export function createCampaignsModule(options: CampaignsModuleOptions = {}): Cam
   });
   const launchService = new LaunchService({ campaignService, jobService, now: options.now });
   const statusService = new CampaignStatusService({ campaignService, jobService, now: options.now });
-  const dashboardService = new DashboardService({ campaignService, jobService, auditService });
+  const dashboardService = new DashboardService({
+    campaignService,
+    jobService,
+    auditService,
+    getAccessTokenForChannel: options.getAccessTokenForChannel,
+  });
   const campaignsController = new CampaignsController(
     campaignService,
     sessionGuard,

@@ -133,12 +133,92 @@ describe('DashboardService.getStats', () => {
     expect(main.published).toBe(2);
     expect(main.failed).toBe(0);
     expect(main.successRate).toBe(100);
+    expect(main.totalViews).toBe(0);
+    expect(main.topVideoId).toBeNull();
+    expect(main.topVideoTitle).toBeNull();
+    expect(main.topVideoViews).toBe(0);
 
     const backup = stats.channels.find((c) => c.channelId === 'ch-backup')!;
     expect(backup.totalTargets).toBe(1);
     expect(backup.published).toBe(0);
     expect(backup.failed).toBe(1);
     expect(backup.successRate).toBe(0);
+    expect(backup.totalViews).toBe(0);
+    expect(backup.topVideoId).toBeNull();
+    expect(backup.topVideoTitle).toBeNull();
+    expect(backup.topVideoViews).toBe(0);
+  });
+
+  test('aggregates per-channel top video and total views when video stats are available', async () => {
+    const campaignRepo = new InMemoryCampaignRepository();
+    const campaignService = new CampaignService({ repository: campaignRepo });
+    const jobRepo = new InMemoryPublishJobRepository();
+    const jobService = new PublishJobService({ repository: jobRepo });
+
+    const tokenRequests: string[] = [];
+    const statsRequests: Array<{ accessToken: string; videoIds: string[] }> = [];
+    const statsByVideoId: Record<string, { title: string; views: number }> = {
+      'yt-1': { title: 'Alpha One', views: 140 },
+      'yt-2': { title: 'Alpha Two', views: 390 },
+      'yt-3': { title: 'Beta One', views: 220 },
+    };
+
+    const dashboard = new DashboardService({
+      campaignService,
+      jobService,
+      getAccessTokenForChannel: async (channelId) => {
+        tokenRequests.push(channelId);
+        return `token:${channelId}`;
+      },
+      fetchVideoStats: async (accessToken, videoIds) => {
+        statsRequests.push({ accessToken, videoIds: [...videoIds] });
+        return videoIds.map((videoId) => ({
+          videoId,
+          title: statsByVideoId[videoId]?.title ?? null,
+          views: statsByVideoId[videoId]?.views ?? 0,
+        }));
+      },
+    });
+
+    const { campaign: campaignOne } = await campaignService.createCampaign({ title: 'Views 1', videoAssetId: 'a1' });
+    const { target: alphaOne } = await campaignService.addTarget(campaignOne.id, {
+      channelId: 'ch-alpha',
+      videoTitle: 'Alpha 1',
+      videoDescription: 'D1',
+    });
+    const { target: betaOne } = await campaignService.addTarget(campaignOne.id, {
+      channelId: 'ch-beta',
+      videoTitle: 'Beta 1',
+      videoDescription: 'D3',
+    });
+
+    const { campaign: campaignTwo } = await campaignService.createCampaign({ title: 'Views 2', videoAssetId: 'a2' });
+    const { target: alphaTwo } = await campaignService.addTarget(campaignTwo.id, {
+      channelId: 'ch-alpha',
+      videoTitle: 'Alpha 2',
+      videoDescription: 'D2',
+    });
+
+    await campaignService.updateTargetStatus(campaignOne.id, alphaOne.id, 'publicado', { youtubeVideoId: 'yt-1' });
+    await campaignService.updateTargetStatus(campaignOne.id, betaOne.id, 'publicado', { youtubeVideoId: 'yt-3' });
+    await campaignService.updateTargetStatus(campaignTwo.id, alphaTwo.id, 'publicado', { youtubeVideoId: 'yt-2' });
+
+    const stats = await dashboard.getStats();
+
+    const alpha = stats.channels.find((channel) => channel.channelId === 'ch-alpha')!;
+    expect(alpha.totalViews).toBe(530);
+    expect(alpha.topVideoId).toBe('yt-2');
+    expect(alpha.topVideoTitle).toBe('Alpha Two');
+    expect(alpha.topVideoViews).toBe(390);
+
+    const beta = stats.channels.find((channel) => channel.channelId === 'ch-beta')!;
+    expect(beta.totalViews).toBe(220);
+    expect(beta.topVideoId).toBe('yt-3');
+    expect(beta.topVideoTitle).toBe('Beta One');
+    expect(beta.topVideoViews).toBe(220);
+
+    expect(tokenRequests.sort()).toEqual(['ch-alpha', 'ch-beta']);
+    expect(statsRequests).toHaveLength(2);
   });
 
   test('includes job statistics', async () => {

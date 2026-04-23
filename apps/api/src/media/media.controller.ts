@@ -230,6 +230,31 @@ export class MediaController {
     return { status: 200, body: { asset } };
   }
 
+  async updateAssetMetadata(request: MediaRequest): Promise<{ status: number; body: unknown }> {
+    const guardResult = this.sessionGuard.check(request);
+    if (!guardResult.allowed) {
+      return { status: guardResult.status, body: { error: guardResult.reason } };
+    }
+
+    const id = request.params?.id;
+    if (!id) {
+      return { status: 400, body: { error: 'Missing asset id' } };
+    }
+
+    const body = request.body as { durationSeconds?: unknown } | undefined;
+    const durationSeconds = Number(body?.durationSeconds);
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+      return { status: 400, body: { error: 'durationSeconds must be a positive number.' } };
+    }
+
+    const asset = await this.mediaService.updateAssetDuration(id, durationSeconds, request.session?.adminUser?.email);
+    if (!asset) {
+      return { status: 404, body: { error: 'Video asset not found' } };
+    }
+
+    return { status: 200, body: { asset } };
+  }
+
   async deleteAsset(request: MediaRequest): Promise<{ status: number; body: unknown }> {
     const guardResult = this.sessionGuard.check(request);
     if (!guardResult.allowed) {

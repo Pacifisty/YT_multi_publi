@@ -8,6 +8,16 @@ export interface ChannelStats {
   published: number;
   failed: number;
   successRate: number;
+  totalViews: number;
+  topVideoId: string | null;
+  topVideoTitle: string | null;
+  topVideoViews: number;
+}
+
+interface DashboardVideoStats {
+  videoId: string;
+  title: string | null;
+  views: number;
 }
 
 export interface DashboardStats {
@@ -70,6 +80,8 @@ export interface DashboardServiceOptions {
   campaignService: CampaignService;
   jobService: PublishJobService;
   auditService?: AuditEventService;
+  getAccessTokenForChannel?: (channelId: string) => Promise<string>;
+  fetchVideoStats?: (accessToken: string, videoIds: string[]) => Promise<DashboardVideoStats[]>;
 }
 
 export class DashboardService {
@@ -83,11 +95,63 @@ export class DashboardService {
   private readonly campaignService: CampaignService;
   private readonly jobService: PublishJobService;
   private readonly auditService?: AuditEventService;
+  private readonly getAccessTokenForChannel?: (channelId: string) => Promise<string>;
+  private readonly fetchVideoStatsFn?: (accessToken: string, videoIds: string[]) => Promise<DashboardVideoStats[]>;
 
   constructor(options: DashboardServiceOptions) {
     this.campaignService = options.campaignService;
     this.jobService = options.jobService;
     this.auditService = options.auditService;
+    this.getAccessTokenForChannel = options.getAccessTokenForChannel;
+    this.fetchVideoStatsFn = options.fetchVideoStats ?? defaultFetchVideoStats;
+  }
+
+  private async loadVideoStatsByChannel(
+    publishedTargets: Array<Pick<CampaignTargetRecord, 'channelId' | 'youtubeVideoId'>>,
+  ): Promise<Map<string, Map<string, DashboardVideoStats>>> {
+    const statsByChannel = new Map<string, Map<string, DashboardVideoStats>>();
+    if (!this.getAccessTokenForChannel || !this.fetchVideoStatsFn || publishedTargets.length === 0) {
+      return statsByChannel;
+    }
+
+    const videoIdsByChannel = new Map<string, Set<string>>();
+    for (const target of publishedTargets) {
+      if (!target.channelId || !target.youtubeVideoId) {
+        continue;
+      }
+      if (!videoIdsByChannel.has(target.channelId)) {
+        videoIdsByChannel.set(target.channelId, new Set());
+      }
+      videoIdsByChannel.get(target.channelId)!.add(target.youtubeVideoId);
+    }
+
+    await Promise.all(
+      [...videoIdsByChannel.entries()].map(async ([channelId, videoIdSet]) => {
+        const videoIds = [...videoIdSet];
+        if (videoIds.length === 0) {
+          return;
+        }
+
+        try {
+          const accessToken = await this.getAccessTokenForChannel!(channelId);
+          const channelStats = new Map<string, DashboardVideoStats>();
+          for (let index = 0; index < videoIds.length; index += 50) {
+            const chunk = videoIds.slice(index, index + 50);
+            const stats = await this.fetchVideoStatsFn!(accessToken, chunk);
+            for (const stat of stats) {
+              channelStats.set(stat.videoId, stat);
+            }
+          }
+          if (channelStats.size > 0) {
+            statsByChannel.set(channelId, channelStats);
+          }
+        } catch {
+          // Swallow per-channel stats failures to keep dashboard available.
+        }
+      }),
+    );
+
+    return statsByChannel;
   }
 
   private isTerminalTarget(target: Pick<CampaignTargetRecord, 'status' | 'youtubeVideoId' | 'errorMessage'>): boolean {
@@ -303,16 +367,43 @@ export class DashboardService {
     }
     const latestAuditEvent = scopedAuditEvents[0] ?? null;
 
+    const publishedTargets = allTargets.filter((target) => target.status === 'publicado' && Boolean(target.youtubeVideoId));
+    const videoStatsByChannel = await this.loadVideoStatsByChannel(
+      publishedTargets.map((target) => ({
+        channelId: target.channelId,
+        youtubeVideoId: target.youtubeVideoId,
+      })),
+    );
+
     // Channel stats
     const channels: ChannelStats[] = [];
     for (const [channelId, data] of channelMap) {
       const termTotal = data.published + data.failed;
+      const channelVideoStats = videoStatsByChannel.get(channelId);
+      let totalViews = 0;
+      let topVideoId: string | null = null;
+      let topVideoTitle: string | null = null;
+      let topVideoViews = 0;
+      if (channelVideoStats) {
+        for (const stat of channelVideoStats.values()) {
+          totalViews += stat.views;
+          if (stat.views > topVideoViews) {
+            topVideoViews = stat.views;
+            topVideoId = stat.videoId;
+            topVideoTitle = stat.title;
+          }
+        }
+      }
       channels.push({
         channelId,
         totalTargets: data.total,
         published: data.published,
         failed: data.failed,
         successRate: termTotal > 0 ? Math.round((data.published / termTotal) * 10000) / 100 : 0,
+        totalViews,
+        topVideoId,
+        topVideoTitle,
+        topVideoViews,
       });
     }
 
@@ -358,4 +449,45 @@ export class DashboardService {
       channels,
     };
   }
+}
+
+async function defaultFetchVideoStats(accessToken: string, videoIds: string[]): Promise<DashboardVideoStats[]> {
+  if (videoIds.length === 0) {
+    return [];
+  }
+
+  const { google } = await import('googleapis');
+  const oauth2Client = new google.auth.OAuth2();
+  oauth2Client.setCredentials({ access_token: accessToken });
+
+  const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+  const response = await youtube.videos.list({
+    part: ['snippet', 'statistics'],
+    id: videoIds,
+    maxResults: 50,
+  });
+
+  const items = response.data.items ?? [];
+  return items
+    .map((item): DashboardVideoStats | null => {
+      const videoId = item.id ?? null;
+      if (!videoId) {
+        return null;
+      }
+
+      const viewsRaw = item.statistics?.viewCount;
+      const parsedViews = typeof viewsRaw === 'string'
+        ? Number.parseInt(viewsRaw, 10)
+        : typeof viewsRaw === 'number'
+          ? viewsRaw
+          : 0;
+      const views = Number.isFinite(parsedViews) && parsedViews > 0 ? parsedViews : 0;
+
+      return {
+        videoId,
+        title: item.snippet?.title ?? null,
+        views,
+      };
+    })
+    .filter((entry): entry is DashboardVideoStats => entry !== null);
 }

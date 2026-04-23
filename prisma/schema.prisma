@@ -22,15 +22,16 @@ model AdminUser {
 }
 
 model AccountPlan {
-  email            String   @id
-  plan             String
-  tokens           Int
-  lastDailyVisitAt DateTime? @map("last_daily_visit_at")
-  billingStartedAt DateTime? @map("billing_started_at")
-  billingExpiresAt DateTime? @map("billing_expires_at")
-  selectedAt       DateTime? @map("selected_at")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  email               String    @id
+  plan                String
+  tokens              Int
+  lastDailyVisitAt    DateTime? @map("last_daily_visit_at")
+  lastMonthlyGrantAt  DateTime? @map("last_monthly_grant_at")
+  billingStartedAt    DateTime? @map("billing_started_at")
+  billingExpiresAt    DateTime? @map("billing_expires_at")
+  selectedAt          DateTime? @map("selected_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
   @@map("account_plans")
 }

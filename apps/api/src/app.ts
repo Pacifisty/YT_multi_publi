@@ -74,11 +74,13 @@ export function createApp(config: AppConfig = {}): AppInstance {
     new SessionGuard({ allowPendingPlanSelection: true }),
     authModule.authController,
   );
+  const accountsModule = createAccountsModule(config.accountsModuleOptions);
   const campaignsModule = createCampaignsModule({
     ...config.campaignsModuleOptions,
     accountPlanService,
+    getAccessTokenForChannel: (channelId, options) =>
+      accountsModule.accountsService.resolveAccessTokenForChannel(channelId, options),
   });
-  const accountsModule = createAccountsModule(config.accountsModuleOptions);
   const mediaModule = createMediaModule(config.mediaModuleOptions);
   let processingQueue = false;
 

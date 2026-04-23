@@ -54,6 +54,21 @@ export class AccountPlanController {
     };
   }
 
+  async claimMonthlyGrant(request: SessionRequestLike) {
+    const guardResult = this.sessionGuard.check(request);
+    if (!guardResult.allowed) {
+      return { status: guardResult.status, body: { error: guardResult.reason } };
+    }
+
+    const email = request.session?.adminUser?.email;
+    if (!email) {
+      return { status: 401, body: { error: 'Authentication required.' } };
+    }
+
+    const result = await this.accountPlanService.claimMonthlyGrant(email);
+    return { status: 200, body: result };
+  }
+
   async selectPlan(request: AccountPlanRequest) {
     const guardResult = this.sessionGuard.check(request);
     if (!guardResult.allowed) {

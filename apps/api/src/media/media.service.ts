@@ -202,6 +202,27 @@ export class MediaService {
     return asset;
   }
 
+  async updateAssetDuration(id: string, durationSeconds: number, ownerEmail?: string): Promise<MediaAssetResponseDto | null> {
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+      return null;
+    }
+
+    const asset = await this.getAsset(id, ownerEmail);
+    if (!asset || asset.asset_type !== 'video') {
+      return null;
+    }
+
+    const updated = await this.repository.update(asset.id, {
+      duration_seconds: Math.round(durationSeconds),
+    });
+    if (!updated) {
+      return null;
+    }
+
+    const thumbnail = await this.repository.findThumbnailByVideoId(updated.id);
+    return toResponseDto(updated, thumbnail ?? undefined);
+  }
+
   async getAssetFile(id: string): Promise<MediaAssetFileRecord | null> {
     const asset = await this.repository.findById(id);
     if (!asset) {

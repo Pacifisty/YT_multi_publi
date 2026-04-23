@@ -224,8 +224,8 @@ const ACCOUNT_PLAN_OPTIONS = [
 ];
 const BACKGROUND_THEME_OPTIONS = [
   {
-    id: 'orbital-neon-night',
-    label: 'Orbital Neon',
+    id: 'platform-neon-night',
+    label: 'Platform Neon',
     type: 'dark',
     appearance: 'dark',
     code: '#05020A -> #0F1722',
@@ -247,8 +247,8 @@ const BACKGROUND_THEME_OPTIONS = [
     headerBackground: 'linear-gradient(135deg, rgba(7, 3, 11, 0.98) 0%, rgba(29, 9, 32, 0.96) 54%, rgba(8, 20, 27, 0.92) 100%)',
   },
   {
-    id: 'orbital-instagram-spectrum',
-    label: 'Orbital Spectrum',
+    id: 'platform-instagram-spectrum',
+    label: 'Platform Spectrum',
     type: 'dark',
     appearance: 'dark',
     code: '#120614 -> #FCB045',
@@ -270,8 +270,8 @@ const BACKGROUND_THEME_OPTIONS = [
     headerBackground: 'linear-gradient(135deg, rgba(18, 6, 20, 0.98) 0%, rgba(82, 16, 86, 0.92) 55%, rgba(252, 176, 69, 0.82) 100%)',
   },
   {
-    id: 'orbital-youtube-redline',
-    label: 'Orbital Redline',
+    id: 'platform-youtube-redline',
+    label: 'Platform Redline',
     type: 'dark',
     appearance: 'dark',
     code: '#050505 -> #FF0033',
@@ -990,21 +990,21 @@ const FONT_THEME_OPTIONS = [
   { id: 'mintcream', label: 'MintCream', color: '#F5FFFA' },
 ];
 
-const ORBITAL_THEME_OPTIONS = [
+const PLATFORM_THEME_OPTIONS = [
   {
-    id: 'orbital-neon-night',
+    id: 'platform-neon-night',
     platform: 'tiktok',
     label: 'Neon Night',
     detail: 'TikTok mode',
   },
   {
-    id: 'orbital-instagram-spectrum',
+    id: 'platform-instagram-spectrum',
     platform: 'instagram',
     label: 'Spectrum',
     detail: 'Instagram mode',
   },
   {
-    id: 'orbital-youtube-redline',
+    id: 'platform-youtube-redline',
     platform: 'youtube',
     label: 'Redline',
     detail: 'YouTube mode',
@@ -1318,19 +1318,19 @@ function settingsPickerHtml(prefix) {
   `;
 }
 
-function renderOrbitalThemeSelector(options = {}) {
+function renderPlatformThemeSelector(options = {}) {
   const compactClass = options.compact ? ' compact' : '';
-  const buttonsHtml = ORBITAL_THEME_OPTIONS.map((option) => {
+  const buttonsHtml = PLATFORM_THEME_OPTIONS.map((option) => {
     const selectedClass = option.id === state.backgroundTheme ? ' active' : '';
     return `
       <button
         type="button"
-        class="platform-orbital-theme-button${selectedClass}"
-        data-orbital-theme-option="${option.id}"
+        class="platform-theme-button${selectedClass}"
+        data-platform-theme-option="${option.id}"
         title="${escapeHtml(option.detail)}"
       >
-        <span class="platform-orbital-theme-icon ${escapeHtml(option.platform)}">${renderPlatformGlyph(option.platform, 'small')}</span>
-        <span class="platform-orbital-theme-copy">
+        <span class="platform-theme-icon ${escapeHtml(option.platform)}">${renderPlatformGlyph(option.platform, 'small')}</span>
+        <span class="platform-theme-copy">
           <strong>${escapeHtml(option.label)}</strong>
           <small>${escapeHtml(option.detail)}</small>
         </span>
@@ -1339,16 +1339,16 @@ function renderOrbitalThemeSelector(options = {}) {
   }).join('');
 
   return `
-    <div class="platform-orbital-theme-strip${compactClass}">
+    <div class="platform-theme-strip${compactClass}">
       ${buttonsHtml}
     </div>
   `;
 }
 
-function bindOrbitalThemePicker(onSelected) {
-  document.querySelectorAll('[data-orbital-theme-option]').forEach((element) => {
+function bindPlatformThemePicker(onSelected) {
+  document.querySelectorAll('[data-platform-theme-option]').forEach((element) => {
     element.addEventListener('click', (event) => {
-      const selectedThemeId = event.currentTarget?.getAttribute('data-orbital-theme-option');
+      const selectedThemeId = event.currentTarget?.getAttribute('data-platform-theme-option');
       if (!selectedThemeId) return;
       applyBackgroundTheme(selectedThemeId);
       onSelected();
@@ -1612,24 +1612,24 @@ function renderWorkspaceShell(options) {
   ` : '';
 
   const isWorkspaceRoute = pathname.startsWith('/workspace');
-  const hasOrbitalDashboardContent = typeof options.contentHtml === 'string'
+  const hasPlatformDashboardContent = typeof options.contentHtml === 'string'
     && options.contentHtml.includes('id="od-root"');
-  const useOrbitalShell = isWorkspaceRoute && !hasOrbitalDashboardContent;
+  const usePlatformShell = isWorkspaceRoute && !hasPlatformDashboardContent;
   const currentTabLabel = tabs.find((tab) => tab.id === currentTab)?.label ?? 'Workspace';
 
   const pageClasses = ['page'];
   if (isWorkspaceRoute) {
     pageClasses.push('workspace-page', `workspace-page-${currentTab}`);
   }
-  if (useOrbitalShell) {
-    pageClasses.push('workspace-page-orbital');
+  if (usePlatformShell) {
+    pageClasses.push('workspace-page-platform');
   }
 
   const shellHeaderHtml = (options.title || options.subtitle || options.actionsHtml)
     ? `
       <section class="od-shell-head">
         <div class="od-shell-head-main">
-          <p class="od-shell-kicker">Orbital ${escapeHtml(currentTabLabel)}</p>
+          <p class="od-shell-kicker">Platform ${escapeHtml(currentTabLabel)}</p>
           ${options.title ? `<h1 class="route-title">${escapeHtml(options.title)}</h1>` : ''}
           ${options.subtitle ? `<p class="muted">${escapeHtml(options.subtitle)}</p>` : ''}
         </div>
@@ -1650,9 +1650,9 @@ function renderWorkspaceShell(options) {
     `
     : '';
 
-  const mainContentHtml = useOrbitalShell
+  const mainContentHtml = usePlatformShell
     ? `
-      <main class="container stack workspace-main workspace-main-orbital">
+      <main class="container stack workspace-main workspace-main-platform">
         <section class="od-shell">
           <div class="od-bracket od-bracket-tl"></div>
           <div class="od-bracket od-bracket-tr"></div>
@@ -1683,7 +1683,7 @@ function renderWorkspaceShell(options) {
       <header class="header">
         <div class="container header-shell">
           <div class="header-brand-block">
-            <span class="brand-kicker">Orbital Command</span>
+            <span class="brand-kicker">Platform Command</span>
             <div class="brand">
               Plataform Multi Publi
             </div>
@@ -1826,14 +1826,14 @@ function renderLoginPage(options = {}) {
   const combinedNoticeHtml = `${renderUiNotice()}${options.error ? `<div class="notice error">${escapeHtml(options.error)}</div>` : ''}`;
 
   root.innerHTML = `
-    <div class="orbital-login">
-      <div class="orbital-panel">
-        <p class="orbital-brand-name">YT Multi Publi</p>
-        <p class="orbital-brand-tagline">Publish to every platform in one click.</p>
-        <div class="orbital-scene">
-          <div class="orbital-ring orbital-ring-outer"></div>
-          <div class="orbital-ring orbital-ring-inner"></div>
-          <div class="orbital-center">🚀</div>
+    <div class="platform-classic-login">
+      <div class="platform-classic-panel">
+        <p class="platform-classic-brand-name">YT Multi Publi</p>
+        <p class="platform-classic-brand-tagline">Publish to every platform in one click.</p>
+        <div class="platform-classic-scene">
+          <div class="platform-classic-ring platform-classic-ring-outer"></div>
+          <div class="platform-classic-ring platform-classic-ring-inner"></div>
+          <div class="platform-classic-center">🚀</div>
           <div class="orbit-arm">
             <div class="orbit-icon">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1868,16 +1868,16 @@ function renderLoginPage(options = {}) {
             </div>
           </div>
         </div>
-        <div class="orbital-platform-labels">
+        <div class="platform-classic-labels">
           <span>YouTube</span><span>·</span><span>Instagram</span><span>·</span><span>TikTok</span>
         </div>
       </div>
 
-      <div class="orbital-form-panel">
-        <div class="orbital-toolbar">${settingsPicker}</div>
-        <div class="orbital-form-wrap">
+      <div class="platform-classic-form-panel">
+        <div class="platform-classic-toolbar">${settingsPicker}</div>
+        <div class="platform-classic-form-wrap">
           ${combinedNoticeHtml}
-          <div class="orbital-form-header">
+          <div class="platform-classic-form-header">
             <div class="auth-mode-switch" role="tablist" aria-label="Authentication mode">
               <button class="${mode === 'login' ? 'btn-primary' : 'btn'}" type="button" data-auth-mode="login">Sign in</button>
               <button class="${mode === 'register' ? 'btn-primary' : 'btn'}" type="button" data-auth-mode="register">Create account</button>
@@ -1997,7 +1997,7 @@ function renderRichLoginPage(options = {}) {
   const settingsPicker = settingsPickerHtml('login');
   const combinedNoticeHtml = `${renderUiNotice()}${options.error ? `<div class="notice error">${escapeHtml(options.error)}</div>` : ''}`;
   const liveClock = formatClockLabel();
-  const orbitalThemeStripHtml = renderOrbitalThemeSelector({ compact: true });
+  const platformThemeStripHtml = renderPlatformThemeSelector({ compact: true });
   const securitySignals = [
     { label: 'Secure relay', value: 'Online' },
     { label: 'Platforms ready', value: '3 nodes' },
@@ -2045,7 +2045,7 @@ function renderRichLoginPage(options = {}) {
       <div class="platform-login-verify-beam" aria-hidden="true"></div>
       <div class="platform-login-verify-copy">
         <span class="platform-login-kicker">Step 3 of 3</span>
-        <h3>Syncing the orbital workspace</h3>
+        <h3>Syncing the platform workspace</h3>
         <p>Hold on while we validate auth, load channel state and prepare the dashboard surfaces.</p>
       </div>
       <div class="platform-login-verify-list">
@@ -2081,7 +2081,7 @@ function renderRichLoginPage(options = {}) {
               <span class="platform-login-live-dot"></span>
               Secure relay online ${escapeHtml(liveClock)}
             </div>
-            ${orbitalThemeStripHtml}
+            ${platformThemeStripHtml}
           </div>
         </div>
 
@@ -2090,7 +2090,7 @@ function renderRichLoginPage(options = {}) {
           <div class="platform-login-orbit-ring middle"></div>
           <div class="platform-login-orbit-ring inner"></div>
           <div class="platform-login-orbit-core">
-            <span class="platform-login-orbit-core-kicker">Orbital sync</span>
+            <span class="platform-login-orbit-core-kicker">Platform sync</span>
             <strong>3 active nodes</strong>
             <span>Publishing grid</span>
           </div>
@@ -2306,7 +2306,7 @@ function renderRichLoginPage(options = {}) {
   bindBackgroundPicker(() => {
     renderRichLoginPage({ ...options, mode, step, draft });
   });
-  bindOrbitalThemePicker(() => {
+  bindPlatformThemePicker(() => {
     renderRichLoginPage({ ...options, mode, step, draft, verifying: false });
   });
   bindUiNoticeDismiss();
@@ -3079,7 +3079,7 @@ function shouldAutoRefreshDashboard(stats) {
 }
 
 async function renderDashboardPage() {
-  return renderOrbitalDashboardPage();
+  return renderPlatformDashboardPage();
   const result = await api.dashboard();
   if (!result.ok) {
     if (result.status === 401) {
@@ -3379,7 +3379,7 @@ async function renderDashboardPage() {
   }
 }
 
-// ─── Orbital Dashboard design system ────────────────────────────────────────
+// ─── Platform Dashboard design system ────────────────────────────────────────
 
 function withAlpha(color, alpha, fallback = `rgba(100, 116, 139, ${alpha})`) {
   if (typeof color !== 'string' || !color.trim()) {
@@ -3492,7 +3492,7 @@ function buildOdGlobe() {
   return `<svg viewBox="-1.1 -1.1 2.2 2.2" class="od-globe-svg">${latLines}${dots.join('')}</svg>`;
 }
 
-async function renderOrbitalDashboardPage() {
+async function renderPlatformDashboardPage() {
   const [result, recentCampaignsResult] = await Promise.all([
     api.dashboard(),
     api.campaigns({ limit: 8, offset: 0 }),
@@ -3632,7 +3632,7 @@ async function renderOrbitalDashboardPage() {
       </div>
 
       <div class="od-topbar">
-        <div class="od-brand od-mono">ORBITAL COMMAND</div>
+        <div class="od-brand od-mono">PLATFORM COMMAND</div>
         <div class="od-topbar-right od-muted od-mono">
           <span id="od-theme-name">THEME: ${escapeHtml(selectedBackgroundTheme.label)}</span>
           <span class="od-live-dot"></span>${escapeHtml(liveClock)}
@@ -3700,7 +3700,7 @@ async function renderOrbitalDashboardPage() {
 
   if (shouldAutoRefreshDashboard(stats)) {
     state.autoRefreshTimer = setTimeout(() => {
-      if (window.location.pathname === '/workspace/dashboard') void renderOrbitalDashboardPage();
+      if (window.location.pathname === '/workspace/dashboard') void renderPlatformDashboardPage();
     }, 4000);
   }
 }

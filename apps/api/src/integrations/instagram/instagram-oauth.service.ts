@@ -51,6 +51,8 @@ export class InstagramOauthService {
     }
 
     const url = new URL('https://www.instagram.com/oauth/authorize');
+    url.searchParams.set('enable_fb_login', '0');
+    url.searchParams.set('force_authentication', '1');
     url.searchParams.set('client_id', clientId);
     url.searchParams.set('redirect_uri', redirectUri);
     url.searchParams.set('response_type', 'code');

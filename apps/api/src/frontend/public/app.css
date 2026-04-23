@@ -537,12 +537,12 @@ p {
   overflow-wrap: anywhere;
 }
 
-.background-card[data-background-theme-option^="orbital-"] .background-card-body strong {
+.background-card[data-background-theme-option^="platform-"] .background-card-body strong {
   font-size: 0.84rem;
   line-height: 1.4;
 }
 
-.background-card[data-background-theme-option^="orbital-"] .background-card-preview {
+.background-card[data-background-theme-option^="platform-"] .background-card-preview {
   min-height: 86px;
 }
 
@@ -1749,15 +1749,15 @@ pre {
 }
 
 /* =========================================
-   Login Orbital Redesign
+   Login Platform Redesign
    ========================================= */
-.orbital-login {
+.platform-classic-login {
   min-height: 100vh;
   display: grid;
   grid-template-columns: 1fr 1fr;
 }
 
-.orbital-panel {
+.platform-classic-panel {
   background: var(--header-background);
   display: flex;
   flex-direction: column;
@@ -1769,7 +1769,7 @@ pre {
   gap: 4px;
 }
 
-.orbital-panel::before {
+.platform-classic-panel::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -1777,7 +1777,7 @@ pre {
   pointer-events: none;
 }
 
-.orbital-brand-name {
+.platform-classic-brand-name {
   font-size: 1.8rem;
   font-weight: 800;
   color: var(--header-text);
@@ -1788,7 +1788,7 @@ pre {
   z-index: 1;
 }
 
-.orbital-brand-tagline {
+.platform-classic-brand-tagline {
   font-size: 0.92rem;
   color: rgba(248, 250, 252, 0.6);
   text-align: center;
@@ -1797,7 +1797,7 @@ pre {
   z-index: 1;
 }
 
-.orbital-scene {
+.platform-classic-scene {
   position: relative;
   width: 220px;
   height: 220px;
@@ -1805,22 +1805,22 @@ pre {
   flex-shrink: 0;
 }
 
-.orbital-ring {
+.platform-classic-ring {
   position: absolute;
   border-radius: 50%;
   border: 1.5px solid rgba(255, 255, 255, 0.12);
 }
 
-.orbital-ring-outer {
+.platform-classic-ring-outer {
   inset: 0;
 }
 
-.orbital-ring-inner {
+.platform-classic-ring-inner {
   inset: 28px;
   border-color: rgba(255, 255, 255, 0.07);
 }
 
-.orbital-center {
+.platform-classic-center {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -1880,7 +1880,7 @@ pre {
   display: block;
 }
 
-.orbital-platform-labels {
+.platform-classic-labels {
   display: flex;
   gap: 8px;
   align-items: center;
@@ -1893,7 +1893,7 @@ pre {
   z-index: 1;
 }
 
-.orbital-form-panel {
+.platform-classic-form-panel {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1903,7 +1903,7 @@ pre {
   position: relative;
 }
 
-.orbital-toolbar {
+.platform-classic-toolbar {
   position: absolute;
   top: 20px;
   right: 20px;
@@ -1912,18 +1912,18 @@ pre {
   gap: 8px;
 }
 
-.orbital-form-wrap {
+.platform-classic-form-wrap {
   width: min(400px, 100%);
   display: grid;
   gap: 22px;
 }
 
-.orbital-form-header {
+.platform-classic-form-header {
   display: grid;
   gap: 10px;
 }
 
-.orbital-form-header h2 {
+.platform-classic-form-header h2 {
   margin: 0;
   font-size: 1.55rem;
   font-weight: 700;
@@ -1931,7 +1931,7 @@ pre {
   color: var(--text);
 }
 
-.orbital-form-header p {
+.platform-classic-form-header p {
   margin: 0;
   font-size: 0.88rem;
   color: var(--text-subtle);
@@ -2188,20 +2188,20 @@ pre {
 }
 
 @media (max-width: 800px) {
-  .orbital-login {
+  .platform-classic-login {
     grid-template-columns: 1fr;
   }
 
-  .orbital-panel {
+  .platform-classic-panel {
     display: none;
   }
 
-  .orbital-form-panel {
+  .platform-classic-form-panel {
     min-height: 100vh;
     padding: 32px 24px;
   }
 
-  .orbital-toolbar {
+  .platform-classic-toolbar {
     top: 16px;
     right: 16px;
   }
@@ -2348,7 +2348,7 @@ pre {
 }
 
 /* =========================================
-   Platform Orbital Login
+   Platform Login
    ========================================= */
 .platform-glyph {
   display: inline-flex;
@@ -2662,17 +2662,17 @@ pre {
   text-transform: uppercase;
 }
 
-.platform-orbital-theme-strip {
+.platform-theme-strip {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
 }
 
-.platform-orbital-theme-strip.compact {
+.platform-theme-strip.compact {
   gap: 8px;
 }
 
-.platform-orbital-theme-button {
+.platform-theme-button {
   appearance: none;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.06);
@@ -2687,19 +2687,19 @@ pre {
   min-height: 54px;
 }
 
-.platform-orbital-theme-button:hover {
+.platform-theme-button:hover {
   transform: translateY(-1px);
   border-color: color-mix(in srgb, var(--primary) 46%, rgba(255, 255, 255, 0.16));
   box-shadow: 0 16px 32px color-mix(in srgb, var(--primary) 14%, transparent);
 }
 
-.platform-orbital-theme-button.active {
+.platform-theme-button.active {
   border-color: color-mix(in srgb, var(--primary) 62%, rgba(255, 255, 255, 0.16));
   background: color-mix(in srgb, var(--primary-soft) 56%, rgba(255, 255, 255, 0.04));
   box-shadow: 0 18px 38px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
-.platform-orbital-theme-icon {
+.platform-theme-icon {
   width: 36px;
   height: 36px;
   display: grid;
@@ -2710,30 +2710,30 @@ pre {
   flex: 0 0 auto;
 }
 
-.platform-orbital-theme-icon.youtube {
+.platform-theme-icon.youtube {
   background: rgba(255, 0, 51, 0.12);
 }
 
-.platform-orbital-theme-icon.instagram {
+.platform-theme-icon.instagram {
   background: rgba(225, 48, 108, 0.12);
 }
 
-.platform-orbital-theme-icon.tiktok {
+.platform-theme-icon.tiktok {
   background: rgba(64, 224, 208, 0.12);
 }
 
-.platform-orbital-theme-copy {
+.platform-theme-copy {
   display: grid;
   gap: 2px;
   text-align: left;
 }
 
-.platform-orbital-theme-copy strong {
+.platform-theme-copy strong {
   font-size: 0.84rem;
   color: inherit;
 }
 
-.platform-orbital-theme-copy small {
+.platform-theme-copy small {
   color: var(--text-subtle);
   font-size: 0.7rem;
   letter-spacing: 0.08em;
@@ -3060,7 +3060,7 @@ pre {
 }
 
 /* =========================================
-   Platform Orbital Dashboard
+   Platform Dashboard
    ========================================= */
 .platform-surface {
   background: color-mix(in srgb, var(--surface) 90%, transparent);
@@ -3838,7 +3838,7 @@ pre {
     align-items: stretch;
   }
 
-  .platform-orbital-theme-button,
+  .platform-theme-button,
   .platform-dashboard-activity-item,
   .platform-dashboard-alert-actions {
     width: 100%;
@@ -4032,7 +4032,7 @@ pre {
 }
 
 /* =========================================
-   Orbital Dashboard
+   Platform Dashboard
    ========================================= */
 .od-root {
   --od-accent: #40e0d0;
@@ -4069,8 +4069,8 @@ pre {
 }
 
 .workspace-page-dashboard {
-  --dashboard-header-overlap: clamp(82px, 11vh, 112px);
-  --dashboard-top-inset: 0.3cm;
+  --dashboard-header-overlap: clamp(240px, 32vh, 380px);
+  --dashboard-top-inset: 0px;
   --dashboard-bottom-inset: 0;
   padding-bottom: 0;
 }
@@ -4575,22 +4575,22 @@ body[data-theme='light'] .workspace-page-dashboard .od-root {
 }
 
 /* =========================================
-   Workspace Orbital Shell
+   Workspace Platform Shell
    ========================================= */
-.workspace-page-orbital {
-  --orbital-header-overlap: clamp(82px, 11vh, 112px);
-  --orbital-top-inset: 0.3cm;
-  --orbital-bottom-inset: 0.3cm;
+.workspace-page-platform {
+  --platform-header-overlap: clamp(82px, 11vh, 112px);
+  --platform-top-inset: 0.3cm;
+  --platform-bottom-inset: 0.3cm;
   padding-bottom: 0;
 }
 
-.workspace-page-orbital .header {
+.workspace-page-platform .header {
   margin-bottom: 0;
   background: transparent;
   backdrop-filter: none;
 }
 
-.workspace-page-orbital .workspace-main-orbital {
+.workspace-page-platform .workspace-main-platform {
   position: relative;
   flex: 1;
   width: 100%;
@@ -4599,7 +4599,7 @@ body[data-theme='light'] .workspace-page-dashboard .od-root {
   min-height: 100%;
 }
 
-.workspace-page-orbital .od-shell {
+.workspace-page-platform .od-shell {
   --od-shell-pad: clamp(18px, 2vw, 28px);
   --od-shell-accent: var(--primary, #40e0d0);
   --od-shell-accent-strong: var(--primary-strong, #ff4fa3);
@@ -4611,12 +4611,12 @@ body[data-theme='light'] .workspace-page-dashboard .od-root {
   --od-bg-globe-shadow-b: color-mix(in srgb, var(--od-accent2) 28%, transparent);
   position: relative;
   min-height: calc(
-    100% + var(--orbital-header-overlap) - var(--orbital-top-inset) - var(--orbital-bottom-inset)
+    100% + var(--platform-header-overlap) - var(--platform-top-inset) - var(--platform-bottom-inset)
   );
   overflow: hidden;
-  margin-top: calc((var(--orbital-header-overlap) - var(--orbital-top-inset)) * -1);
+  margin-top: calc((var(--platform-header-overlap) - var(--platform-top-inset)) * -1);
   padding: var(--od-shell-pad);
-  padding-top: calc(var(--od-shell-pad) + var(--orbital-header-overlap) - var(--orbital-top-inset));
+  padding-top: calc(var(--od-shell-pad) + var(--platform-header-overlap) - var(--platform-top-inset));
   border-radius: 0;
   border: 1px solid color-mix(in srgb, var(--od-shell-accent) 24%, var(--border));
   background:
@@ -4630,62 +4630,62 @@ body[data-theme='light'] .workspace-page-dashboard .od-root {
   box-shadow: 0 22px 56px rgba(0, 0, 0, 0.42);
 }
 
-body[data-theme='light'] .workspace-page-orbital .od-shell {
+body[data-theme='light'] .workspace-page-platform .od-shell {
   box-shadow: 0 16px 34px rgba(15, 23, 42, 0.12);
 }
 
-.workspace-page-orbital .od-shell .od-bg-globe {
+.workspace-page-platform .od-shell .od-bg-globe {
   width: min(88vw, 1600px);
   right: -34vw;
   opacity: 0.22;
 }
 
-.workspace-page-orbital .od-shell .od-bg-globe-secondary {
+.workspace-page-platform .od-shell .od-bg-globe-secondary {
   width: min(82vw, 1500px);
   left: -38vw;
   top: 58%;
   opacity: 0.12;
 }
 
-.workspace-page-orbital .od-shell > :not(.od-bg-globe-field):not(.od-bracket) {
+.workspace-page-platform .od-shell > :not(.od-bg-globe-field):not(.od-bracket) {
   position: relative;
   z-index: 1;
 }
 
-.workspace-page-orbital .od-shell .od-bracket {
+.workspace-page-platform .od-shell .od-bracket {
   width: 28px;
   height: 28px;
 }
 
-.workspace-page-orbital .od-shell .od-bracket-tl {
+.workspace-page-platform .od-shell .od-bracket-tl {
   top: 10px;
   left: 10px;
   border-top-color: var(--od-shell-accent);
   border-left-color: var(--od-shell-accent);
 }
 
-.workspace-page-orbital .od-shell .od-bracket-tr {
+.workspace-page-platform .od-shell .od-bracket-tr {
   top: 10px;
   right: 10px;
   border-top-color: var(--od-shell-accent);
   border-right-color: var(--od-shell-accent);
 }
 
-.workspace-page-orbital .od-shell .od-bracket-bl {
+.workspace-page-platform .od-shell .od-bracket-bl {
   bottom: 10px;
   left: 10px;
   border-bottom-color: var(--od-shell-accent);
   border-left-color: var(--od-shell-accent);
 }
 
-.workspace-page-orbital .od-shell .od-bracket-br {
+.workspace-page-platform .od-shell .od-bracket-br {
   bottom: 10px;
   right: 10px;
   border-bottom-color: var(--od-shell-accent);
   border-right-color: var(--od-shell-accent);
 }
 
-.workspace-page-orbital .od-shell-head {
+.workspace-page-platform .od-shell-head {
   position: relative;
   z-index: 1;
   display: flex;
@@ -4697,12 +4697,12 @@ body[data-theme='light'] .workspace-page-orbital .od-shell {
   border-bottom: 1px solid color-mix(in srgb, var(--od-shell-accent) 22%, var(--border));
 }
 
-.workspace-page-orbital .od-shell-head-main {
+.workspace-page-platform .od-shell-head-main {
   display: grid;
   gap: 6px;
 }
 
-.workspace-page-orbital .od-shell-kicker {
+.workspace-page-platform .od-shell-kicker {
   margin: 0;
   color: var(--od-shell-accent);
   font-size: 0.72rem;
@@ -4711,125 +4711,125 @@ body[data-theme='light'] .workspace-page-orbital .od-shell {
   font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
 }
 
-.workspace-page-orbital .od-shell-head .route-title {
+.workspace-page-platform .od-shell-head .route-title {
   margin: 0;
   color: var(--text);
   font-size: clamp(1.4rem, 2.5vw, 2rem);
   letter-spacing: -0.03em;
 }
 
-.workspace-page-orbital .od-shell-head .muted {
+.workspace-page-platform .od-shell-head .muted {
   margin: 0;
   max-width: 66ch;
 }
 
-.workspace-page-orbital .od-shell-actions .inline-actions {
+.workspace-page-platform .od-shell-actions .inline-actions {
   justify-content: flex-end;
 }
 
-.workspace-page-orbital .od-shell-content {
+.workspace-page-platform .od-shell-content {
   position: relative;
   z-index: 1;
   gap: 18px;
 }
 
-.workspace-page-orbital .od-shell-content .card,
-.workspace-page-orbital .od-shell-content .platform-surface,
-.workspace-page-orbital .od-shell-content .platform-page-provider-card,
-.workspace-page-orbital .od-shell-content .platform-page-summary-card,
-.workspace-page-orbital .od-shell-content .platform-media-card,
-.workspace-page-orbital .od-shell-content .campaign-item,
-.workspace-page-orbital .od-shell-content .channel-toggle-card,
-.workspace-page-orbital .od-shell-content .checklist-item {
+.workspace-page-platform .od-shell-content .card,
+.workspace-page-platform .od-shell-content .platform-surface,
+.workspace-page-platform .od-shell-content .platform-page-provider-card,
+.workspace-page-platform .od-shell-content .platform-page-summary-card,
+.workspace-page-platform .od-shell-content .platform-media-card,
+.workspace-page-platform .od-shell-content .campaign-item,
+.workspace-page-platform .od-shell-content .channel-toggle-card,
+.workspace-page-platform .od-shell-content .checklist-item {
   border-color: color-mix(in srgb, var(--od-shell-accent) 20%, var(--border));
   background: linear-gradient(180deg, rgba(20, 8, 28, 0.62) 0%, rgba(8, 3, 12, 0.76) 100%);
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.24);
 }
 
-body[data-theme='light'] .workspace-page-orbital .od-shell-content .card,
-body[data-theme='light'] .workspace-page-orbital .od-shell-content .platform-surface,
-body[data-theme='light'] .workspace-page-orbital .od-shell-content .platform-page-provider-card,
-body[data-theme='light'] .workspace-page-orbital .od-shell-content .platform-page-summary-card,
-body[data-theme='light'] .workspace-page-orbital .od-shell-content .platform-media-card,
-body[data-theme='light'] .workspace-page-orbital .od-shell-content .campaign-item,
-body[data-theme='light'] .workspace-page-orbital .od-shell-content .channel-toggle-card,
-body[data-theme='light'] .workspace-page-orbital .od-shell-content .checklist-item {
+body[data-theme='light'] .workspace-page-platform .od-shell-content .card,
+body[data-theme='light'] .workspace-page-platform .od-shell-content .platform-surface,
+body[data-theme='light'] .workspace-page-platform .od-shell-content .platform-page-provider-card,
+body[data-theme='light'] .workspace-page-platform .od-shell-content .platform-page-summary-card,
+body[data-theme='light'] .workspace-page-platform .od-shell-content .platform-media-card,
+body[data-theme='light'] .workspace-page-platform .od-shell-content .campaign-item,
+body[data-theme='light'] .workspace-page-platform .od-shell-content .channel-toggle-card,
+body[data-theme='light'] .workspace-page-platform .od-shell-content .checklist-item {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(246, 250, 252, 0.96) 100%);
 }
 
-.workspace-page-orbital .od-shell-content .btn {
+.workspace-page-platform .od-shell-content .btn {
   border-color: color-mix(in srgb, var(--od-shell-accent) 26%, var(--border));
   background: color-mix(in srgb, var(--surface-muted) 74%, transparent);
 }
 
-.workspace-page-orbital .od-shell-content .btn-primary {
+.workspace-page-platform .od-shell-content .btn-primary {
   border-color: transparent;
   background: linear-gradient(120deg, var(--od-shell-accent), var(--od-shell-accent-strong));
   color: #020617;
   font-weight: 700;
 }
 
-body[data-theme='light'] .workspace-page-orbital .od-shell-content .btn-primary {
+body[data-theme='light'] .workspace-page-platform .od-shell-content .btn-primary {
   color: #ffffff;
 }
 
-.workspace-page-orbital .od-shell-content table th {
+.workspace-page-platform .od-shell-content table th {
   background: color-mix(in srgb, var(--od-shell-accent) 12%, var(--surface-muted));
 }
 
-.workspace-page-orbital .od-shell-content tbody tr:hover td {
+.workspace-page-platform .od-shell-content tbody tr:hover td {
   background: color-mix(in srgb, var(--od-shell-accent) 22%, transparent);
 }
 
-.workspace-page-orbital .od-shell-content .notice {
+.workspace-page-platform .od-shell-content .notice {
   border-radius: 18px;
   border: 1px solid color-mix(in srgb, var(--od-shell-accent) 24%, var(--border));
   background: color-mix(in srgb, rgba(64, 224, 208, 0.14) 60%, var(--surface));
 }
 
-body[data-theme='light'] .workspace-page-orbital .od-shell-content .notice {
+body[data-theme='light'] .workspace-page-platform .od-shell-content .notice {
   background: color-mix(in srgb, rgba(14, 165, 233, 0.1) 58%, var(--surface));
 }
 
-.workspace-page-orbital .od-shell-content .notice.warning {
+.workspace-page-platform .od-shell-content .notice.warning {
   border-color: color-mix(in srgb, var(--warning) 34%, var(--border));
 }
 
-.workspace-page-orbital .od-shell-content .notice.error {
+.workspace-page-platform .od-shell-content .notice.error {
   border-color: color-mix(in srgb, var(--danger) 34%, var(--border));
 }
 
-.workspace-page-orbital .od-shell-content .notice.info {
+.workspace-page-platform .od-shell-content .notice.info {
   border-color: color-mix(in srgb, var(--od-shell-accent) 30%, var(--border));
 }
 
 @media (max-width: 980px) {
-  .workspace-page-orbital .od-shell-head {
+  .workspace-page-platform .od-shell-head {
     flex-direction: column;
   }
 
-  .workspace-page-orbital .od-shell-actions {
+  .workspace-page-platform .od-shell-actions {
     width: 100%;
   }
 
-  .workspace-page-orbital .od-shell-actions .inline-actions {
+  .workspace-page-platform .od-shell-actions .inline-actions {
     justify-content: flex-start;
   }
 }
 
 @media (max-width: 700px) {
-  .workspace-page-orbital .od-shell {
+  .workspace-page-platform .od-shell {
     padding: 16px;
     border-radius: 0;
   }
 
-  .workspace-page-orbital .od-shell .od-bg-globe {
+  .workspace-page-platform .od-shell .od-bg-globe {
     width: 134vw;
     right: -60vw;
     opacity: 0.16;
   }
 
-  .workspace-page-orbital .od-shell .od-bg-globe-secondary {
+  .workspace-page-platform .od-shell .od-bg-globe-secondary {
     width: 128vw;
     left: -66vw;
     opacity: 0.09;

@@ -1969,7 +1969,6 @@ pre {
 }
 
 .provider-badge.youtube   { color: #ff0000; background: rgba(255,0,0,0.08); border-color: rgba(255,0,0,0.22); }
-.provider-badge.instagram { color: #dd2a7b; background: rgba(221,42,123,0.08); border-color: rgba(221,42,123,0.22); }
 .provider-badge.tiktok    { color: var(--text); background: var(--surface-alt); border-color: var(--border-strong); }
 .provider-badge.google    { color: #4285f4; background: rgba(66,133,244,0.08); border-color: rgba(66,133,244,0.22); }
 
@@ -2038,11 +2037,6 @@ pre {
 .account-platform-logo.youtube {
   border-color: rgba(255, 0, 51, 0.38);
   box-shadow: 0 0 18px rgba(255, 0, 51, 0.18);
-}
-
-.account-platform-logo.instagram {
-  border-color: rgba(221, 42, 123, 0.42);
-  box-shadow: 0 0 18px rgba(221, 42, 123, 0.18);
 }
 
 .account-platform-logo.tiktok {
@@ -2386,43 +2380,152 @@ pre {
 
 .platform-login {
   min-height: 100vh;
+  position: relative;
+  --platform-login-globe-primary-accent: color-mix(in srgb, var(--primary) 84%, #ffffff);
+  --platform-login-globe-secondary-accent: color-mix(in srgb, var(--primary-strong) 72%, var(--info));
+  --platform-login-globe-primary-aura: color-mix(in srgb, var(--primary) 24%, transparent);
+  --platform-login-globe-secondary-aura: color-mix(in srgb, var(--primary-strong) 22%, transparent);
+  --platform-login-globe-tertiary-aura: color-mix(in srgb, var(--info) 18%, transparent);
+  --platform-login-globe-primary-shadow: color-mix(in srgb, var(--primary) 42%, transparent);
+  --platform-login-globe-secondary-shadow: color-mix(in srgb, var(--primary-strong) 36%, transparent);
+  --platform-login-stage-grid: color-mix(in srgb, var(--primary) 14%, rgba(255, 255, 255, 0.04));
   display: grid;
   grid-template-columns: minmax(0, 1.08fr) minmax(380px, 0.92fr);
-  background: var(--page-background);
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 12% 18%, var(--platform-login-globe-primary-aura) 0%, transparent 30%),
+    radial-gradient(circle at 88% 20%, var(--platform-login-globe-tertiary-aura) 0%, transparent 28%),
+    radial-gradient(circle at 72% 74%, var(--platform-login-globe-secondary-aura) 0%, transparent 36%),
+    linear-gradient(145deg, rgba(5, 9, 18, 0.96) 0%, color-mix(in srgb, var(--header-background) 82%, #020617) 56%, rgba(3, 7, 18, 0.98) 100%);
+}
+
+.platform-login::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(var(--platform-login-stage-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--platform-login-stage-grid) 1px, transparent 1px);
+  background-size: 44px 44px;
+  opacity: 0.18;
+  pointer-events: none;
+  mask-image: radial-gradient(circle at center, black 44%, transparent 100%);
+  z-index: 0;
 }
 
 .platform-login-stage,
 .platform-login-panel {
   position: relative;
   min-height: 100vh;
+  z-index: 1;
 }
 
 .platform-login-stage {
-  overflow: hidden;
   padding: 48px clamp(28px, 5vw, 64px);
-  background:
-    radial-gradient(circle at 16% 18%, color-mix(in srgb, var(--primary) 16%, transparent) 0%, transparent 34%),
-    radial-gradient(circle at 82% 26%, rgba(255, 255, 255, 0.1) 0%, transparent 26%),
-    linear-gradient(145deg, rgba(5, 9, 18, 0.96) 0%, color-mix(in srgb, var(--header-background) 82%, #020617) 100%);
+  background: transparent;
   color: #f8fafc;
   display: grid;
   align-content: space-between;
   gap: 28px;
-  isolation: isolate;
 }
 
-.platform-login-stage::before {
-  content: '';
+.platform-login-globe-field {
   position: absolute;
   inset: 0;
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-  background-size: 44px 44px;
-  opacity: 0.18;
+  overflow: hidden;
   pointer-events: none;
-  mask-image: radial-gradient(circle at center, black 42%, transparent 100%);
-  z-index: -1;
+  z-index: 0;
+}
+
+.platform-login-globe-field::before,
+.platform-login-globe-field::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(12px);
+  opacity: 0.9;
+}
+
+.platform-login-globe-field::before {
+  inset: auto auto -18% -12%;
+  width: min(42vw, 520px);
+  aspect-ratio: 1;
+  background: radial-gradient(circle, var(--platform-login-globe-secondary-aura) 0%, transparent 68%);
+}
+
+.platform-login-globe-field::after {
+  inset: 8% -10% auto auto;
+  width: min(48vw, 640px);
+  aspect-ratio: 1;
+  background: radial-gradient(circle, var(--platform-login-globe-primary-aura) 0%, transparent 70%);
+}
+
+.platform-login-globe {
+  position: absolute;
+  width: min(76vw, 1080px);
+  aspect-ratio: 1;
+  pointer-events: none;
+}
+
+.platform-login-globe .od-globe-svg {
+  width: 100%;
+  height: 100%;
+  animation: od-bg-globe-rotate 126s linear infinite;
+}
+
+.platform-login-globe-primary {
+  --od-accent: var(--platform-login-globe-primary-accent);
+  right: -18vw;
+  top: 48%;
+  transform: translate(0, -50%) rotate(-8deg);
+  opacity: 0.34;
+  filter:
+    drop-shadow(0 0 28px var(--platform-login-globe-primary-shadow))
+    drop-shadow(0 0 64px var(--platform-login-globe-secondary-shadow));
+  animation: platform-login-globe-primary-drift 24s ease-in-out infinite;
+}
+
+.platform-login-globe-secondary {
+  --od-accent: var(--platform-login-globe-secondary-accent);
+  left: -22vw;
+  top: 58%;
+  transform: translate(0, -50%) scale(0.92) rotate(10deg);
+  opacity: 0.18;
+  filter:
+    drop-shadow(0 0 22px var(--platform-login-globe-secondary-shadow))
+    drop-shadow(0 0 48px var(--platform-login-globe-primary-shadow));
+  animation: platform-login-globe-secondary-drift 30s ease-in-out infinite;
+}
+
+.platform-login-globe-secondary .od-globe-svg {
+  animation-duration: 170s;
+  animation-direction: reverse;
+}
+
+.platform-login-globe-beam {
+  position: absolute;
+  inset: 14% -14%;
+  background: linear-gradient(
+    112deg,
+    transparent 0%,
+    transparent 28%,
+    color-mix(in srgb, var(--platform-login-globe-secondary-accent) 12%, transparent) 44%,
+    color-mix(in srgb, var(--platform-login-globe-primary-accent) 24%, transparent) 50%,
+    color-mix(in srgb, var(--platform-login-globe-secondary-accent) 12%, transparent) 56%,
+    transparent 72%,
+    transparent 100%
+  );
+  filter: blur(18px);
+  mix-blend-mode: screen;
+  opacity: 0.76;
+  transform: translate3d(-8%, 0, 0) rotate(-12deg);
+  animation: platform-login-globe-beam 18s ease-in-out infinite;
+}
+
+.platform-login > :not(.platform-login-globe-field) {
+  position: relative;
+  z-index: 1;
 }
 
 .platform-login-stage-top {
@@ -2442,6 +2545,7 @@ pre {
   position: absolute;
   inset: 22px;
   pointer-events: none;
+  z-index: 2;
 }
 
 .platform-stage-corner {
@@ -2553,17 +2657,20 @@ pre {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, rgba(255, 255, 255, 0.12));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--primary) 10%, transparent),
+    0 0 36px color-mix(in srgb, var(--primary) 10%, transparent);
 }
 
 .platform-login-orbit-ring.middle {
   inset: 13%;
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: color-mix(in srgb, var(--primary-strong) 18%, rgba(255, 255, 255, 0.1));
 }
 
 .platform-login-orbit-ring.inner {
   inset: 28%;
-  border-color: rgba(255, 255, 255, 0.08);
+  border-color: color-mix(in srgb, var(--info) 18%, rgba(255, 255, 255, 0.08));
 }
 
 .platform-login-orbit-core,
@@ -2572,9 +2679,15 @@ pre {
   width: 38%;
   aspect-ratio: 1;
   border-radius: 28px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.04) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow: 0 20px 44px rgba(2, 6, 23, 0.28);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--primary) 16%, rgba(255, 255, 255, 0.18)) 0%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+  border: 1px solid color-mix(in srgb, var(--primary) 26%, rgba(255, 255, 255, 0.18));
+  box-shadow:
+    0 20px 44px rgba(2, 6, 23, 0.28),
+    inset 0 0 0 1px color-mix(in srgb, var(--primary-strong) 12%, transparent);
   backdrop-filter: blur(18px);
   display: grid;
   place-items: center;
@@ -2611,9 +2724,11 @@ pre {
   border-radius: 22px;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow: 0 18px 40px rgba(2, 6, 23, 0.26);
+  background: color-mix(in srgb, var(--primary-soft) 44%, rgba(255, 255, 255, 0.08));
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, rgba(255, 255, 255, 0.18));
+  box-shadow:
+    0 18px 40px rgba(2, 6, 23, 0.26),
+    0 0 24px color-mix(in srgb, var(--primary) 14%, transparent);
   backdrop-filter: blur(16px);
   animation: platform-float 5.6s ease-in-out infinite;
 }
@@ -2623,16 +2738,10 @@ pre {
   right: 14%;
 }
 
-.platform-login-orbit-node.instagram {
+.platform-login-orbit-node.tiktok {
   left: 7%;
   top: 46%;
-  animation-delay: -1.8s;
-}
-
-.platform-login-orbit-node.tiktok {
-  right: 18%;
-  bottom: 10%;
-  animation-delay: -3.4s;
+  animation-delay: -2.6s;
 }
 
 .platform-login-platform-row {
@@ -2712,10 +2821,6 @@ pre {
 
 .platform-theme-icon.youtube {
   background: rgba(255, 0, 51, 0.12);
-}
-
-.platform-theme-icon.instagram {
-  background: rgba(225, 48, 108, 0.12);
 }
 
 .platform-theme-icon.tiktok {
@@ -3062,6 +3167,16 @@ pre {
 /* =========================================
    Platform Dashboard
    ========================================= */
+.workspace-page-dashboard {
+  width: 100vw;
+  min-height: 100vh;
+  margin: 0;
+  background: var(--page-background);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
 .platform-surface {
   background: color-mix(in srgb, var(--surface) 90%, transparent);
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
@@ -3621,11 +3736,6 @@ pre {
   background: color-mix(in srgb, rgba(255, 0, 51, 0.12) 48%, var(--surface));
 }
 
-.platform-page-provider-card.instagram {
-  border-color: color-mix(in srgb, #dd2a7b 28%, var(--border));
-  background: color-mix(in srgb, rgba(221, 42, 123, 0.12) 48%, var(--surface));
-}
-
 .platform-page-provider-card.tiktok {
   border-color: color-mix(in srgb, #25f4ee 24%, var(--border));
   background: color-mix(in srgb, rgba(37, 244, 238, 0.12) 44%, var(--surface));
@@ -3726,6 +3836,21 @@ pre {
   50% { transform: translateY(-10px); }
 }
 
+@keyframes platform-login-globe-primary-drift {
+  0%, 100% { transform: translate(0, -50%) rotate(-8deg); }
+  50% { transform: translate(18px, calc(-50% - 18px)) rotate(3deg); }
+}
+
+@keyframes platform-login-globe-secondary-drift {
+  0%, 100% { transform: translate(0, -50%) scale(0.92) rotate(10deg); }
+  50% { transform: translate(-20px, calc(-50% + 16px)) scale(0.98) rotate(-4deg); }
+}
+
+@keyframes platform-login-globe-beam {
+  0%, 100% { transform: translate3d(-10%, -2%, 0) rotate(-12deg); opacity: 0.42; }
+  50% { transform: translate3d(12%, 3%, 0) rotate(-8deg); opacity: 0.88; }
+}
+
 @keyframes platform-scanner {
   0% { transform: translateX(0); opacity: 0.5; }
   50% { opacity: 1; }
@@ -3772,12 +3897,29 @@ pre {
   }
 
   .platform-login-panel {
+    min-height: 100dvh;
     padding-top: 88px;
   }
 
   .platform-login-toolbar {
     top: 18px;
     right: 18px;
+  }
+
+  .platform-login-globe {
+    width: max(130vw, 640px);
+  }
+
+  .platform-login-globe-primary {
+    right: -56vw;
+    top: 48%;
+    opacity: 0.26;
+  }
+
+  .platform-login-globe-secondary {
+    left: -58vw;
+    top: 72%;
+    opacity: 0.16;
   }
 
   .platform-login-card-top,
@@ -4066,13 +4208,17 @@ pre {
   width: 100%;
   max-width: none;
   margin: 0;
+  min-height: 0;
 }
 
 .workspace-page-dashboard {
   --dashboard-header-overlap: clamp(240px, 32vh, 380px);
+  --dashboard-page-offset: clamp(82px, 11vh, 112px);
   --dashboard-top-inset: 0px;
   --dashboard-bottom-inset: 0;
   padding-bottom: 0;
+  background: var(--dashboard-page-background, var(--page-background));
+  transition: background 1.2s ease;
 }
 
 .workspace-page-dashboard .header {
@@ -4082,8 +4228,13 @@ pre {
 }
 
 .workspace-page-dashboard .od-root {
-  min-height: calc(
-    100% + var(--dashboard-header-overlap) - var(--dashboard-top-inset) - var(--dashboard-bottom-inset)
+  min-height: max(
+    calc(100% + var(--dashboard-header-overlap) - var(--dashboard-top-inset) - var(--dashboard-bottom-inset)),
+    calc(100vh - var(--dashboard-page-offset) + var(--dashboard-header-overlap) - var(--dashboard-top-inset) - var(--dashboard-bottom-inset))
+  );
+  min-height: max(
+    calc(100% + var(--dashboard-header-overlap) - var(--dashboard-top-inset) - var(--dashboard-bottom-inset)),
+    calc(100dvh - var(--dashboard-page-offset) + var(--dashboard-header-overlap) - var(--dashboard-top-inset) - var(--dashboard-bottom-inset))
   );
   margin-top: calc((var(--dashboard-header-overlap) - var(--dashboard-top-inset)) * -1);
   padding-top: calc(1.5rem + var(--dashboard-header-overlap) - var(--dashboard-top-inset));
@@ -4569,6 +4720,12 @@ body[data-theme='light'] .workspace-page-dashboard .od-root {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .platform-login-globe,
+  .platform-login-globe .od-globe-svg,
+  .platform-login-globe-beam {
+    animation: none;
+  }
+
   .od-bg-globe .od-globe-svg {
     animation: none;
   }

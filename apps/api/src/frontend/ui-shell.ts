@@ -48,13 +48,17 @@ export function resolveFrontendAsset(path: string): FrontendAsset | null {
 
 export function renderFrontendDocument(path: string): string {
   const initialPath = escapeHtml(path);
+  const tiktokVerification = process.env.TIKTOK_DEVELOPER_VERIFICATION || '';
+  const tiktokMetaTag = tiktokVerification
+    ? `    <meta name="tiktok-developers-site-verification" content="${escapeHtml(tiktokVerification)}" />\n`
+    : '';
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>YT Multi Publi</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
+${tiktokMetaTag}    <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/app.css" />

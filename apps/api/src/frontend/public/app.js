@@ -2073,38 +2073,34 @@ function renderRichLoginPage(options = {}) {
               <span class="platform-login-live-dot"></span>
               Secure relay online ${escapeHtml(liveClock)}
             </div>
-            <div class="pmp-badge-panel" aria-label="Platform Multi Publisher">
-              <div class="pmp-badge-scan"></div>
-              <div class="pmp-badge-letter" data-expand="latform">
-                <span class="pmp-badge-char">P</span>
-                <span class="pmp-badge-rest">latform</span>
-              </div>
-              <div class="pmp-badge-letter" data-expand="ulti">
-                <span class="pmp-badge-char">M</span>
-                <span class="pmp-badge-rest">ulti</span>
-              </div>
-              <div class="pmp-badge-letter" data-expand="ublisher">
-                <span class="pmp-badge-char">P</span>
-                <span class="pmp-badge-rest">ublisher</span>
+            <div class="orbit-nodes-badge" aria-label="Platform sync nodes online">
+              <span class="orbit-nodes-badge-status">
+                <span class="orbit-status-dot"></span>
+                LIVE SYNC
+              </span>
+              <strong class="orbit-nodes-badge-count">02</strong>
+              <span class="orbit-nodes-badge-label">NODES ONLINE</span>
+              <div class="orbit-nodes-badge-bars" aria-hidden="true">
+                <span></span><span></span><span></span><span></span><span></span>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="platform-login-orbit platform-login-orbit-v2">
-          <div class="orbit-hud-scan"></div>
-          <div class="platform-login-orbit-ring outer"></div>
-          <div class="platform-login-orbit-ring middle"></div>
-          <div class="platform-login-orbit-ring inner"></div>
-          <div class="platform-login-orbit-core">
-            <span class="orbit-core-status">
-              <span class="orbit-status-dot"></span>
-              LIVE SYNC
-            </span>
-            <strong class="orbit-core-count" data-counter="2">02</strong>
-            <span class="orbit-core-label">NODES ONLINE</span>
-            <div class="orbit-core-bars" aria-hidden="true">
-              <span></span><span></span><span></span><span></span><span></span>
+        <div class="pmp-stage-wrapper">
+          <div class="pmp-badge-panel pmp-badge-stage" aria-label="Platform Multi Publisher" id="pmp-stage-badge">
+            <div class="pmp-badge-scan"></div>
+            <div class="pmp-badge-letter" data-expand="latform" data-pmp-index="0">
+              <span class="pmp-badge-char">P</span>
+              <span class="pmp-badge-rest">latform</span>
+            </div>
+            <div class="pmp-badge-letter" data-expand="ulti" data-pmp-index="1">
+              <span class="pmp-badge-char">M</span>
+              <span class="pmp-badge-rest">ulti</span>
+            </div>
+            <div class="pmp-badge-letter" data-expand="ublisher" data-pmp-index="2">
+              <span class="pmp-badge-char">P</span>
+              <span class="pmp-badge-rest">ublisher</span>
             </div>
           </div>
           <div class="platform-login-orbit-node youtube">${renderPlatformGlyph('youtube')}</div>
@@ -2312,6 +2308,35 @@ function renderRichLoginPage(options = {}) {
     renderRichLoginPage({ ...options, mode, step, draft, verifying: false });
   });
   bindUiNoticeDismiss();
+  startPmpAutoRotation();
+}
+
+let pmpRotationTimer = null;
+
+function startPmpAutoRotation() {
+  if (pmpRotationTimer) {
+    clearInterval(pmpRotationTimer);
+    pmpRotationTimer = null;
+  }
+  const badge = document.getElementById('pmp-stage-badge');
+  if (!badge) return;
+  const letters = Array.from(badge.querySelectorAll('.pmp-badge-letter'));
+  if (letters.length === 0) return;
+
+  let currentIndex = -1;
+  const setActive = (index) => {
+    letters.forEach((letter, i) => {
+      letter.classList.toggle('pmp-auto-open', i === index);
+    });
+  };
+
+  const advance = () => {
+    currentIndex = (currentIndex + 1) % letters.length;
+    setActive(currentIndex);
+  };
+
+  advance();
+  pmpRotationTimer = setInterval(advance, 5000);
 }
 
 function handleAuthenticatedNavigation(user) {
@@ -4924,6 +4949,97 @@ function campaignActionButtons(campaign) {
   return `<div class="inline-actions">${buttons.join('')}</div>`;
 }
 
+function buildRadarPoints(statusTotals) {
+  const statuses = [
+    { key: 'draft', angle: -90 },
+    { key: 'ready', angle: -18 },
+    { key: 'launching', angle: 54 },
+    { key: 'completed', angle: 126 },
+    { key: 'failed', angle: 198 },
+  ];
+  const total = Math.max(1, Object.values(statusTotals).reduce((a, b) => a + (Number(b) || 0), 0));
+  const cx = 110, cy = 110, maxRadius = 96;
+  const points = statuses.map((s) => {
+    const val = Number(statusTotals[s.key] ?? 0);
+    const radius = Math.max(6, (val / total) * maxRadius);
+    const rad = (s.angle * Math.PI) / 180;
+    const x = cx + radius * Math.cos(rad);
+    const y = cy + radius * Math.sin(rad);
+    return { ...s, x, y, val };
+  });
+  const polygon = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const dots = points.map((p) => `
+    <circle class="radar-dot radar-dot-${p.key}" data-status="${p.key}" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="5">
+      <animate attributeName="r" values="5;8;5" dur="2.5s" repeatCount="indefinite" />
+    </circle>
+  `).join('');
+  return `
+    <polygon class="radar-polygon" points="${polygon}" />
+    ${dots}
+  `;
+}
+
+function buildPulseChart(statusTotals) {
+  const total = Math.max(1, Object.values(statusTotals).reduce((a, b) => a + (Number(b) || 0), 0));
+  const pts = [];
+  const baseline = 70;
+  const width = 600;
+  const steps = 30;
+  for (let i = 0; i <= steps; i += 1) {
+    const t = i / steps;
+    const seed = (i * 9301 + 49297) % 233280;
+    const noise = (seed / 233280) * 2 - 1;
+    const launchingWeight = (Number(statusTotals.launching ?? 0) / total) * 40;
+    const readyWeight = (Number(statusTotals.ready ?? 0) / total) * 25;
+    const y = baseline - Math.sin(t * Math.PI * 3) * (launchingWeight + 10) - Math.cos(t * Math.PI * 2) * readyWeight - noise * 8;
+    const x = t * width;
+    pts.push([x, Math.max(10, Math.min(130, y))]);
+  }
+  const path = pts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(' ');
+  const areaPath = `${path} L${width},140 L0,140 Z`;
+  return `
+    <path class="pulse-area" d="${areaPath}" fill="url(#pulseFill)" />
+    <path class="pulse-line" d="${path}" fill="none" stroke="url(#pulseStroke)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+    ${pts.filter((_, i) => i % 5 === 0).map(([x, y]) => `<circle class="pulse-dot" cx="${x}" cy="${y}" r="2.5"><animate attributeName="r" values="2.5;4;2.5" dur="1.8s" repeatCount="indefinite" /></circle>`).join('')}
+  `;
+}
+
+function animateCampaignControl() {
+  const panel = document.getElementById('campaign-control-panel');
+  if (!panel) return;
+  panel.querySelectorAll('[data-target]').forEach((el) => {
+    const target = Number(el.getAttribute('data-target') ?? 0);
+    const duration = 900;
+    const start = performance.now();
+    const tick = (now) => {
+      const progress = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      el.textContent = String(Math.round(target * eased));
+      if (progress < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  panel.querySelectorAll('.pulse-tick-fill').forEach((el) => {
+    const cs = getComputedStyle(el);
+    el.style.width = '0';
+    requestAnimationFrame(() => {
+      el.style.transition = 'width 1.2s cubic-bezier(0.22, 0.61, 0.36, 1)';
+      el.style.width = cs.getPropertyValue('--fill');
+    });
+  });
+  panel.querySelectorAll('[data-legend]').forEach((el) => {
+    el.addEventListener('mouseenter', () => {
+      const status = el.getAttribute('data-legend');
+      panel.querySelectorAll('.radar-dot').forEach((d) => {
+        d.classList.toggle('radar-dot-active', d.getAttribute('data-status') === status);
+      });
+    });
+    el.addEventListener('mouseleave', () => {
+      panel.querySelectorAll('.radar-dot').forEach((d) => d.classList.remove('radar-dot-active'));
+    });
+  });
+}
+
 async function renderCampaignsPage() {
   const query = parseCurrentQuery();
   const filters = {
@@ -5084,66 +5200,125 @@ async function renderCampaignsPage() {
     title: 'Campanhas',
     subtitle: 'Campaign list and lifecycle actions.',
     actionsHtml: `
-      <div class="inline-actions">
-        <a class="btn btn-primary" data-link href="/workspace/campanhas/nova">Create campaign</a>
-        <a class="btn" data-link href="${escapeHtml(buildUrl('/workspace/campanhas', {
+      <div class="inline-actions cc-hero-actions">
+        <a class="cc-create-btn" data-link href="/workspace/campanhas/nova" title="Criar nova campanha">
+          <span class="cc-create-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="16" />
+              <line x1="8" y1="12" x2="16" y2="12" />
+            </svg>
+          </span>
+          <span class="cc-create-label">
+            <span class="cc-create-title">Create campaign</span>
+            <span class="cc-create-sub">Launch a new CAMPAIGN</span>
+          </span>
+          <span class="cc-create-arrow" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12" />
+              <polyline points="12 5 19 12 12 19" />
+            </svg>
+          </span>
+        </a>
+        <a class="cc-refresh-btn" data-link href="${escapeHtml(buildUrl('/workspace/campanhas', {
           status: filters.status,
           search: filters.search,
           limit: pageLimit,
           offset: pageOffset,
-        }))}">Refresh</a>
+        }))}" title="Refresh list">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10" />
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+          </svg>
+          <span>Refresh</span>
+        </a>
       </div>
     `,
     contentHtml: `
-      <section class="platform-dashboard-hero">
-        <article class="platform-surface platform-dashboard-hero-copy">
-          <div class="platform-dashboard-kicker-row">
-            <span class="platform-dashboard-kicker">Campaign control</span>
-            <span class="platform-dashboard-live"><span class="platform-login-live-dot"></span> Synced ${escapeHtml(liveClock)}</span>
-          </div>
-          <h2>Move campaigns from draft to launch with one consistent control plane.</h2>
-          <p>Track launch readiness, paging volume and publishing outcomes across the same visual system used in the dashboard, accounts and media library.</p>
-          <div class="platform-dashboard-chip-row">
-            <span class="platform-chip">${renderPlatformGlyph('youtube', 'small')} YouTube rollout</span>
-            <span class="platform-chip">${renderPlatformGlyph('tiktok', 'small')} TikTok drops</span>
-          </div>
-          <div class="platform-dashboard-chip-row">
-            <span class="platform-dashboard-inline-stat">${formatNumber(total)} total campaigns</span>
-            <span class="platform-dashboard-inline-stat">${formatNumber(statusTotals.ready)} ready</span>
-            <span class="platform-dashboard-inline-stat">${formatNumber(statusTotals.launching)} launching</span>
-          </div>
-        </article>
+      <section class="campaign-control-panel" id="campaign-control-panel">
+        <div class="campaign-control-bg-grid" aria-hidden="true"></div>
+        <div class="campaign-control-glow" aria-hidden="true"></div>
 
-        <article class="platform-surface platform-dashboard-hero-visual">
-          <div class="platform-page-summary-grid">
-            <article class="platform-page-summary-card">
-              <span>Draft</span>
-              <strong>${formatNumber(statusTotals.draft)}</strong>
-            </article>
-            <article class="platform-page-summary-card">
-              <span>Ready</span>
-              <strong>${formatNumber(statusTotals.ready)}</strong>
-            </article>
-            <article class="platform-page-summary-card">
-              <span>Launching</span>
-              <strong>${formatNumber(statusTotals.launching)}</strong>
-            </article>
+        <header class="campaign-control-header">
+          <div class="campaign-control-header-main">
+            <span class="campaign-control-kicker">
+              <span class="campaign-control-dot"></span>
+              CAMPAIGN CONTROL
+            </span>
+            <span class="campaign-control-clock">LIVE · ${escapeHtml(liveClock)}</span>
           </div>
-          <div class="platform-dashboard-orbit-footer">
-            <div>
-              <span>Completed</span>
-              <strong>${formatNumber(statusTotals.completed)}</strong>
-            </div>
-            <div>
-              <span>Failed</span>
-              <strong>${formatNumber(statusTotals.failed)}</strong>
-            </div>
-            <div>
-              <span>Page</span>
-              <strong>${formatNumber(currentPage)} / ${formatNumber(totalPages)}</strong>
+          <div class="campaign-control-legend">
+            <span data-legend="draft"><span class="legend-swatch"></span>Draft</span>
+            <span data-legend="ready"><span class="legend-swatch"></span>Ready</span>
+            <span data-legend="launching"><span class="legend-swatch"></span>Launching</span>
+            <span data-legend="completed"><span class="legend-swatch"></span>Completed</span>
+            <span data-legend="failed"><span class="legend-swatch"></span>Failed</span>
+          </div>
+        </header>
+
+        <div class="campaign-control-grid">
+          <div class="campaign-control-chart" data-total="${formatNumber(total)}">
+            <svg class="campaign-control-radar" viewBox="0 0 220 220" aria-hidden="true">
+              <defs>
+                <radialGradient id="radarFill" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stop-color="currentColor" stop-opacity="0.35" />
+                  <stop offset="70%" stop-color="currentColor" stop-opacity="0.12" />
+                  <stop offset="100%" stop-color="transparent" />
+                </radialGradient>
+                <linearGradient id="radarSweep" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="transparent" />
+                  <stop offset="100%" stop-color="currentColor" />
+                </linearGradient>
+              </defs>
+              <circle cx="110" cy="110" r="100" fill="url(#radarFill)" />
+              <circle cx="110" cy="110" r="100" fill="none" stroke="currentColor" stroke-opacity="0.18" stroke-width="1" />
+              <circle cx="110" cy="110" r="75" fill="none" stroke="currentColor" stroke-opacity="0.14" stroke-width="1" />
+              <circle cx="110" cy="110" r="50" fill="none" stroke="currentColor" stroke-opacity="0.1" stroke-width="1" />
+              <circle cx="110" cy="110" r="25" fill="none" stroke="currentColor" stroke-opacity="0.08" stroke-width="1" />
+              <line x1="10" y1="110" x2="210" y2="110" stroke="currentColor" stroke-opacity="0.12" stroke-width="1" />
+              <line x1="110" y1="10" x2="110" y2="210" stroke="currentColor" stroke-opacity="0.12" stroke-width="1" />
+              <g class="radar-sweep-group">
+                <path d="M110 110 L210 110 A100 100 0 0 0 171 39 Z" fill="url(#radarSweep)" opacity="0.55" />
+              </g>
+              ${buildRadarPoints(statusTotals)}
+            </svg>
+            <div class="campaign-control-chart-center">
+              <span class="chart-center-kicker">TOTAL</span>
+              <strong class="chart-center-val" data-target="${total}">0</strong>
+              <span class="chart-center-label">CAMPAIGNS</span>
             </div>
           </div>
-        </article>
+
+          <div class="campaign-control-pulse">
+            <div class="pulse-head">
+              <span>PULSE · LAST 30 TICKS</span>
+              <span class="pulse-now">+${formatNumber(statusTotals.launching)}</span>
+            </div>
+            <svg class="pulse-chart" viewBox="0 0 600 140" preserveAspectRatio="none" aria-hidden="true">
+              <defs>
+                <linearGradient id="pulseFill" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="currentColor" stop-opacity="0.6" />
+                  <stop offset="100%" stop-color="currentColor" stop-opacity="0" />
+                </linearGradient>
+                <linearGradient id="pulseStroke" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="currentColor" />
+                  <stop offset="100%" class="pulse-stroke-end" stop-color="var(--cc-accent2)" />
+                </linearGradient>
+              </defs>
+              ${buildPulseChart(statusTotals)}
+            </svg>
+            <div class="pulse-ticks">
+              ${['DRAFT','READY','LAUNCHING','DONE','FAIL'].map((label, i) => {
+                const key = ['draft','ready','launching','completed','failed'][i];
+                return `<div class="pulse-tick" data-status="${key}">
+                  <span class="pulse-tick-label">${label}</span>
+                  <strong class="pulse-tick-val" data-target="${statusTotals[key] ?? 0}">0</strong>
+                  <div class="pulse-tick-bar"><div class="pulse-tick-fill" style="--fill:${Math.min(100, (statusTotals[key] ?? 0) / Math.max(1, total) * 100)}%"></div></div>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>
+        </div>
       </section>
 
       <section class="platform-dashboard-stat-grid">
@@ -5178,9 +5353,23 @@ async function renderCampaignsPage() {
             Page size
             <input name="limit" type="number" min="1" max="200" value="${escapeHtml(pageLimit)}" />
           </label>
-          <div class="inline-actions">
-            <button class="btn-primary" type="submit">Apply</button>
-            <a class="btn" data-link href="/workspace/campanhas">Clear</a>
+          <div class="inline-actions cc-filter-actions">
+            <button class="cc-apply-btn" type="submit" title="Apply filters">
+              <span class="cc-apply-glow" aria-hidden="true"></span>
+              <span class="cc-apply-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                </svg>
+              </span>
+              <span class="cc-apply-label">Apply filters</span>
+            </button>
+            <a class="cc-clear-btn" data-link href="/workspace/campanhas" title="Clear filters">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+              Clear
+            </a>
           </div>
         </form>
       </section>
@@ -5286,6 +5475,8 @@ async function renderCampaignsPage() {
       await renderCampaignsPage();
     });
   });
+
+  animateCampaignControl();
 
   document.querySelectorAll('[data-action="clone-campaign"]').forEach((button) => {
     button.addEventListener('click', async () => {

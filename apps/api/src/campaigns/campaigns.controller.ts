@@ -68,7 +68,7 @@ function normalizePlatformValue(rawValue: unknown): CampaignTargetPlatform | und
     return undefined;
   }
 
-  if (normalized === 'youtube' || normalized === 'instagram' || normalized === 'tiktok') {
+  if (normalized === 'youtube' || normalized === 'tiktok') {
     return normalized;
   }
 

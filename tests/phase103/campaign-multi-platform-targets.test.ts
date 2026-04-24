@@ -48,31 +48,6 @@ function mockRes(): ServerResponse & { _status: number; _headers: Record<string,
 }
 
 describe('campaign multi-platform targets', () => {
-  test('stores instagram targets with generic destination fields and without youtube channel binding', async () => {
-    const service = new CampaignService();
-    const { campaign } = await service.createCampaign({
-      title: 'Instagram campaign',
-      videoAssetId: 'video-1',
-    });
-
-    const result = await service.addTarget(campaign.id, {
-      platform: 'instagram',
-      destinationId: 'ig-account-1',
-      destinationLabel: 'Instagram Brand',
-      connectedAccountId: 'ig-account-1',
-      videoTitle: 'Launch reel',
-      videoDescription: 'Short description',
-    });
-
-    expect(result.target.platform).toBe('instagram');
-    expect(result.target.destinationId).toBe('ig-account-1');
-    expect(result.target.destinationLabel).toBe('Instagram Brand');
-    expect(result.target.connectedAccountId).toBe('ig-account-1');
-    expect(result.target.channelId).toBeNull();
-    expect(result.target.youtubeVideoId).toBeNull();
-    expect(result.target.externalPublishId).toBeNull();
-  });
-
   test('rejects duplicate targets per platform and destination id', async () => {
     const service = new CampaignService();
     const { campaign } = await service.createCampaign({
@@ -101,93 +76,9 @@ describe('campaign multi-platform targets', () => {
     ).rejects.toThrow('Target for this channel already exists in the campaign');
   });
 
-  test('completes an instagram-only campaign when the external publish id is recorded', async () => {
-    const campaignService = new CampaignService();
-    const { campaign } = await campaignService.createCampaign({
-      title: 'Instagram campaign completion',
-      videoAssetId: 'video-3',
-    });
-
-    const { target } = await campaignService.addTarget(campaign.id, {
-      platform: 'instagram',
-      destinationId: 'ig-account-2',
-      destinationLabel: 'Instagram Branch',
-      connectedAccountId: 'ig-connected-2',
-      videoTitle: 'Launch reel',
-      videoDescription: 'Description',
-    });
-
-    await campaignService.markReady(campaign.id);
-    await campaignService.launch(campaign.id);
-    await campaignService.updateTargetStatus(campaign.id, target.id, 'publicado', {
-      externalPublishId: 'ig-media-123',
-    });
-
-    const updated = await campaignService.getCampaign(campaign.id);
-    expect(updated?.campaign.status).toBe('completed');
-  });
 });
 
 describe('platform dispatch worker', () => {
-  test('routes instagram jobs to the instagram worker and completes the campaign', async () => {
-    const campaignService = new CampaignService();
-    const jobService = new PublishJobService();
-    const launchService = new LaunchService({ campaignService, jobService });
-
-    const { campaign } = await campaignService.createCampaign({
-      title: 'Instagram publish',
-      videoAssetId: 'video-ig-1',
-    });
-
-    const { target } = await campaignService.addTarget(campaign.id, {
-      platform: 'instagram',
-      destinationId: 'ig-user-123',
-      destinationLabel: 'Brand Instagram',
-      connectedAccountId: 'connected-instagram-1',
-      videoTitle: 'Launch reel',
-      videoDescription: 'Reel description',
-    });
-
-    await campaignService.markReady(campaign.id);
-    await launchService.launchCampaign(campaign.id);
-
-    const youtubeWorker = {
-      processPickedJob: vi.fn(),
-    } as any;
-
-    const instagramWorker = {
-      processPickedJob: vi.fn(async (job, passedTarget) => {
-        await jobService.markCompleted(job.id, 'ig-media-999');
-        await campaignService.updateTargetStatus(passedTarget.campaignId, passedTarget.id, 'publicado', {
-          externalPublishId: 'ig-media-999',
-        });
-        return (await jobService.getJobsForTarget(passedTarget.id))[0] ?? null;
-      }),
-    } as any;
-
-    const worker = new PlatformDispatchWorker({
-      jobService,
-      campaignService,
-      youtubeWorker,
-      instagramWorker,
-      tiktokWorker: { processPickedJob: vi.fn() } as any,
-    });
-
-    const job = await worker.processNext();
-    const updated = await campaignService.getCampaign(campaign.id);
-    const updatedTarget = updated!.campaign.targets.find((entry) => entry.id === target.id);
-
-    expect(job?.status).toBe('completed');
-    expect(instagramWorker.processPickedJob).toHaveBeenCalledOnce();
-    expect(youtubeWorker.processPickedJob).not.toHaveBeenCalled();
-    expect(updatedTarget).toMatchObject({
-      status: 'publicado',
-      externalPublishId: 'ig-media-999',
-      youtubeVideoId: null,
-    });
-    expect(updated!.campaign.status).toBe('completed');
-  });
-
   test('routes tiktok jobs to the tiktok worker and completes the campaign', async () => {
     const campaignService = new CampaignService();
     const jobService = new PublishJobService();
@@ -211,7 +102,6 @@ describe('platform dispatch worker', () => {
     await launchService.launchCampaign(campaign.id);
 
     const youtubeWorker = { processPickedJob: vi.fn() } as any;
-    const instagramWorker = { processPickedJob: vi.fn() } as any;
     const tiktokWorker = {
       processPickedJob: vi.fn(async (job, passedTarget) => {
         await jobService.markCompleted(job.id, 'tt-post-123');
@@ -226,7 +116,6 @@ describe('platform dispatch worker', () => {
       jobService,
       campaignService,
       youtubeWorker,
-      instagramWorker,
       tiktokWorker,
     });
 
@@ -237,7 +126,6 @@ describe('platform dispatch worker', () => {
     expect(job?.status).toBe('completed');
     expect(tiktokWorker.processPickedJob).toHaveBeenCalledOnce();
     expect(youtubeWorker.processPickedJob).not.toHaveBeenCalled();
-    expect(instagramWorker.processPickedJob).not.toHaveBeenCalled();
     expect(updatedTarget).toMatchObject({
       status: 'publicado',
       externalPublishId: 'tt-post-123',

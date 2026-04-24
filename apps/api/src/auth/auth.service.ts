@@ -1,7 +1,7 @@
 import { createHash, randomUUID, scrypt as nodeScrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 
-import { GoogleOauthService, GOOGLE_AUTH_SCOPES, type GoogleOauthSession } from '../integrations/google/google-oauth.service';
+import { GoogleOauthService, GOOGLE_AUTH_SCOPES, type GoogleOauthSession, type GoogleTokenResult } from '../integrations/google/google-oauth.service';
 import { getSeedAdminUser } from '../../../../prisma/seed';
 import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
@@ -39,6 +39,7 @@ interface FailedAttemptState {
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
 const GOOGLE_STATE_TTL_MS = 10 * 60 * 1000;
+const DEV_GOOGLE_LOGIN_CODE = 'dev-google-login';
 
 export class AuthService {
   private readonly env: Record<string, string | undefined>;
@@ -131,6 +132,16 @@ export class AuthService {
   }
 
   async createGoogleAuthorizationRedirect(session?: GoogleOauthSession | null): Promise<string> {
+    if (isDevelopmentGoogleLoginFallbackEnabled(this.env)) {
+      const state = randomUUID();
+      if (session) {
+        session.oauthStateNonce = state;
+      }
+      const redirectUrl = buildDevelopmentGoogleLoginRedirect(this.env, state);
+      this.rememberGoogleOauthState(state);
+      return redirectUrl;
+    }
+
     const redirectUrl = await this.googleOauthService.createAuthorizationRedirect(
       session,
       GOOGLE_AUTH_SCOPES,
@@ -160,7 +171,9 @@ export class AuthService {
       };
     }
 
-    const tokenResult = await this.googleOauthService.exchangeCodeForTokens(input.code);
+    const tokenResult = isDevelopmentGoogleLoginFallbackEnabled(this.env) && input.code === DEV_GOOGLE_LOGIN_CODE
+      ? buildDevelopmentGoogleLoginTokenResult(this.env, this.now)
+      : await this.googleOauthService.exchangeCodeForTokens(input.code);
     const email = tokenResult.profile.email?.trim().toLowerCase();
     if (!email) {
       return {
@@ -202,9 +215,15 @@ export class AuthService {
       email,
       fullName: tokenResult.profile.displayName?.trim() || existing.fullName,
       googleSubject: googleSubject?.trim() || existing.googleSubject,
+      planSelectionCompleted: existing.planSelectionCompleted,
       updatedAt: this.now(),
     });
     user = updated ?? existing;
+
+    const refreshed = await this.userStore.findByEmail(user.email);
+    if (refreshed) {
+      user = refreshed;
+    }
 
     return this.finalizeAuthenticatedUser(user, session);
   }
@@ -367,6 +386,50 @@ function normalizePublicBaseUrl(env: Record<string, string | undefined>): string
   const host = env.HOST?.trim() || '127.0.0.1';
   const port = env.PORT?.trim() || '3000';
   return `http://${host}:${port}/login/callback`;
+}
+
+function isDevelopmentGoogleLoginFallbackEnabled(env: Record<string, string | undefined>): boolean {
+  const nodeEnv = (env.NODE_ENV ?? 'development').trim().toLowerCase();
+  if (nodeEnv === 'production') {
+    return false;
+  }
+
+  return isUnsetOrPlaceholder(env.GOOGLE_CLIENT_ID) || isUnsetOrPlaceholder(env.GOOGLE_CLIENT_SECRET);
+}
+
+function isUnsetOrPlaceholder(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase() ?? '';
+  return !normalized || normalized === 'replace-me';
+}
+
+function buildDevelopmentGoogleLoginRedirect(env: Record<string, string | undefined>, state: string): string {
+  const callbackUrl = env.GOOGLE_AUTH_REDIRECT_URI?.trim() || normalizePublicBaseUrl(env);
+  const url = new URL(callbackUrl);
+  url.searchParams.set('code', DEV_GOOGLE_LOGIN_CODE);
+  url.searchParams.set('state', state);
+  return url.toString();
+}
+
+function buildDevelopmentGoogleLoginTokenResult(
+  env: Record<string, string | undefined>,
+  now: () => Date,
+): GoogleTokenResult {
+  const email = env.ADMIN_EMAIL?.trim().toLowerCase() || 'google-dev@example.com';
+  const displayName = 'Development Google Login';
+  const googleSubject = `dev-google:${email}`;
+
+  return {
+    accessToken: `dev-google-access-token:${email}`,
+    refreshToken: undefined,
+    scopes: [...GOOGLE_AUTH_SCOPES],
+    tokenExpiresAt: new Date(now().getTime() + 60 * 60 * 1000).toISOString(),
+    profile: {
+      providerSubject: googleSubject,
+      googleSubject,
+      email,
+      displayName,
+    },
+  };
 }
 
 function extractStateFromAuthorizationRedirect(redirectUrl: string): string | null {

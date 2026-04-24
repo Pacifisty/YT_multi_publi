@@ -7,9 +7,6 @@ export interface EnvConfig {
   googleClientSecret: string | undefined;
   googleRedirectUri: string | undefined;
   googleAuthRedirectUri: string | undefined;
-  instagramClientId: string | undefined;
-  instagramClientSecret: string | undefined;
-  instagramRedirectUri: string | undefined;
   tiktokClientKey: string | undefined;
   tiktokClientSecret: string | undefined;
   tiktokRedirectUri: string | undefined;
@@ -50,9 +47,6 @@ export function loadEnvConfig(env: Record<string, string | undefined>): EnvConfi
     googleClientSecret: env.GOOGLE_CLIENT_SECRET,
     googleRedirectUri: env.GOOGLE_REDIRECT_URI,
     googleAuthRedirectUri: env.GOOGLE_AUTH_REDIRECT_URI,
-    instagramClientId: env.INSTAGRAM_CLIENT_ID,
-    instagramClientSecret: env.INSTAGRAM_CLIENT_SECRET,
-    instagramRedirectUri: env.INSTAGRAM_REDIRECT_URI,
     tiktokClientKey: env.TIKTOK_CLIENT_KEY,
     tiktokClientSecret: env.TIKTOK_CLIENT_SECRET,
     tiktokRedirectUri: env.TIKTOK_REDIRECT_URI,

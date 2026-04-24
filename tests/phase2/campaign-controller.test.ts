@@ -177,7 +177,7 @@ describe('campaigns controller', () => {
     expect(response.status).toBe(400);
   });
 
-  test('POST /campaigns/:id/targets blocks instagram target for non-pro plans', async () => {
+  test('POST /campaigns/:id/targets blocks tiktok target for non-pro plans', async () => {
     const repository = new InMemoryCampaignRepository();
     const service = new CampaignService({ repository });
     const accountPlanService = new AccountPlanService();
@@ -189,10 +189,10 @@ describe('campaigns controller', () => {
       ...createAuthenticatedRequest(),
       params: { id: campaign.id },
       body: {
-        platform: 'instagram',
-        destinationId: 'ig-destination-1',
-        videoTitle: 'Instagram Video',
-        videoDescription: 'Instagram Desc',
+        platform: 'tiktok',
+        destinationId: 'tt-destination-1',
+        videoTitle: 'TikTok Video',
+        videoDescription: 'TikTok Desc',
       },
     });
 
@@ -233,6 +233,6 @@ describe('campaigns controller', () => {
     expect(secondLaunch.status).toBe(200);
 
     const account = await accountPlanService.getAccount('admin@example.com');
-    expect(account.tokens).toBe(5);
+    expect(account.tokens).toBe(10);
   });
 });

@@ -215,10 +215,10 @@ const ACCOUNT_PLAN_OPTIONS = [
     id: 'PRO',
     label: 'Pro',
     priceLabel: 'R$ 19,99 / mes',
-    description: 'Plano completo para publicar em YouTube, Instagram e TikTok.',
+    description: 'Plano completo para publicar em YouTube e TikTok.',
     tokenSummary: 'ganho de 800 tokens todo mes na escolha deste plano',
     visitSummary: '+80 tokens por visita diaria',
-    platformSummary: 'YouTube + Instagram + TikTok',
+    platformSummary: 'YouTube + TikTok',
     featured: true,
   },
 ];
@@ -245,29 +245,6 @@ const BACKGROUND_THEME_OPTIONS = [
     info: '#f472b6',
     shadow: '0 20px 48px rgba(0, 0, 0, 0.5)',
     headerBackground: 'linear-gradient(135deg, rgba(7, 3, 11, 0.98) 0%, rgba(29, 9, 32, 0.96) 54%, rgba(8, 20, 27, 0.92) 100%)',
-  },
-  {
-    id: 'platform-instagram-spectrum',
-    label: 'Platform Spectrum',
-    type: 'dark',
-    appearance: 'dark',
-    code: '#120614 -> #FCB045',
-    description: 'Instagram gradient pulse.',
-    pageBackground: 'radial-gradient(circle at 78% 20%, rgba(74, 16, 96, 0.94) 0%, rgba(30, 8, 42, 0.98) 36%, #040206 100%)',
-    bg: '#120614',
-    bgSoft: '#210a28',
-    surface: 'rgba(20, 8, 22, 0.9)',
-    surfaceMuted: 'rgba(34, 12, 40, 0.94)',
-    border: 'rgba(225, 48, 108, 0.24)',
-    primary: '#E1306C',
-    primaryStrong: '#FCAF45',
-    primarySoft: 'rgba(225, 48, 108, 0.18)',
-    danger: '#fb7185',
-    warning: '#FCAF45',
-    success: '#f472b6',
-    info: '#833AB4',
-    shadow: '0 20px 48px rgba(10, 2, 18, 0.52)',
-    headerBackground: 'linear-gradient(135deg, rgba(18, 6, 20, 0.98) 0%, rgba(82, 16, 86, 0.92) 55%, rgba(252, 176, 69, 0.82) 100%)',
   },
   {
     id: 'platform-youtube-redline',
@@ -998,12 +975,6 @@ const PLATFORM_THEME_OPTIONS = [
     detail: 'TikTok mode',
   },
   {
-    id: 'platform-instagram-spectrum',
-    platform: 'instagram',
-    label: 'Spectrum',
-    detail: 'Instagram mode',
-  },
-  {
     id: 'platform-youtube-redline',
     platform: 'youtube',
     label: 'Redline',
@@ -1036,7 +1007,7 @@ function readStoredFontTheme() {
 function readPendingOauthProvider() {
   try {
     const value = localStorage.getItem(OAUTH_PROVIDER_STORAGE_KEY);
-    return value === 'youtube' || value === 'google' ? value : null;
+    return value === 'youtube' || value === 'google' || value === 'tiktok' ? value : null;
   } catch {
     return null;
   }
@@ -1145,11 +1116,9 @@ const api = {
   accounts: () => apiRequest('GET', '/api/accounts'),
   startGoogleOauth: () => apiRequest('GET', '/api/accounts/oauth/google/start'),
   startYouTubeOauth: () => apiRequest('GET', '/api/accounts/oauth/youtube/start'),
-  startInstagramOauth: () => apiRequest('GET', '/api/accounts/oauth/instagram/start'),
   startTikTokOauth: () => apiRequest('GET', '/api/accounts/oauth/tiktok/start'),
   accountOauthCallback: (code, stateParam) => apiRequest('GET', buildUrl('/api/accounts/oauth/google/callback', { code, state: stateParam })),
   accountYouTubeOauthCallback: (code, stateParam) => apiRequest('GET', buildUrl('/api/accounts/oauth/youtube/callback', { code, state: stateParam })),
-  accountInstagramOauthCallback: (code, stateParam) => apiRequest('GET', buildUrl('/api/accounts/oauth/instagram/callback', { code, state: stateParam })),
   accountTikTokOauthCallback: (code, stateParam) => apiRequest('GET', buildUrl('/api/accounts/oauth/tiktok/callback', { code, state: stateParam })),
   accountChannels: (accountId) => apiRequest('GET', `/api/accounts/${encodeURIComponent(accountId)}/channels`),
   syncAccountChannels: (accountId) => apiRequest('POST', `/api/accounts/${encodeURIComponent(accountId)}/channels/sync`),
@@ -1284,9 +1253,21 @@ function settingsPickerHtml(prefix) {
     `;
   }).join('');
 
-  const fontOptionsHtml = FONT_THEME_OPTIONS.map((option) => (
-    `<option value="${option.id}" ${option.id === state.fontTheme ? 'selected' : ''}>${option.label}</option>`
-  )).join('');
+  const fontOptionsHtml = FONT_THEME_OPTIONS.map((option) => {
+    const isSelected = option.id === state.fontTheme ? ' active' : '';
+    return `
+      <button
+        type="button"
+        class="font-theme-button${isSelected}"
+        data-font-theme-id="${option.id}"
+        title="${escapeHtml(option.label)}"
+        style="--color: ${option.color}"
+      >
+        <span class="color-swatch"></span>
+        <span class="color-label">${escapeHtml(option.label)}</span>
+      </button>
+    `;
+  }).join('');
 
   return `
     <details class="settings-picker">
@@ -1297,21 +1278,21 @@ function settingsPickerHtml(prefix) {
       <div class="settings-panel">
         <div class="settings-section">
           <div class="settings-section-header">
+            <strong>Text color</strong>
+            <span class="muted">Applies globally.</span>
+          </div>
+          <div class="font-theme-grid">
+            ${fontOptionsHtml}
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-section-header">
             <strong>Background</strong>
             <span class="muted">Live preview on select.</span>
           </div>
           <div class="background-grid">
             ${cardsHtml}
           </div>
-        </div>
-        <div class="settings-section">
-          <div class="settings-section-header">
-            <strong>Text color</strong>
-            <span class="muted">Applies globally.</span>
-          </div>
-          <select id="${escapeHtml(prefix)}-font-theme-select" class="font-theme-select-panel">
-            ${fontOptionsHtml}
-          </select>
         </div>
       </div>
     </details>
@@ -1600,13 +1581,24 @@ function renderWorkspaceShell(options) {
     planLabel ? `Plano ${planLabel}` : '',
   ].filter(Boolean).join(' - ');
 
+  let tokenState = 'healthy';
+  if (tokens <= 5) tokenState = 'critical';
+  else if (tokens <= 20) tokenState = 'warning';
+  else if (tokens >= 500) tokenState = 'full';
+
   const claimBtnHtml = dailyClaimed
-    ? `<span class="header-claim-done" title="Bonus diario ja coletado. Volte amanha para mais ${dailyTokens} tokens.">claim done</span>`
-    : `<button id="header-claim-btn" class="header-claim-btn" type="button" title="Clique para receber +${dailyTokens} tokens de bonus diario. Disponivel uma vez por dia!">claim</button>`;
+    ? `<span class="token-capsule-claim done" title="Bonus diario ja coletado. Volte amanha para mais ${dailyTokens} tokens."><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></span>`
+    : `<button id="header-claim-btn" class="token-capsule-claim available" type="button" title="Clique para receber +${dailyTokens} tokens de bonus diario. Disponivel uma vez por dia!"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M20 6h-2.18c.11-.31.18-.65.18-1a2.996 2.996 0 0 0-5.5-1.65l-.5.67-.5-.68C10.96 2.54 10.05 2 9 2 7.34 2 6 3.34 6 5c0 .35.07.69.18 1H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-5-2c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zM9 4c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm11 15H4v-2h16v2zm0-5H4V8h5.08L7 10.83 8.62 12 11 8.76l1-1.36 1 1.36L15.38 12 17 10.83 14.92 8H20v6z"/></svg></button>`;
 
   const tokenHtml = account ? `
-    <div class="header-token-wrap" title="Voce tem ${tokens} tokens. Clique em aclaim para ganhar +${dailyTokens} tokens hoje.">
-      <span class="header-token-count">${tokens}<span class="header-token-label"> tkn</span></span>
+    <div class="token-capsule" data-state="${tokenState}" title="Voce tem ${tokens} tokens. ${dailyClaimed ? 'Bonus diario ja coletado hoje.' : 'Clique no presente para ganhar +' + dailyTokens + ' tokens!'}">
+      <span class="token-capsule-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>
+      </span>
+      <span class="token-capsule-count">
+        <span class="token-capsule-current">${formatNumber(tokens)}</span>
+        <span class="token-capsule-label">tokens</span>
+      </span>
       ${claimBtnHtml}
     </div>
   ` : '';
@@ -1680,8 +1672,8 @@ function renderWorkspaceShell(options) {
 
   root.innerHTML = `
     <div class="${pageClasses.join(' ')}">
-      <header class="header">
-        <div class="container header-shell">
+      <header class="header header-fullwidth">
+        <div class="header-shell header-shell-fullwidth">
           <div class="header-brand-block">
             <span class="brand-kicker">Platform Command</span>
             <div class="brand">
@@ -1728,18 +1720,25 @@ function renderWorkspaceShell(options) {
         if (granted > 0) {
           setUiNotice('success', 'Bonus diario coletado!', `+${granted} tokens adicionados ao seu saldo.`);
         }
+        const refreshed = await api.accountPlanSummary();
+        if (refreshed.ok && refreshed.body?.account) {
+          state.account = refreshed.body.account;
+        }
+        state.routeInFlight = false;
+        await renderRoute();
       }
-      void renderRoute();
     });
   }
 
-  const fontThemeSelect = document.getElementById('workspace-font-theme-select');
-  if (fontThemeSelect) {
-    fontThemeSelect.addEventListener('change', (event) => {
-      applyFontTheme(event.target.value);
-      void renderRoute();
+  document.querySelectorAll('[data-font-theme-id]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const themeId = button.getAttribute('data-font-theme-id');
+      if (themeId) {
+        applyFontTheme(themeId);
+        void renderRoute();
+      }
     });
-  }
+  });
 
   bindBackgroundPicker(() => {
     void renderRoute();
@@ -1758,24 +1757,6 @@ function renderPlatformGlyph(platform, extraClass = '') {
   const className = ['platform-glyph', extraClass].filter(Boolean).join(' ');
 
   switch (platform) {
-    case 'instagram':
-      return `
-        <span class="${className}" aria-hidden="true">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <linearGradient id="platform-instagram-gradient" x1="2" y1="22" x2="22" y2="2">
-                <stop offset="0%" stop-color="#f58529" />
-                <stop offset="48%" stop-color="#dd2a7b" />
-                <stop offset="100%" stop-color="#515bd4" />
-              </linearGradient>
-            </defs>
-            <rect x="2.5" y="2.5" width="19" height="19" rx="5.5" fill="url(#platform-instagram-gradient)" />
-            <rect x="7" y="7" width="10" height="10" rx="3.2" fill="none" stroke="#ffffff" stroke-width="1.5" />
-            <circle cx="12" cy="12" r="2.8" fill="none" stroke="#ffffff" stroke-width="1.5" />
-            <circle cx="16.6" cy="7.5" r="1.1" fill="#ffffff" />
-          </svg>
-        </span>
-      `;
     case 'tiktok':
       return `
         <span class="${className}" aria-hidden="true">
@@ -1869,7 +1850,7 @@ function renderLoginPage(options = {}) {
           </div>
         </div>
         <div class="platform-classic-labels">
-          <span>YouTube</span><span>·</span><span>Instagram</span><span>·</span><span>TikTok</span>
+          <span>YouTube</span><span>·</span><span>TikTok</span>
         </div>
       </div>
 
@@ -1974,7 +1955,11 @@ function renderRichLoginPage(options = {}) {
     email: String(options.draft?.email ?? ''),
     password: String(options.draft?.password ?? ''),
   };
-  const selectedBackgroundTheme = BACKGROUND_THEME_OPTIONS.find((option) => option.id === state.backgroundTheme) ?? BACKGROUND_THEME_OPTIONS[0];
+  const neonNightTheme = BACKGROUND_THEME_OPTIONS.find((option) => option.id === 'platform-neon-night') ?? BACKGROUND_THEME_OPTIONS[0];
+  if (state.backgroundTheme !== neonNightTheme.id) {
+    applyBackgroundTheme(neonNightTheme.id);
+  }
+  const selectedBackgroundTheme = neonNightTheme;
   const title = verifying
     ? 'Sync your secure workspace access'
     : step === 1
@@ -1985,7 +1970,7 @@ function renderRichLoginPage(options = {}) {
     : step === 1
     ? (mode === 'register'
       ? 'Start with your name and email, then finish the account setup with a password or Google.'
-      : 'Use your email or Google to enter the publishing workspace for YouTube, Instagram and TikTok.')
+      : 'Use your email or Google to enter the publishing workspace for YouTube and TikTok.')
     : (mode === 'register'
       ? 'Passwords need at least 6 characters. After registration, we take you to plan selection.'
       : 'This keeps the internal dashboard and publishing tools locked to your operator session.');
@@ -2060,9 +2045,17 @@ function renderRichLoginPage(options = {}) {
       </div>
     </div>
   `;
+  const loginBackgroundGlobeHtml = `
+    <div class="platform-login-globe-field" aria-hidden="true">
+      <div class="platform-login-globe platform-login-globe-secondary">${buildOdGlobe()}</div>
+      <div class="platform-login-globe platform-login-globe-primary">${buildOdGlobe()}</div>
+      <div class="platform-login-globe-beam"></div>
+    </div>
+  `;
 
   root.innerHTML = `
     <div class="platform-login">
+      ${loginBackgroundGlobeHtml}
       <section class="platform-login-stage">
         <div class="platform-stage-frame" aria-hidden="true">
           <span class="platform-stage-corner top-left"></span>
@@ -2072,52 +2065,60 @@ function renderRichLoginPage(options = {}) {
         </div>
         <div class="platform-login-stage-top">
           <div>
-            <div class="platform-login-kicker">Multi Platform Publisher</div>
-            <h1>Launch once, distribute everywhere.</h1>
-            <p>One secure control room for YouTube, Instagram and TikTok publishing.</p>
+            <h1 class="platform-login-title">PLATFORM MULTI PUBLISHER</h1>
+            <p>One secure control room for YouTube and TikTok publishing.</p>
           </div>
           <div class="platform-login-stage-meta">
             <div class="platform-login-live">
               <span class="platform-login-live-dot"></span>
               Secure relay online ${escapeHtml(liveClock)}
             </div>
-            ${platformThemeStripHtml}
+            <div class="pmp-badge-panel" aria-label="Platform Multi Publisher">
+              <div class="pmp-badge-scan"></div>
+              <div class="pmp-badge-letter" data-expand="latform">
+                <span class="pmp-badge-char">P</span>
+                <span class="pmp-badge-rest">latform</span>
+              </div>
+              <div class="pmp-badge-letter" data-expand="ulti">
+                <span class="pmp-badge-char">M</span>
+                <span class="pmp-badge-rest">ulti</span>
+              </div>
+              <div class="pmp-badge-letter" data-expand="ublisher">
+                <span class="pmp-badge-char">P</span>
+                <span class="pmp-badge-rest">ublisher</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div class="platform-login-orbit">
+        <div class="platform-login-orbit platform-login-orbit-v2">
+          <div class="orbit-hud-scan"></div>
           <div class="platform-login-orbit-ring outer"></div>
           <div class="platform-login-orbit-ring middle"></div>
           <div class="platform-login-orbit-ring inner"></div>
           <div class="platform-login-orbit-core">
-            <span class="platform-login-orbit-core-kicker">Platform sync</span>
-            <strong>3 active nodes</strong>
-            <span>Publishing grid</span>
+            <span class="orbit-core-status">
+              <span class="orbit-status-dot"></span>
+              LIVE SYNC
+            </span>
+            <strong class="orbit-core-count" data-counter="2">02</strong>
+            <span class="orbit-core-label">NODES ONLINE</span>
+            <div class="orbit-core-bars" aria-hidden="true">
+              <span></span><span></span><span></span><span></span><span></span>
+            </div>
           </div>
           <div class="platform-login-orbit-node youtube">${renderPlatformGlyph('youtube')}</div>
-          <div class="platform-login-orbit-node instagram">${renderPlatformGlyph('instagram')}</div>
           <div class="platform-login-orbit-node tiktok">${renderPlatformGlyph('tiktok')}</div>
-        </div>
-
-        <div class="platform-login-platform-row">
-          <span class="platform-chip">${renderPlatformGlyph('youtube', 'small')} YouTube</span>
-          <span class="platform-chip">${renderPlatformGlyph('instagram', 'small')} Instagram</span>
-          <span class="platform-chip">${renderPlatformGlyph('tiktok', 'small')} TikTok</span>
-        </div>
-
-        <div class="platform-login-signal-grid">
-          ${signalCardsHtml}
-        </div>
-
-        <div class="platform-login-stage-telemetry">
-          <span>Theme ${escapeHtml(selectedBackgroundTheme.label)}</span>
-          <span>Latency 98 ms</span>
-          <span>Workspace sealed</span>
         </div>
       </section>
 
       <section class="platform-login-panel">
-        <div class="platform-login-toolbar">${settingsPicker}</div>
+        <div class="login-panel-v2">
+          <div class="login-panel-glow"></div>
+          <div class="login-panel-corner tl"></div>
+          <div class="login-panel-corner tr"></div>
+          <div class="login-panel-corner bl"></div>
+          <div class="login-panel-corner br"></div>
         <div class="platform-login-card">
           ${combinedNoticeHtml}
           <div class="platform-login-card-top">
@@ -2185,6 +2186,7 @@ function renderRichLoginPage(options = {}) {
           <p class="footnote">${mode === 'register'
             ? 'After registration, the next step is selecting the account plan before entering the workspace.'
             : 'Google-first accounts should continue with Google so we can restore the correct workspace session.'}</p>
+        </div>
         </div>
       </section>
     </div>
@@ -2379,7 +2381,7 @@ function renderWorkspacePlanCard(option, account) {
   const isFeatured = option.id === 'PRO';
 
   const platformIcons = option.id === 'PRO'
-    ? `${renderPlatformGlyph('youtube')}${renderPlatformGlyph('instagram')}${renderPlatformGlyph('tiktok')}`
+    ? `${renderPlatformGlyph('youtube')}${renderPlatformGlyph('tiktok')}`
     : renderPlatformGlyph('youtube');
 
   return `
@@ -2457,11 +2459,13 @@ async function renderPlanosPage(options = {}) {
       <section class="card stack" style="margin-top:1.5rem;">
         <h2>Regras dos planos</h2>
         <ul class="stack" style="list-style:disc;padding-left:1.25rem;">
-          <li>Cada conta conectada para publicar custa <strong>5 tokens</strong> por campanha.</li>
+          <li>Cada conta conectada para publicar custa <strong>2 tokens</strong> por campanha.</li>
+          <li>Thumbnail custa <strong>1 token</strong> no plano Free. <strong>Gratis</strong> nos planos pagos.</li>
+          <li>Ao mudar de plano, voce recebe os tokens mensais do novo plano.</li>
           <li>A publicacao so acontece se voce tiver tokens suficientes para todas as contas selecionadas.</li>
           <li>Se nao houver tokens suficientes, a campanha nao sera publicada e voce vera um aviso de <strong>out of Tokens</strong>.</li>
           <li>O limite de tokens nunca e ultrapassado — o bônus diario e aplicado apenas ate o maximo do plano.</li>
-          <li>Instagram e TikTok estao disponiveis somente no plano <strong>PRO</strong>.</li>
+          <li>TikTok esta disponivel somente no plano <strong>PRO</strong>.</li>
         </ul>
       </section>
     `,
@@ -2481,6 +2485,8 @@ async function renderPlanosPage(options = {}) {
         return;
       }
 
+      state.account = selectResult.body?.account ?? state.account;
+      await ensureAccountPlan(true);
       await renderPlanosPage({ success: `Plano ${planId} ativado com sucesso!` });
     });
   });
@@ -2501,17 +2507,18 @@ async function renderPlanSelectionPage(options = {}) {
     return;
   }
 
+  const redlineTheme = BACKGROUND_THEME_OPTIONS.find((option) => option.id === 'platform-youtube-redline') ?? BACKGROUND_THEME_OPTIONS[0];
+  if (state.backgroundTheme !== redlineTheme.id) {
+    applyBackgroundTheme(redlineTheme.id);
+  }
+
   const account = result.body?.account ?? null;
   const selectedPlan = account?.plan ?? 'FREE';
   const combinedNoticeHtml = `${renderUiNotice()}${options.error ? `<div class="notice error">${escapeHtml(options.error)}</div>` : ''}`;
   const planCardsHtml = ACCOUNT_PLAN_OPTIONS.map((option) => renderPlanCard(option, selectedPlan)).join('');
-  const settingsPicker = settingsPickerHtml('plan-onboarding');
 
   root.innerHTML = `
     <div class="login-wrap">
-      <div class="login-toolbar">
-        ${settingsPicker}
-      </div>
       <section class="login-card plan-onboarding-card stack">
         ${combinedNoticeHtml}
         <div class="stack">
@@ -2545,20 +2552,12 @@ async function renderPlanSelectionPage(options = {}) {
       }
 
       state.me = selectResult.body?.user ?? { ...state.me, needsPlanSelection: false };
+      state.account = selectResult.body?.account ?? state.account;
       setUiNotice('success', 'Plan selected', `The ${planId} plan is now active for your account.`);
       navigate('/workspace/dashboard', true);
     });
   });
 
-  const planFontThemeSelect = document.getElementById('plan-onboarding-font-theme-select');
-  planFontThemeSelect?.addEventListener('change', (event) => {
-    applyFontTheme(event.target.value);
-    void renderPlanSelectionPage(options);
-  });
-
-  bindBackgroundPicker(() => {
-    void renderPlanSelectionPage(options);
-  });
   bindUiNoticeDismiss();
 }
 
@@ -2776,8 +2775,6 @@ function channelAvatarHtml(channel, label, className = 'channel-avatar') {
 
 function getAccountPlatformKey(provider) {
   switch ((provider ?? '').toLowerCase()) {
-    case 'instagram':
-      return 'instagram';
     case 'tiktok':
       return 'tiktok';
     case 'youtube':
@@ -2800,8 +2797,6 @@ function getProviderLabel(provider) {
   switch ((provider ?? '').toLowerCase()) {
     case 'youtube':
       return 'YouTube';
-    case 'instagram':
-      return 'Instagram';
     case 'tiktok':
       return 'TikTok';
     case 'google':
@@ -2813,6 +2808,11 @@ function getProviderLabel(provider) {
 function supportsChannels(provider) {
   const normalized = (provider ?? '').toLowerCase();
   return normalized === 'google' || normalized === 'youtube';
+}
+
+function isSupportedWorkspaceProvider(provider) {
+  const normalized = (provider ?? '').toLowerCase();
+  return normalized === 'google' || normalized === 'youtube' || normalized === 'tiktok';
 }
 
 function buildMediaAssetFileUrl(assetId) {
@@ -3435,8 +3435,12 @@ function applyOdThemeFromSettings() {
   const theme = buildOdThemeFromSettings();
   const root = document.getElementById('od-root');
   if (!root) return;
+  const dashboardPage = root.closest('.workspace-page-dashboard');
   const isDarkTheme = theme.appearance === 'dark';
   root.style.background = theme.bg;
+  if (dashboardPage) {
+    dashboardPage.style.setProperty('--dashboard-page-background', theme.bg);
+  }
   root.style.setProperty('--od-accent',     theme.accent);
   root.style.setProperty('--od-accent2',    theme.accent2);
   root.style.setProperty('--od-text-hi',    theme.textHi);
@@ -3716,9 +3720,6 @@ async function renderAccountsOauthCallbackPage() {
     case 'youtube':
       callbackRequest = api.accountYouTubeOauthCallback(code, stateParam);
       break;
-    case 'instagram':
-      callbackRequest = api.accountInstagramOauthCallback(code, stateParam);
-      break;
     case 'tiktok':
       callbackRequest = api.accountTikTokOauthCallback(code, stateParam);
       break;
@@ -3784,7 +3785,9 @@ async function renderAccountsPage() {
     return;
   }
 
-  const accounts = Array.isArray(listResult.body?.accounts) ? listResult.body.accounts : [];
+  const accounts = Array.isArray(listResult.body?.accounts)
+    ? listResult.body.accounts.filter((account) => isSupportedWorkspaceProvider(account.provider))
+    : [];
   const query = parseCurrentQuery();
   const search = (query.get('search') ?? '').trim();
   const statusFilter = (query.get('status') ?? '').trim();
@@ -3878,12 +3881,6 @@ async function renderAccountsPage() {
       label: 'YouTube',
       count: accounts.filter((account) => ['google', 'youtube'].includes((account.provider ?? '').toLowerCase())).length,
       detail: 'Channel sync + publishing',
-    },
-    {
-      key: 'instagram',
-      label: 'Instagram',
-      count: accounts.filter((account) => (account.provider ?? '').toLowerCase() === 'instagram').length,
-      detail: 'Distribution node',
     },
     {
       key: 'tiktok',
@@ -4049,11 +4046,10 @@ async function renderAccountsPage() {
   const accountsSetupCard = accounts.length === 0
     ? renderEmptyStateCard({
         title: 'No connected accounts yet',
-        message: 'Connect YouTube, Instagram, or TikTok accounts to centralize your publishing workspace.',
+        message: 'Connect YouTube or TikTok accounts to centralize your publishing workspace.',
         tone: 'info',
         actionsHtml: `
           <button class="btn-primary" type="button" data-action="start-youtube-oauth">Connect YouTube</button>
-          <button class="btn" type="button" data-action="start-instagram-oauth">Connect Instagram</button>
           <button class="btn" type="button" data-action="start-tiktok-oauth">Connect TikTok</button>
         `,
       })
@@ -4078,11 +4074,10 @@ async function renderAccountsPage() {
 
   renderWorkspaceShell({
     title: 'Accounts',
-    subtitle: 'Connected social accounts and YouTube publishing channels.',
+    subtitle: 'Connected YouTube and TikTok publishing accounts.',
     actionsHtml: `
       <div class="inline-actions">
         <button class="btn-primary" type="button" data-action="start-youtube-oauth">Connect YouTube</button>
-        <button class="btn" type="button" data-action="start-instagram-oauth">Connect Instagram</button>
         <button class="btn" type="button" data-action="start-tiktok-oauth">Connect TikTok</button>
         <a class="btn" data-link href="${escapeHtml(buildUrl('/workspace/accounts', { search, status: statusFilter }))}">Refresh</a>
       </div>
@@ -4099,7 +4094,6 @@ async function renderAccountsPage() {
           <p>Review account health, reconnect providers and manage the channels that feed your campaigns without leaving the workspace.</p>
           <div class="platform-dashboard-chip-row">
             <span class="platform-chip">${renderPlatformGlyph('youtube', 'small')} YouTube channels</span>
-            <span class="platform-chip">${renderPlatformGlyph('instagram', 'small')} Instagram profiles</span>
             <span class="platform-chip">${renderPlatformGlyph('tiktok', 'small')} TikTok creators</span>
           </div>
           <div class="platform-dashboard-chip-row">
@@ -4272,31 +4266,6 @@ async function renderAccountsPage() {
         return;
       }
       writePendingOauthProvider('youtube');
-      window.location.assign(redirectUrl);
-    });
-  });
-
-  document.querySelectorAll('[data-action="start-instagram-oauth"]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      clearUiNotice();
-      setButtonBusy(button, true, 'Connecting...');
-      const result = await api.startInstagramOauth();
-      setButtonBusy(button, false);
-
-      if (!result.ok) {
-        setUiNotice('error', 'Instagram OAuth failed', result.error);
-        await renderAccountsPage();
-        return;
-      }
-
-      const redirectUrl = result.body?.redirectUrl;
-      if (!redirectUrl) {
-        setUiNotice('error', 'Instagram OAuth failed', 'OAuth redirect URL not returned by API.');
-        await renderAccountsPage();
-        return;
-      }
-
-      writePendingOauthProvider('instagram');
       window.location.assign(redirectUrl);
     });
   });
@@ -4615,10 +4584,9 @@ async function renderMediaPage() {
             <span class="platform-dashboard-live"><span class="platform-login-live-dot"></span> Synced ${escapeHtml(liveClock)}</span>
           </div>
           <h2>Keep every video and thumbnail launch-ready for the whole workspace.</h2>
-          <p>Upload assets once, keep previews handy and maintain a reusable media library for YouTube, Instagram and TikTok campaigns.</p>
+          <p>Upload assets once, keep previews handy and maintain a reusable media library for YouTube and TikTok campaigns.</p>
           <div class="platform-dashboard-chip-row">
             <span class="platform-chip">${renderPlatformGlyph('youtube', 'small')} Long-form masters</span>
-            <span class="platform-chip">${renderPlatformGlyph('instagram', 'small')} Visual stories</span>
             <span class="platform-chip">${renderPlatformGlyph('tiktok', 'small')} Vertical cuts</span>
           </div>
           <div class="platform-dashboard-chip-row">
@@ -5137,7 +5105,6 @@ async function renderCampaignsPage() {
           <p>Track launch readiness, paging volume and publishing outcomes across the same visual system used in the dashboard, accounts and media library.</p>
           <div class="platform-dashboard-chip-row">
             <span class="platform-chip">${renderPlatformGlyph('youtube', 'small')} YouTube rollout</span>
-            <span class="platform-chip">${renderPlatformGlyph('instagram', 'small')} Instagram delivery</span>
             <span class="platform-chip">${renderPlatformGlyph('tiktok', 'small')} TikTok drops</span>
           </div>
           <div class="platform-dashboard-chip-row">
@@ -5420,7 +5387,7 @@ async function renderCampaignComposerPage() {
         {
           done: hasChannels,
           label: hasChannels ? 'Publishing destinations are ready' : 'Connect publishing accounts',
-          hint: hasChannels ? `${formatNumber(activeChannels.length)} YouTube channels and ${formatNumber(connectedChannels.length - activeChannels.length)} social destinations are available for this campaign.` : 'Connect YouTube, Instagram, or TikTok accounts to target publications directly from the composer.',
+          hint: hasChannels ? `${formatNumber(activeChannels.length)} YouTube channels and ${formatNumber(connectedChannels.length - activeChannels.length)} social destinations are available for this campaign.` : 'Connect YouTube or TikTok accounts to target publications directly from the composer.',
           actionHtml: '<a class="btn" data-link href="/workspace/accounts">Open accounts</a>',
         },
       ])}
@@ -5723,7 +5690,9 @@ async function loadActiveConnectedChannels() {
     };
   }
 
-  const accounts = Array.isArray(accountsResult.body?.accounts) ? accountsResult.body.accounts : [];
+  const accounts = Array.isArray(accountsResult.body?.accounts)
+    ? accountsResult.body.accounts.filter((account) => isSupportedWorkspaceProvider(account.provider))
+    : [];
   if (accounts.length === 0) {
     return {
       ok: true,
@@ -5776,7 +5745,9 @@ async function loadConnectedPublishDestinations() {
     };
   }
 
-  const accounts = Array.isArray(accountsResult.body?.accounts) ? accountsResult.body.accounts : [];
+  const accounts = Array.isArray(accountsResult.body?.accounts)
+    ? accountsResult.body.accounts.filter((account) => isSupportedWorkspaceProvider(account.provider))
+    : [];
   const youtubeAccounts = accounts.filter((account) => supportsChannels(account.provider));
   const channelResponses = await Promise.all(youtubeAccounts.map((account) => api.accountChannels(account.id)));
   const unauthorized = channelResponses.find((response) => !response.ok && response.status === 401);

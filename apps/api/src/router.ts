@@ -74,7 +74,7 @@ export function createApiRouter(options: {
         method: 'GET',
         pattern: /^\/auth\/google\/start$/,
         paramNames: [],
-        handler: () => authController.startGoogleOauth(),
+        handler: (req) => authController.startGoogleOauth(req),
       },
       {
         method: 'GET',
@@ -267,12 +267,6 @@ export function createApiRouter(options: {
       },
       {
         method: 'GET',
-        pattern: /^\/api\/accounts\/oauth\/instagram\/start$/,
-        paramNames: [],
-        handler: (req: AccountsRequest) => accountsController.startInstagramOauth(req),
-      },
-      {
-        method: 'GET',
         pattern: /^\/api\/accounts\/oauth\/tiktok\/start$/,
         paramNames: [],
         handler: (req: AccountsRequest) => accountsController.startTikTokOauth(req),
@@ -282,12 +276,6 @@ export function createApiRouter(options: {
         pattern: /^\/api\/accounts\/oauth\/google\/callback$/,
         paramNames: [],
         handler: (req: AccountsRequest) => accountsController.handleGoogleOauthCallback(req),
-      },
-      {
-        method: 'GET',
-        pattern: /^\/api\/accounts\/oauth\/instagram\/callback$/,
-        paramNames: [],
-        handler: (req: AccountsRequest) => accountsController.handleInstagramOauthCallback(req),
       },
       {
         method: 'GET',

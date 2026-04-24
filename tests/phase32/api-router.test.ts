@@ -59,16 +59,6 @@ describe('API Router — accounts routes', () => {
       handleOauthCallback: async (input) => (input.state === 'ok-state'
         ? { ok: true, account }
         : { ok: false, reason: 'INVALID_STATE' }),
-      instagramOauthService: {
-        createAuthorizationRedirect: async () => 'https://www.instagram.com/oauth/authorize?state=state-123',
-        validateCallbackState: () => true,
-        exchangeCodeForTokens: async () => ({
-          accessToken: 'ig-token',
-          scopes: ['instagram_business_basic'],
-          tokenExpiresAt: null,
-          profile: { providerSubject: 'ig-user-1', displayName: 'Instagram User' },
-        }),
-      } as any,
       tikTokOauthService: {
         createAuthorizationRedirect: async () => 'https://www.tiktok.com/v2/auth/authorize/?state=state-123',
         validateCallbackState: () => true,
@@ -158,16 +148,6 @@ describe('API Router — accounts routes', () => {
     expect(res.body.redirectUrl).toContain('accounts.google.com');
   });
 
-  it('GET /api/accounts/oauth/instagram/start returns redirect URL', async () => {
-    const res = await router.handle({
-      method: 'GET',
-      path: '/api/accounts/oauth/instagram/start',
-      session: authedSession,
-    });
-    expect(res.status).toBe(200);
-    expect(res.body.redirectUrl).toContain('instagram.com');
-  });
-
   it('GET /api/accounts/oauth/tiktok/start returns redirect URL', async () => {
     const res = await router.handle({
       method: 'GET',
@@ -193,17 +173,6 @@ describe('API Router — accounts routes', () => {
     const res = await router.handle({
       method: 'GET',
       path: '/api/accounts/oauth/youtube/callback',
-      session: authedSession,
-      query: { code: 'abc', state: 'ok-state' },
-    });
-    expect(res.status).toBe(200);
-    expect(res.body.account.id).toBe('acct-1');
-  });
-
-  it('GET /api/accounts/oauth/instagram/callback returns account on valid code/state', async () => {
-    const res = await router.handle({
-      method: 'GET',
-      path: '/api/accounts/oauth/instagram/callback',
       session: authedSession,
       query: { code: 'abc', state: 'ok-state' },
     });
@@ -480,7 +449,7 @@ describe('API Router - account plan routes', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.account.plan).toBe('FREE');
-    expect(res.body.account.maxTokens).toBe(80);
+    expect(res.body.account.maxTokens).toBe(150);
   });
 
   it('POST /api/account/plan/visit grants daily tokens once per day', async () => {
@@ -498,10 +467,10 @@ describe('API Router - account plan routes', () => {
 
     expect(firstRes.status).toBe(200);
     expect(firstRes.body.claimed).toBe(true);
-    expect(firstRes.body.grantedTokens).toBe(10);
+    expect(firstRes.body.grantedTokens).toBe(15);
     expect(secondRes.status).toBe(200);
     expect(secondRes.body.claimed).toBe(false);
-    expect(secondRes.body.account.tokens).toBe(10);
+    expect(secondRes.body.account.tokens).toBe(15);
   });
 
   it('POST /api/account/plan/select updates the current plan', async () => {
@@ -514,6 +483,6 @@ describe('API Router - account plan routes', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.account.plan).toBe('PRO');
-    expect(res.body.account.allowedPlatforms).toEqual(['youtube', 'instagram', 'tiktok']);
+    expect(res.body.account.allowedPlatforms).toEqual(['youtube', 'tiktok']);
   });
 });

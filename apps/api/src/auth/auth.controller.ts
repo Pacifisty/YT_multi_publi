@@ -79,9 +79,13 @@ export class AuthController {
     return this.toAuthResponse(result);
   }
 
-  async startGoogleOauth(): Promise<ControllerResponse<{ error?: string; redirectUrl?: string }>> {
+  async startGoogleOauth(
+    request: SessionRequestLike,
+  ): Promise<ControllerResponse<{ error?: string; redirectUrl?: string }>> {
     try {
-      const redirectUrl = await this.authService.createGoogleAuthorizationRedirect();
+      const redirectUrl = await this.authService.createGoogleAuthorizationRedirect(
+        request.session as unknown as { oauthStateNonce?: string } | null | undefined,
+      );
       return {
         status: 200,
         body: { redirectUrl },

@@ -1,14 +1,12 @@
 import type { PublishJobRecord, PublishJobService } from './publish-job.service';
 import type { CampaignService, CampaignTargetRecord } from './campaign.service';
 import type { YouTubeUploadWorker } from './youtube-upload.worker';
-import type { InstagramUploadWorker } from './instagram-upload.worker';
 import type { TikTokUploadWorker } from './tiktok-upload.worker';
 
 export interface PlatformDispatchWorkerOptions {
   jobService: PublishJobService;
   campaignService: CampaignService;
   youtubeWorker: YouTubeUploadWorker;
-  instagramWorker: InstagramUploadWorker;
   tiktokWorker: TikTokUploadWorker;
 }
 
@@ -16,14 +14,12 @@ export class PlatformDispatchWorker {
   private readonly jobService: PublishJobService;
   private readonly campaignService: CampaignService;
   private readonly youtubeWorker: YouTubeUploadWorker;
-  private readonly instagramWorker: InstagramUploadWorker;
   private readonly tiktokWorker: TikTokUploadWorker;
 
   constructor(options: PlatformDispatchWorkerOptions) {
     this.jobService = options.jobService;
     this.campaignService = options.campaignService;
     this.youtubeWorker = options.youtubeWorker;
-    this.instagramWorker = options.instagramWorker;
     this.tiktokWorker = options.tiktokWorker;
   }
 
@@ -41,10 +37,6 @@ export class PlatformDispatchWorker {
     const campaignResult = await this.campaignService.getCampaign(target.campaignId);
     if (!campaignResult) {
       return this.jobService.markFailed(job.id, 'Campaign not found');
-    }
-
-    if (target.platform === 'instagram') {
-      return this.instagramWorker.processPickedJob(job, target, campaignResult.campaign.videoAssetId);
     }
 
     if (target.platform === 'youtube') {

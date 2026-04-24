@@ -20,7 +20,7 @@ cp .env.example .env
 
 Fill any real credentials you need.  
 `DATABASE_URL` can stay empty for in-memory mode.
-`PUBLIC_APP_URL` should point to the externally reachable base URL when platforms like Instagram need to fetch uploaded media back from your server.
+`PUBLIC_APP_URL` should point to the externally reachable base URL when platforms like TikTok need to fetch uploaded media back from your server.
 
 For persistent local development with PostgreSQL:
 
@@ -62,14 +62,6 @@ For YouTube account connection (Google OAuth), set:
 - `GOOGLE_REDIRECT_URI=http://127.0.0.1:3000/workspace/accounts/callback`
 
 In Google Cloud Console, the same URI must be added as an authorized redirect URI.
-
-For Instagram account connection, set:
-
-- `INSTAGRAM_CLIENT_ID`
-- `INSTAGRAM_CLIENT_SECRET`
-- `INSTAGRAM_REDIRECT_URI=http://127.0.0.1:3000/workspace/accounts/callback?provider=instagram`
-
-Register the same callback in your Instagram/Meta app settings.
 
 For TikTok account connection, set:
 
@@ -162,5 +154,5 @@ Frontend routes served by the same process:
 - `GET /workspace/campanhas/nova`
 - `GET /workspace/campanhas/:campaignId`
 - `GET /workspace/accounts`
-- `GET /workspace/accounts/callback` (OAuth return route for Google, Instagram, and TikTok)
+- `GET /workspace/accounts/callback` (OAuth return route for Google and TikTok)
 - `GET /workspace/media`

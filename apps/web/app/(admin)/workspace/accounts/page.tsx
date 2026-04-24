@@ -11,7 +11,6 @@ export interface AccountsPageView {
   channelLists: Record<string, ChannelToggleListView>;
   connectUrls: {
     youtube: string;
-    instagram: string;
     tiktok: string;
   };
   emptyState?: {
@@ -34,7 +33,6 @@ export function buildAccountsPageView(data: AccountsPageData): AccountsPageView 
     channelLists,
     connectUrls: {
       youtube: '/accounts/oauth/youtube/start',
-      instagram: '/accounts/oauth/instagram/start',
       tiktok: '/accounts/oauth/tiktok/start',
     },
   };
@@ -42,8 +40,8 @@ export function buildAccountsPageView(data: AccountsPageData): AccountsPageView 
   if (table.isEmpty) {
     view.emptyState = {
       heading: 'No accounts connected',
-      body: 'Connect YouTube, Instagram, or TikTok accounts to centralize your publishing workspace.',
-      ctas: ['Connect YouTube Account', 'Connect Instagram Account', 'Connect TikTok Account'],
+      body: 'Connect YouTube or TikTok accounts to centralize your publishing workspace.',
+      ctas: ['Connect YouTube Account', 'Connect TikTok Account'],
     };
   }
 

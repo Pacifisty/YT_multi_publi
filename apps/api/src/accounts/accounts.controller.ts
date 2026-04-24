@@ -68,10 +68,6 @@ export class AccountsController {
     return this.startOauthForProvider('google', request);
   }
 
-  async startInstagramOauth(request: SessionRequestLike): Promise<AccountsControllerResponse<{ error?: string; redirectUrl?: string }>> {
-    return this.startOauthForProvider('instagram', request);
-  }
-
   async startTikTokOauth(request: SessionRequestLike): Promise<AccountsControllerResponse<{ error?: string; redirectUrl?: string }>> {
     return this.startOauthForProvider('tiktok', request);
   }
@@ -104,7 +100,7 @@ export class AccountsController {
         },
       };
     } catch (error) {
-      const label = provider === 'tiktok' ? 'TikTok' : provider === 'instagram' ? 'Instagram' : 'Google';
+      const label = provider === 'tiktok' ? 'TikTok' : provider === 'youtube' ? 'YouTube' : 'Google';
       const message = error instanceof Error ? error.message : `${label} OAuth start failed.`;
       return {
         status: 500,
@@ -123,12 +119,6 @@ export class AccountsController {
     request: AccountsRequest,
   ): Promise<AccountsControllerResponse<{ error?: string; account?: ConnectedAccountRecord; sync?: ChannelSyncSummary }>> {
     return this.handleOauthCallbackForProvider('google', request);
-  }
-
-  async handleInstagramOauthCallback(
-    request: AccountsRequest,
-  ): Promise<AccountsControllerResponse<{ error?: string; account?: ConnectedAccountRecord; sync?: ChannelSyncSummary }>> {
-    return this.handleOauthCallbackForProvider('instagram', request);
   }
 
   async handleTikTokOauthCallback(
@@ -172,7 +162,7 @@ export class AccountsController {
         session: request.session as unknown as Record<string, unknown> | null | undefined,
       });
     } catch (error) {
-      const label = provider === 'tiktok' ? 'TikTok' : provider === 'instagram' ? 'Instagram' : 'Google';
+      const label = provider === 'tiktok' ? 'TikTok' : provider === 'youtube' ? 'YouTube' : 'Google';
       const message = error instanceof Error ? error.message : `${label} OAuth callback failed.`;
       return {
         status: 500,

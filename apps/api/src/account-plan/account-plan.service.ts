@@ -11,6 +11,7 @@ export interface AccountPlanDefinition {
   maxTokens: number;
   dailyVisitTokens: number;
   campaignPublishCostTokens: number;
+  thumbnailCostTokens: number;
   allowedPlatforms: string[];
   depthProfile: AccountDepthProfile;
 }
@@ -36,6 +37,7 @@ export interface AccountPlanSummary {
   maxTokens: number;
   dailyVisitTokens: number;
   campaignPublishCostTokens: number;
+  thumbnailCostTokens: number;
   priceBrl: number | null;
   durationDays: number | null;
   billingStartedAt: string | null;
@@ -71,7 +73,8 @@ export const ACCOUNT_PLAN_DEFINITIONS: Record<AccountPlanType, AccountPlanDefini
     durationDays: null,
     maxTokens: 150,
     dailyVisitTokens: 15,
-    campaignPublishCostTokens: 5,
+    campaignPublishCostTokens: 2,
+    thumbnailCostTokens: 1,
     allowedPlatforms: ['youtube'],
     depthProfile: 'light',
   },
@@ -82,7 +85,8 @@ export const ACCOUNT_PLAN_DEFINITIONS: Record<AccountPlanType, AccountPlanDefini
     durationDays: 30,
     maxTokens: 400,
     dailyVisitTokens: 40,
-    campaignPublishCostTokens: 5,
+    campaignPublishCostTokens: 2,
+    thumbnailCostTokens: 0,
     allowedPlatforms: ['youtube'],
     depthProfile: 'balanced',
   },
@@ -93,8 +97,9 @@ export const ACCOUNT_PLAN_DEFINITIONS: Record<AccountPlanType, AccountPlanDefini
     durationDays: 30,
     maxTokens: 800,
     dailyVisitTokens: 80,
-    campaignPublishCostTokens: 5,
-    allowedPlatforms: ['youtube', 'instagram', 'tiktok'],
+    campaignPublishCostTokens: 2,
+    thumbnailCostTokens: 0,
+    allowedPlatforms: ['youtube', 'tiktok'],
     depthProfile: 'deep',
   },
 };
@@ -163,11 +168,10 @@ export class AccountPlanService {
       };
     }
 
-    const nextTokens = Math.min(record.tokens + definition.dailyVisitTokens, definition.maxTokens);
-    const grantedTokens = Math.max(nextTokens - record.tokens, 0);
+    const grantedTokens = definition.dailyVisitTokens;
     const updated = await this.store.save({
       ...record,
-      tokens: nextTokens,
+      tokens: record.tokens + grantedTokens,
       lastDailyVisitAt: this.now().toISOString(),
       updatedAt: this.now().toISOString(),
     });
@@ -184,10 +188,18 @@ export class AccountPlanService {
     const definition = ACCOUNT_PLAN_DEFINITIONS[plan];
     const nowIso = this.now().toISOString();
 
+    const planChanged = current.plan !== plan;
+    const shouldGrantMonthly = planChanged || !current.lastMonthlyGrantAt;
+
+    const baseTokens = shouldGrantMonthly
+      ? current.tokens + definition.maxTokens
+      : current.tokens;
+
     const updated = await this.store.save({
       ...current,
       plan,
-      tokens: Math.min(current.tokens, definition.maxTokens),
+      tokens: baseTokens,
+      lastMonthlyGrantAt: shouldGrantMonthly ? nowIso : current.lastMonthlyGrantAt,
       billingStartedAt: definition.durationDays ? nowIso : null,
       billingExpiresAt: definition.durationDays ? new Date(this.now().getTime() + definition.durationDays * 24 * 60 * 60 * 1000).toISOString() : null,
       selectedAt: nowIso,
@@ -225,11 +237,36 @@ export class AccountPlanService {
     }
 
     throw new AccountPlanAccessError(
-      platform === 'instagram' || platform === 'tiktok'
-        ? 'Seu plano atual nao permite publicar no Instagram ou TikTok. Faça upgrade para o plano PRO.'
+      platform === 'tiktok'
+        ? 'Seu plano atual nao permite publicar no TikTok. Faca upgrade para o plano PRO.'
         : 'Seu plano atual nao permite usar este destino de publicacao.',
       403,
     );
+  }
+
+  async chargeThumbnailUpload(email: string): Promise<CampaignLaunchAuthorizationResult> {
+    const record = await this.getOrCreateRecord(email);
+    const definition = ACCOUNT_PLAN_DEFINITIONS[record.plan];
+    const chargedTokens = definition.thumbnailCostTokens;
+
+    if (chargedTokens <= 0) {
+      return { ok: true, chargedTokens: 0, account: this.toSummary(record) };
+    }
+
+    if (record.tokens < chargedTokens) {
+      throw new AccountPlanTokenError(
+        `Tokens insuficientes para enviar thumbnail. Saldo atual: ${record.tokens}. Necessario: ${chargedTokens}.`,
+        402,
+      );
+    }
+
+    const updated = await this.store.save({
+      ...record,
+      tokens: record.tokens - chargedTokens,
+      updatedAt: this.now().toISOString(),
+    });
+
+    return { ok: true, chargedTokens, account: this.toSummary(updated) };
   }
 
   async authorizeCampaignLaunch(email: string, campaign: CampaignRecord): Promise<CampaignLaunchAuthorizationResult> {
@@ -239,7 +276,7 @@ export class AccountPlanService {
     for (const target of campaign.targets) {
       if (!definition.allowedPlatforms.includes(target.platform ?? 'youtube')) {
         throw new AccountPlanAccessError(
-          'Seu plano atual nao cobre todos os destinos desta campanha. O plano PRO libera Instagram e TikTok.',
+          'Seu plano atual nao cobre todos os destinos desta campanha. O plano PRO libera TikTok.',
           403,
         );
       }
@@ -271,12 +308,13 @@ export class AccountPlanService {
     const existing = await this.store.findByEmail(normalizedEmail);
     if (!existing) {
       const nowIso = this.now().toISOString();
+      const freeDefinition = ACCOUNT_PLAN_DEFINITIONS.FREE;
       const created: AccountPlanRecord = {
         email: normalizedEmail,
         plan: 'FREE',
-        tokens: 0,
+        tokens: freeDefinition.maxTokens,
         lastDailyVisitAt: null,
-        lastMonthlyGrantAt: null,
+        lastMonthlyGrantAt: nowIso,
         billingStartedAt: null,
         billingExpiresAt: null,
         selectedAt: null,
@@ -319,6 +357,7 @@ export class AccountPlanService {
       maxTokens: definition.maxTokens,
       dailyVisitTokens: definition.dailyVisitTokens,
       campaignPublishCostTokens: definition.campaignPublishCostTokens,
+      thumbnailCostTokens: definition.thumbnailCostTokens,
       priceBrl: definition.priceBrl,
       durationDays: definition.durationDays,
       billingStartedAt: record.billingStartedAt,

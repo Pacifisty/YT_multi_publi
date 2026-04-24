@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-export type CampaignTargetPlatform = 'youtube' | 'instagram' | 'tiktok';
+export type CampaignTargetPlatform = 'youtube' | 'tiktok';
 
 export interface CampaignTargetRecord {
   id: string;

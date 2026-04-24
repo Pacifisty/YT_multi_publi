@@ -8,8 +8,6 @@ import {
   type GoogleOauthSession,
   type GoogleTokenResult,
 } from '../integrations/google/google-oauth.service';
-import type { InstagramOauthSession, InstagramTokenResult } from '../integrations/instagram/instagram-oauth.service';
-import { InstagramOauthService } from '../integrations/instagram/instagram-oauth.service';
 import type { TikTokOauthSession, TikTokTokenResult } from '../integrations/tiktok/tiktok-oauth.service';
 import { TikTokOauthService } from '../integrations/tiktok/tiktok-oauth.service';
 import {
@@ -72,7 +70,7 @@ interface OAuthCallbackInput {
   session?: Record<string, unknown> | null;
 }
 
-export type SupportedOauthProvider = 'google' | 'youtube' | 'instagram' | 'tiktok';
+export type SupportedOauthProvider = 'google' | 'youtube' | 'tiktok';
 
 type OAuthCallbackResult =
   | {
@@ -99,7 +97,6 @@ export interface RefreshResult {
 export interface AccountsServiceOptions {
   tokenCryptoService?: TokenCryptoService;
   googleOauthService?: GoogleOauthService;
-  instagramOauthService?: InstagramOauthService;
   tikTokOauthService?: TikTokOauthService;
   connectedAccountStore?: ConnectedAccountStore;
   createConnectedAccount?: (record: ConnectedAccountRecord) => Promise<ConnectedAccountRecord>;
@@ -157,7 +154,6 @@ export class AccountsService {
 
   private tokenCryptoService?: TokenCryptoService;
   private googleOauthService?: GoogleOauthService;
-  private instagramOauthService?: InstagramOauthService;
   private tikTokOauthService?: TikTokOauthService;
   private readonly connectedAccountStore: ConnectedAccountStore;
   private readonly channelStore: ChannelStore;
@@ -167,7 +163,6 @@ export class AccountsService {
   constructor(private readonly options: AccountsServiceOptions = {}) {
     this.tokenCryptoService = options.tokenCryptoService;
     this.googleOauthService = options.googleOauthService;
-    this.instagramOauthService = options.instagramOauthService;
     this.tikTokOauthService = options.tikTokOauthService;
     this.connectedAccountStore = options.connectedAccountStore ?? new InMemoryConnectedAccountStore();
     this.channelStore = options.channelStore ?? new InMemoryChannelStore();
@@ -182,18 +177,6 @@ export class AccountsService {
     provider: SupportedOauthProvider,
     session?: Record<string, unknown> | null,
   ): Promise<string> {
-    if (provider === 'instagram') {
-      const redirectUrl = await this.getInstagramOauthService().createAuthorizationRedirect(session as InstagramOauthSession | null | undefined);
-      const state = extractStateFromAuthorizationRedirect(redirectUrl);
-      if (state) {
-        this.rememberOauthState(
-          state,
-          (session as { adminUser?: { email?: string } } | null | undefined)?.adminUser?.email,
-        );
-      }
-      return redirectUrl;
-    }
-
     if (provider === 'tiktok') {
       const redirectUrl = await this.getTikTokOauthService().createAuthorizationRedirect(session as TikTokOauthSession | null | undefined);
       const state = extractStateFromAuthorizationRedirect(redirectUrl);
@@ -647,28 +630,16 @@ export class AccountsService {
     return this.googleOauthService;
   }
 
-  private getInstagramOauthService(): InstagramOauthService {
-    this.instagramOauthService = this.instagramOauthService ?? new InstagramOauthService();
-    return this.instagramOauthService;
-  }
-
   private getTikTokOauthService(): TikTokOauthService {
     this.tikTokOauthService = this.tikTokOauthService ?? new TikTokOauthService();
     return this.tikTokOauthService;
   }
 
   private validateProviderCallbackState(
-    provider: 'google' | 'instagram' | 'tiktok',
+    provider: 'google' | 'tiktok',
     session: OAuthCallbackInput['session'],
     state: string,
   ): boolean {
-    if (provider === 'instagram') {
-      return this.getInstagramOauthService().validateCallbackState(
-        session as InstagramOauthSession | null | undefined,
-        state,
-      );
-    }
-
     if (provider === 'tiktok') {
       return this.getTikTokOauthService().validateCallbackState(
         session as TikTokOauthSession | null | undefined,
@@ -680,13 +651,9 @@ export class AccountsService {
   }
 
   private async exchangeProviderCode(
-    provider: 'google' | 'instagram' | 'tiktok',
+    provider: 'google' | 'tiktok',
     code: string,
-  ): Promise<GoogleTokenResult | InstagramTokenResult | TikTokTokenResult> {
-    if (provider === 'instagram') {
-      return this.getInstagramOauthService().exchangeCodeForTokens(code);
-    }
-
+  ): Promise<GoogleTokenResult | TikTokTokenResult> {
     if (provider === 'tiktok') {
       return this.getTikTokOauthService().exchangeCodeForTokens(code);
     }

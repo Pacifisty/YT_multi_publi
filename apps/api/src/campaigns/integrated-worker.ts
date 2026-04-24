@@ -2,7 +2,6 @@ import type { CampaignService } from './campaign.service';
 import type { PublishJobService } from './publish-job.service';
 import type { AuditEventService } from './audit-event.service';
 import { YouTubeUploadWorker, type YouTubeUploadFn } from './youtube-upload.worker';
-import { InstagramUploadWorker, instagramGraphPublish, type InstagramPublishFn } from './instagram-upload.worker';
 import { TikTokUploadWorker } from './tiktok-upload.worker';
 import { PlatformDispatchWorker } from './platform-dispatch.worker';
 import { JobRunner } from './job-runner';
@@ -18,7 +17,6 @@ export interface IntegratedWorkerOptions {
   jobService: PublishJobService;
   auditService?: AuditEventService;
   uploadFn: YouTubeUploadFn;
-  instagramPublishFn?: InstagramPublishFn;
   channelTokenResolver: ChannelTokenResolver;
   videoFileResolver: VideoFileResolver;
   thumbnailFileResolver?: ThumbnailFileResolver;
@@ -31,7 +29,6 @@ export interface IntegratedWorkerInstance {
   runner: JobRunner;
   uploadService: YouTubeUploadService;
   youtubeWorker: YouTubeUploadWorker;
-  instagramWorker: InstagramUploadWorker;
   tiktokWorker: TikTokUploadWorker;
 }
 
@@ -55,19 +52,6 @@ export function createIntegratedWorker(options: IntegratedWorkerOptions): Integr
       : undefined,
   });
 
-  const instagramWorker = new InstagramUploadWorker({
-    jobService: options.jobService,
-    campaignService: options.campaignService,
-    auditService: options.auditService,
-    publishFn: options.instagramPublishFn ?? instagramGraphPublish,
-    getAccessToken: options.getAccessTokenForConnectedAccount ?? (async () => {
-      throw new Error('Instagram publishing is not configured.');
-    }),
-    getPublicVideoUrl: options.getPublicVideoUrl ?? (async () => {
-      throw new Error('Public media URLs are not configured.');
-    }),
-  });
-
   const tiktokWorker = new TikTokUploadWorker({
     jobService: options.jobService,
     campaignService: options.campaignService,
@@ -84,11 +68,10 @@ export function createIntegratedWorker(options: IntegratedWorkerOptions): Integr
     jobService: options.jobService,
     campaignService: options.campaignService,
     youtubeWorker,
-    instagramWorker,
     tiktokWorker,
   });
 
   const runner = new JobRunner({ worker });
 
-  return { worker, runner, uploadService, youtubeWorker, instagramWorker, tiktokWorker };
+  return { worker, runner, uploadService, youtubeWorker, tiktokWorker };
 }

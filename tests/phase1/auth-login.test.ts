@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
 import { AuthController } from '../../apps/api/src/auth/auth.controller';
 import { AuthService } from '../../apps/api/src/auth/auth.service';
@@ -140,6 +140,71 @@ describe('seeded admin session authentication boundary', () => {
 
     expect(response.status).toBe(401);
     expect(response.body.error).toContain('Google');
+  });
+
+  test('passes the request session into Google OAuth start', async () => {
+    const session = createSession() as ReturnType<typeof createSession> & { oauthStateNonce?: string };
+    const createGoogleAuthorizationRedirect = vi.fn(async (oauthSession?: { oauthStateNonce?: string } | null) => {
+      if (oauthSession) {
+        oauthSession.oauthStateNonce = 'oauth-state-123';
+      }
+      return 'https://accounts.google.com/o/oauth2/v2/auth?state=oauth-state-123';
+    });
+    const controller = new AuthController(
+      {
+        createGoogleAuthorizationRedirect,
+      } as unknown as AuthService,
+      createSessionCookieOptions({ NODE_ENV: 'test' }),
+    );
+
+    const response = await controller.startGoogleOauth({
+      session,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.redirectUrl).toContain('oauth-state-123');
+    expect(createGoogleAuthorizationRedirect).toHaveBeenCalledWith(session);
+    expect(session.oauthStateNonce).toBe('oauth-state-123');
+  });
+
+  test('uses the development Google login fallback when OAuth credentials are placeholders', async () => {
+    const env = {
+      ADMIN_EMAIL: 'admin@example.com',
+      ADMIN_PASSWORD_HASH: 'plain:correct-horse-battery-staple',
+      GOOGLE_CLIENT_ID: 'replace-me',
+      GOOGLE_CLIENT_SECRET: 'replace-me',
+      GOOGLE_AUTH_REDIRECT_URI: 'http://127.0.0.1:3000/login/callback',
+      NODE_ENV: 'development',
+    };
+    const session = createSession() as ReturnType<typeof createSession> & { oauthStateNonce?: string };
+    const controller = new AuthController(
+      new AuthService({ env }),
+      createSessionCookieOptions(env),
+    );
+
+    const startResponse = await controller.startGoogleOauth({ session });
+    const redirectUrl = new URL(String(startResponse.body.redirectUrl));
+    const state = redirectUrl.searchParams.get('state') ?? '';
+    const code = redirectUrl.searchParams.get('code') ?? '';
+
+    expect(startResponse.status).toBe(200);
+    expect(code).toBe('dev-google-login');
+    expect(state).toBeTruthy();
+    expect(session.oauthStateNonce).toBe(state);
+
+    const callbackResponse = await controller.handleGoogleOauthCallback({
+      query: {
+        code,
+        state,
+      },
+      session,
+    });
+
+    expect(callbackResponse.status).toBe(200);
+    expect(callbackResponse.body.user).toMatchObject({
+      email: 'admin@example.com',
+      needsPlanSelection: false,
+    });
   });
 
   test('session guard blocks unauthenticated requests with 401', () => {

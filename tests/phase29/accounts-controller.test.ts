@@ -409,32 +409,6 @@ describe('AccountsController', () => {
     });
   });
 
-  describe('startInstagramOauth', () => {
-    it('returns 200 with redirect URL', async () => {
-      const service = new AccountsService({
-        tokenCryptoService: crypto,
-        instagramOauthService: {
-          createAuthorizationRedirect: async () => 'https://www.instagram.com/oauth/authorize?client_id=test',
-          validateCallbackState: () => true,
-          exchangeCodeForTokens: async () => ({
-            accessToken: 'ig-token',
-            scopes: ['instagram_business_basic'],
-            tokenExpiresAt: null,
-            profile: {
-              providerSubject: 'ig-user-1',
-              displayName: 'Instagram User',
-            },
-          }),
-        } as any,
-      });
-      const controller = new AccountsController(service, new SessionGuard());
-
-      const res = await controller.startInstagramOauth(authedRequest());
-      expect(res.status).toBe(200);
-      expect(res.body.redirectUrl).toContain('instagram.com');
-    });
-  });
-
   describe('startTikTokOauth', () => {
     it('returns 200 with redirect URL', async () => {
       const service = new AccountsService({
@@ -608,44 +582,6 @@ describe('AccountsController', () => {
       );
       expect(res.status).toBe(200);
       expect(res.body.account!.id).toBe(account.id);
-    });
-  });
-
-  describe('handleInstagramOauthCallback', () => {
-    it('returns 200 with account on success without sync summary', async () => {
-      const account = createConnectedAccount(crypto, {
-        id: 'ig-acct-1',
-        provider: 'instagram',
-        providerSubject: 'ig-user-1',
-        googleSubject: 'ig-user-1',
-        displayName: 'Instagram User',
-        email: undefined,
-      });
-      const service = new AccountsService({
-        tokenCryptoService: crypto,
-        instagramOauthService: {
-          createAuthorizationRedirect: async () => 'https://www.instagram.com/oauth/authorize?client_id=test&state=valid',
-          validateCallbackState: () => true,
-          exchangeCodeForTokens: async () => ({
-            accessToken: 'ig-token',
-            scopes: ['instagram_business_basic'],
-            tokenExpiresAt: null,
-            profile: {
-              providerSubject: 'ig-user-1',
-              displayName: 'Instagram User',
-            },
-          }),
-        } as any,
-      });
-      service.createPersistenceRecord = () => account;
-      const controller = new AccountsController(service, new SessionGuard());
-
-      const res = await controller.handleInstagramOauthCallback(
-        authedRequest({ query: { code: 'valid', state: 'valid' } }),
-      );
-      expect(res.status).toBe(200);
-      expect(res.body.account!.provider).toBe('instagram');
-      expect(res.body.sync).toBeUndefined();
     });
   });
 

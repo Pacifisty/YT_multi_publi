@@ -121,7 +121,7 @@ export function createApp(config: AppConfig = {}): AppInstance {
       accountsModule.accountsService.resolveAccessTokenForConnectedAccount(connectedAccountId),
     getPublicVideoUrl: async (videoAssetId) => {
       if (!publicMediaUrlService) {
-        throw new Error('PUBLIC_APP_URL is required for Instagram publishing.');
+        throw new Error('PUBLIC_APP_URL is required for TikTok publishing.');
       }
 
       const asset = await mediaModule.mediaService.getAsset(videoAssetId);

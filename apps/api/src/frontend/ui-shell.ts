@@ -43,6 +43,13 @@ export function resolveFrontendAsset(path: string): FrontendAsset | null {
     };
   }
 
+  if (path === '/tiktok8COodYfNAGHdJBdORbUZUwaC9XDJBjpn.txt') {
+    return {
+      contentType: 'text/plain; charset=utf-8',
+      body: 'tiktok-developers-site-verification=8COodYfNAGHdJBdORbUZUwaC9XDJBjpn',
+    };
+  }
+
   return null;
 }
 

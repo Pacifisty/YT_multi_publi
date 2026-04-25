@@ -2103,8 +2103,6 @@ function renderRichLoginPage(options = {}) {
               <span class="pmp-badge-rest">ublisher</span>
             </div>
           </div>
-          <div class="platform-login-orbit-node youtube">${renderPlatformGlyph('youtube')}</div>
-          <div class="platform-login-orbit-node tiktok">${renderPlatformGlyph('tiktok')}</div>
         </div>
       </section>
 

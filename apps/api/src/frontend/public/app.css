@@ -2578,6 +2578,9 @@ pre {
   display: grid;
   align-content: space-between;
   gap: 28px;
+  overflow: hidden;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .platform-login-globe-field {
@@ -2831,14 +2834,14 @@ pre {
   padding: 22px 42px;
   border-radius: 22px;
   background:
-    radial-gradient(circle at 20% 30%, rgba(64, 224, 208, 0.18), transparent 60%),
-    radial-gradient(circle at 80% 70%, rgba(255, 79, 163, 0.15), transparent 60%),
+    radial-gradient(circle at 20% 30%, rgba(64, 224, 208, 0.07), transparent 60%),
+    radial-gradient(circle at 80% 70%, rgba(255, 79, 163, 0.06), transparent 60%),
     linear-gradient(135deg, rgba(8, 12, 24, 0.85), rgba(2, 6, 23, 0.9));
-  border: 1px solid rgba(64, 224, 208, 0.35);
+  border: 1px solid rgba(64, 224, 208, 0.18);
   box-shadow:
-    0 0 0 1px rgba(255, 79, 163, 0.1),
+    0 0 0 1px rgba(255, 79, 163, 0.05),
     0 8px 28px rgba(2, 6, 23, 0.5),
-    inset 0 0 22px rgba(64, 224, 208, 0.06);
+    inset 0 0 16px rgba(64, 224, 208, 0.03);
   cursor: default;
   overflow: hidden;
   font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
@@ -2846,11 +2849,11 @@ pre {
 }
 
 .pmp-badge-panel:hover {
-  border-color: rgba(64, 224, 208, 0.7);
+  border-color: rgba(64, 224, 208, 0.32);
   box-shadow:
-    0 0 0 1px rgba(255, 79, 163, 0.3),
-    0 12px 36px rgba(64, 224, 208, 0.3),
-    inset 0 0 28px rgba(64, 224, 208, 0.14);
+    0 0 0 1px rgba(255, 79, 163, 0.12),
+    0 12px 36px rgba(64, 224, 208, 0.1),
+    inset 0 0 20px rgba(64, 224, 208, 0.05);
   transform: translateY(-2px);
 }
 
@@ -2863,7 +2866,7 @@ pre {
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(64, 224, 208, 0.4),
+    rgba(64, 224, 208, 0.12),
     transparent
   );
   animation: pmp-badge-scan-sweep 3s ease-in-out infinite;
@@ -2885,8 +2888,8 @@ pre {
   font-weight: 800;
   font-size: 4.2rem;
   letter-spacing: 0.06em;
-  color: #40e0d0;
-  text-shadow: 0 0 20px rgba(64, 224, 208, 0.55);
+  color: #7ecfca;
+  text-shadow: 0 0 8px rgba(64, 224, 208, 0.2);
   transition: color 0.3s, text-shadow 0.3s;
   z-index: 1;
 }
@@ -2903,8 +2906,8 @@ pre {
 }
 
 .pmp-badge-letter:hover {
-  color: #ff4fa3;
-  text-shadow: 0 0 14px rgba(255, 79, 163, 0.7);
+  color: #e07aaa;
+  text-shadow: 0 0 8px rgba(255, 79, 163, 0.3);
 }
 
 .pmp-badge-letter:hover::after {
@@ -2943,8 +2946,8 @@ pre {
 }
 
 .pmp-badge-letter.pmp-auto-open {
-  color: #ff4fa3;
-  text-shadow: 0 0 14px rgba(255, 79, 163, 0.7);
+  color: #e07aaa;
+  text-shadow: 0 0 8px rgba(255, 79, 163, 0.3);
 }
 
 .pmp-badge-letter.pmp-auto-open::after {
@@ -2960,9 +2963,14 @@ pre {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: clamp(220px, 38vh, 360px);
-  padding: 40px 20px;
+  width: 100%;
+  max-width: 100%;
+  min-height: clamp(180px, 30vh, 300px);
+  padding: 32px 16px;
   margin: 8px 0;
+  overflow: hidden;
+  contain: layout paint;
+  box-sizing: border-box;
 }
 
 .pmp-badge-stage {
@@ -2976,22 +2984,18 @@ pre {
     inset 0 0 30px rgba(64, 224, 208, 0.08);
   min-height: 140px;
   z-index: 2;
+  flex-wrap: nowrap;
+  justify-content: center;
+  box-sizing: border-box;
 }
 
-.pmp-stage-wrapper .platform-login-orbit-node {
-  position: absolute;
-  opacity: 0.55;
-  z-index: 1;
+.pmp-badge-stage .pmp-badge-letter {
+  font-size: 4.2rem;
 }
 
-.pmp-stage-wrapper .platform-login-orbit-node.youtube {
-  top: 20%;
-  right: 6%;
-}
-
-.pmp-stage-wrapper .platform-login-orbit-node.tiktok {
-  bottom: 18%;
-  left: 8%;
+.pmp-badge-stage .pmp-badge-letter:hover .pmp-badge-rest,
+.pmp-badge-stage .pmp-badge-letter.pmp-auto-open .pmp-badge-rest {
+  max-width: 360px;
 }
 
 .orbit-nodes-badge {
@@ -3051,7 +3055,13 @@ pre {
   width: 3px;
   background: linear-gradient(180deg, #40e0d0, rgba(64, 224, 208, 0.2));
   border-radius: 1px;
-  animation: orbit-bar-wave 1.4s ease-in-out infinite;
+  transform-origin: bottom center;
+  animation: orbit-bar-wave-fixed 1.4s ease-in-out infinite;
+}
+
+@keyframes orbit-bar-wave-fixed {
+  0%, 100% { transform: scaleY(0.5); opacity: 0.55; }
+  50% { transform: scaleY(1); opacity: 1; }
 }
 
 .orbit-nodes-badge-bars span:nth-child(1) { height: 60%; animation-delay: 0s; }
@@ -3059,6 +3069,24 @@ pre {
 .orbit-nodes-badge-bars span:nth-child(3) { height: 45%; animation-delay: 0.3s; }
 .orbit-nodes-badge-bars span:nth-child(4) { height: 75%; animation-delay: 0.45s; }
 .orbit-nodes-badge-bars span:nth-child(5) { height: 55%; animation-delay: 0.6s; }
+
+.orbit-nodes-badge .orbit-status-dot {
+  animation: orbit-dot-blink-fixed 1.6s ease-in-out infinite;
+}
+
+@keyframes orbit-dot-blink-fixed {
+  0%, 100% { opacity: 1; box-shadow: 0 0 8px #2dd4bf; }
+  50% { opacity: 0.45; box-shadow: 0 0 4px #2dd4bf; }
+}
+
+.platform-login-stage-meta .platform-login-live-dot {
+  animation: relay-dot-blink 1.6s ease-in-out infinite;
+}
+
+@keyframes relay-dot-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
 
 .platform-login-live,
 .platform-dashboard-live {

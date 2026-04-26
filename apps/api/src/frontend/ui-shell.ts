@@ -50,6 +50,27 @@ export function resolveFrontendAsset(path: string): FrontendAsset | null {
     };
   }
 
+  if (path === '/tiktokY0qPZzbYMlseg8jR6X6IWUq4Z943nKtq.txt') {
+    return {
+      contentType: 'text/plain; charset=utf-8',
+      body: 'tiktok-developers-site-verification=Y0qPZzbYMlseg8jR6X6IWUq4Z943nKtq',
+    };
+  }
+
+  if (path === '/terms/tiktokyQY5fafpnYO0QynFIa9YoptEkeAOAm1p.txt') {
+    return {
+      contentType: 'text/plain; charset=utf-8',
+      body: 'tiktok-developers-site-verification=yQY5fafpnYO0QynFIa9YoptEkeAOAm1p',
+    };
+  }
+
+  if (path === '/privacy/tiktokh4lzAEArircjMLNxYEvA21NjqtOGoEzF.txt') {
+    return {
+      contentType: 'text/plain; charset=utf-8',
+      body: 'tiktok-developers-site-verification=h4lzAEArircjMLNxYEvA21NjqtOGoEzF',
+    };
+  }
+
   return null;
 }
 

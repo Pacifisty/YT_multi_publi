@@ -226,7 +226,7 @@ export class AccountsService {
       };
     }
 
-    const tokenResult = await this.exchangeProviderCode(canonicalProvider, input.code);
+    const tokenResult = await this.exchangeProviderCode(canonicalProvider, input.code, input.session);
     const record = this.createPersistenceRecord({
       ownerEmail: adminEmail,
       provider: canonicalProvider,
@@ -653,9 +653,11 @@ export class AccountsService {
   private async exchangeProviderCode(
     provider: 'google' | 'tiktok',
     code: string,
+    session?: OAuthCallbackInput['session'],
   ): Promise<GoogleTokenResult | TikTokTokenResult> {
     if (provider === 'tiktok') {
-      return this.getTikTokOauthService().exchangeCodeForTokens(code);
+      const codeVerifier = typeof session?.tiktokCodeVerifier === 'string' ? session.tiktokCodeVerifier : undefined;
+      return this.getTikTokOauthService().exchangeCodeForTokens(code, codeVerifier);
     }
 
     return this.getGoogleOauthService().exchangeCodeForTokens(code);

@@ -73,8 +73,12 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
     ? { ...accountRepoOverrides, ...channelStoreOverride }
     : undefined;
 
-  const mediaModuleOptions = databaseProvider.mediaAssetRepository
-    ? { repository: createMediaRepoAdapter(databaseProvider.mediaAssetRepository) }
+  const mediaModuleOptions = (databaseProvider.mediaAssetRepository || databaseProvider.playlistRepository || databaseProvider.presetRepository)
+    ? {
+        ...(databaseProvider.mediaAssetRepository ? { repository: createMediaRepoAdapter(databaseProvider.mediaAssetRepository) } : {}),
+        ...(databaseProvider.playlistRepository ? { playlistRepository: databaseProvider.playlistRepository } : {}),
+        ...(databaseProvider.presetRepository ? { presetRepository: databaseProvider.presetRepository } : {}),
+      }
     : undefined;
 
   const server = createServer({

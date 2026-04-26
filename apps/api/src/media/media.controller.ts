@@ -17,6 +17,7 @@ interface JsonUploadFilePayload {
   originalName?: string;
   mimeType?: string;
   base64Data?: string;
+  filePath?: string;
   sizeBytes?: number;
   durationSeconds?: number;
 }
@@ -24,6 +25,7 @@ interface JsonUploadFilePayload {
 interface JsonUploadBody {
   video?: JsonUploadFilePayload;
   thumbnail?: JsonUploadFilePayload;
+  videoDuration?: number;
 }
 
 function normalizeBase64Payload(rawValue: string): string {
@@ -55,6 +57,25 @@ function parseUploadedFileFromJson(
     throw new Error(`Invalid ${fieldName}.originalName: value must be a non-empty string.`);
   }
 
+  const durationSeconds = typeof payload.durationSeconds === 'number' && Number.isFinite(payload.durationSeconds) && payload.durationSeconds >= 0
+    ? payload.durationSeconds
+    : undefined;
+
+  // Multipart path — file already on disk
+  if (typeof payload.filePath === 'string' && payload.filePath.trim()) {
+    const sizeBytes = typeof payload.sizeBytes === 'number' && Number.isFinite(payload.sizeBytes) && payload.sizeBytes >= 0
+      ? Math.round(payload.sizeBytes)
+      : 0;
+    return {
+      originalname: originalName,
+      mimetype: typeof payload.mimeType === 'string' && payload.mimeType.trim() ? payload.mimeType.trim() : undefined,
+      filePath: payload.filePath.trim(),
+      size: sizeBytes,
+      durationSeconds,
+    };
+  }
+
+  // Legacy base64 JSON path
   const rawBase64Data = typeof payload.base64Data === 'string' ? normalizeBase64Payload(payload.base64Data) : '';
   if (!rawBase64Data) {
     throw new Error(`Invalid ${fieldName}.base64Data: value must be a non-empty base64 string.`);
@@ -68,10 +89,6 @@ function parseUploadedFileFromJson(
   const sizeBytes = typeof payload.sizeBytes === 'number' && Number.isFinite(payload.sizeBytes) && payload.sizeBytes >= 0
     ? Math.round(payload.sizeBytes)
     : buffer.byteLength;
-
-  const durationSeconds = typeof payload.durationSeconds === 'number' && Number.isFinite(payload.durationSeconds) && payload.durationSeconds >= 0
-    ? payload.durationSeconds
-    : undefined;
 
   return {
     originalname: originalName,

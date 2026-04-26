@@ -84,7 +84,7 @@ export function buildCampaignDetailView(data: CampaignDetailData, options: Campa
       ? t.scheduledPending
       : t.status === 'aguardando' &&
         typeof t.publishAt === 'string' &&
-        new Date(t.publishAt).getTime() > nowMs;
+        !isNaN(new Date(t.publishAt).getTime()) && new Date(t.publishAt).getTime() > nowMs;
     const partialFailureYoutubeUrl = t.hasPostUploadWarning && t.reviewYoutubeUrl
       ? t.reviewYoutubeUrl
       : hasUploadedVideoForPartialFailure(t)

@@ -294,6 +294,14 @@ describe('resolveInitInput', () => {
     expect(result).toBe('specification content');
   });
 
+  it('handles @file with empty content', async () => {
+    const emptyPath = join(tmpDir, 'empty.md');
+    await writeFile(emptyPath, '');
+
+    const result = await resolveInitInput(makeArgs({ initInput: '@empty.md' }));
+    expect(result).toBe('');
+  });
+
   it('throws descriptive error when @file does not exist', async () => {
     await expect(
       resolveInitInput(makeArgs({ initInput: '@nonexistent.md' }))

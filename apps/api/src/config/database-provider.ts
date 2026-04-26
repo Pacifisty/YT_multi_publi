@@ -7,6 +7,7 @@ import { PrismaCampaignRepository } from '../campaigns/prisma-campaign.repositor
 import { PrismaPublishJobRepository } from '../campaigns/prisma-publish-job.repository';
 import { PrismaYouTubeChannelRepository } from '../channels/prisma-youtube-channel.repository';
 import { PrismaMediaAssetRepository } from '../media/prisma-media-asset.repository';
+import { PrismaPlaylistRepository, PrismaPresetRepository } from '../media/prisma-playlist.repository';
 
 const require = createRequire(import.meta.url);
 
@@ -35,6 +36,8 @@ export interface DatabaseProviderInstance {
   connectedAccountRepository: PrismaConnectedAccountRepository | null;
   youtubeChannelRepository: PrismaYouTubeChannelRepository | null;
   mediaAssetRepository: PrismaMediaAssetRepository | null;
+  playlistRepository: PrismaPlaylistRepository | null;
+  presetRepository: PrismaPresetRepository | null;
   isConnected(): boolean;
   connect(): Promise<void>;
   disconnect(): Promise<void>;
@@ -135,6 +138,8 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
   let connectedAccountRepository: PrismaConnectedAccountRepository | null = null;
   let youtubeChannelRepository: PrismaYouTubeChannelRepository | null = null;
   let mediaAssetRepository: PrismaMediaAssetRepository | null = null;
+  let playlistRepository: PrismaPlaylistRepository | null = null;
+  let presetRepository: PrismaPresetRepository | null = null;
   let startupIssue: string | null = null;
 
   if (databaseUrl) {
@@ -148,6 +153,8 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
       connectedAccountRepository = new PrismaConnectedAccountRepository(prismaClient);
       youtubeChannelRepository = new PrismaYouTubeChannelRepository(prismaClient);
       mediaAssetRepository = new PrismaMediaAssetRepository(prismaClient);
+      playlistRepository = new PrismaPlaylistRepository(prismaClient);
+      presetRepository = new PrismaPresetRepository(prismaClient);
     } else {
       startupIssue = createPrismaUnavailableMessage();
     }
@@ -184,6 +191,14 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
 
     get mediaAssetRepository() {
       return mediaAssetRepository;
+    },
+
+    get playlistRepository() {
+      return playlistRepository;
+    },
+
+    get presetRepository() {
+      return presetRepository;
     },
 
     isConnected() {

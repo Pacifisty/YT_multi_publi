@@ -23,7 +23,7 @@ export interface ValidationResult {
 export class MediaValidationService {
   validateVideo(file: UploadedMediaFile): ValidationResult {
     const errors: ValidationError[] = [];
-    const fileSize = file.size ?? file.buffer.byteLength;
+    const fileSize = file.size ?? file.buffer?.byteLength ?? 0;
 
     if (!VALIDATION_RULES.ACCEPTED_VIDEO_MIMES.includes(file.mimetype ?? '')) {
       errors.push({
@@ -55,7 +55,7 @@ export class MediaValidationService {
 
   validateThumbnail(file: UploadedMediaFile): ValidationResult {
     const errors: ValidationError[] = [];
-    const fileSize = file.size ?? file.buffer.byteLength;
+    const fileSize = file.size ?? file.buffer?.byteLength ?? 0;
 
     if (!VALIDATION_RULES.ACCEPTED_THUMBNAIL_MIMES.includes(file.mimetype ?? '')) {
       errors.push({

@@ -46,7 +46,6 @@ function usd(n: number): string {
 
 export class CLITransport implements TransportHandler {
   private readonly out: Writable;
-  private runningCostUsd = 0;
 
   constructor(out?: Writable) {
     this.out = out ?? process.stdout;
@@ -89,7 +88,7 @@ export class CLITransport implements TransportHandler {
         return `${BOLD}${CYAN}━━━ GSD ► PHASE ${event.phaseNumber}: ${event.phaseName} ━━━${RESET}`;
 
       case GSDEventType.PhaseComplete:
-        return `[${time}] [PHASE] Phase ${event.phaseNumber} complete — success: ${event.success}, cost: ${usd(event.totalCostUsd)}, running: ${usd(this.runningCostUsd)}`;
+        return `[${time}] [PHASE] Phase ${event.phaseNumber} complete — success: ${event.success}, cost: ${usd(event.totalCostUsd)}, running: ${usd(event.cumulativeCostUsd ?? 0)}`;
 
       case GSDEventType.PhaseStepStart:
         return `${CYAN}◆ ${event.step}${RESET}`;
@@ -106,15 +105,14 @@ export class CLITransport implements TransportHandler {
         return `[${time}] [WAVE] Wave ${event.waveNumber} complete — ${GREEN}${event.successCount} success${RESET}, ${RED}${event.failureCount} failed${RESET}, ${event.durationMs}ms`;
 
       case GSDEventType.CostUpdate: {
-        this.runningCostUsd += event.sessionCostUsd;
-        return `${DIM}[${time}] Cost: session ${usd(event.sessionCostUsd)}, running ${usd(this.runningCostUsd)}${RESET}`;
+        return `${DIM}[${time}] Cost: session ${usd(event.sessionCostUsd)}, running ${usd(event.cumulativeCostUsd)}${RESET}`;
       }
 
       case GSDEventType.MilestoneStart:
         return `${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n${BOLD}  GSD Milestone — ${event.phaseCount} phases${RESET}\n${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}`;
 
       case GSDEventType.MilestoneComplete:
-        return `${BOLD}━━━ Milestone complete — success: ${event.success}, cost: ${usd(event.totalCostUsd)}, running: ${usd(this.runningCostUsd)} ━━━${RESET}`;
+        return `${BOLD}━━━ Milestone complete — success: ${event.success}, cost: ${usd(event.totalCostUsd)}, running: ${usd(event.cumulativeCostUsd ?? 0)} ━━━${RESET}`;
 
       case GSDEventType.AssistantText:
         return `${DIM}[${time}] ${truncate(event.text, 200)}${RESET}`;

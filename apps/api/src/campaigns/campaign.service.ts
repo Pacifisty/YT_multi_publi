@@ -33,6 +33,9 @@ export interface CampaignRecord {
   videoAssetId: string;
   status: 'draft' | 'ready' | 'launching' | 'completed' | 'failed';
   scheduledAt: string | null;
+  playlistId: string | null;
+  autoMode: boolean;
+  schedulePattern: string | null;
   targets: CampaignTargetRecord[];
   createdAt: string;
   updatedAt: string;
@@ -43,6 +46,9 @@ export interface CreateCampaignInput {
   title: string;
   videoAssetId: string;
   scheduledAt?: string;
+  playlistId?: string;
+  autoMode?: boolean;
+  schedulePattern?: string;
 }
 
 export interface AddTargetInput {
@@ -204,6 +210,9 @@ export class CampaignService {
       videoAssetId: input.videoAssetId,
       status: 'draft',
       scheduledAt: input.scheduledAt ?? null,
+      playlistId: input.playlistId ?? null,
+      autoMode: input.autoMode ?? false,
+      schedulePattern: input.schedulePattern ?? null,
       targets: [],
       createdAt: nowIso,
       updatedAt: nowIso,
@@ -376,6 +385,9 @@ export class CampaignService {
       videoAssetId: original.videoAssetId,
       status: 'draft',
       scheduledAt: original.scheduledAt,
+      playlistId: original.playlistId ?? null,
+      autoMode: original.autoMode ?? false,
+      schedulePattern: original.schedulePattern ?? null,
       targets: [],
       createdAt: nowIso,
       updatedAt: nowIso,
@@ -523,7 +535,7 @@ export class CampaignService {
 
   async updateCampaign(
     campaignId: string,
-    updates: { title?: string; scheduledAt?: string },
+    updates: { title?: string; scheduledAt?: string; playlistId?: string | null; autoMode?: boolean; schedulePattern?: string | null },
     ownerEmail?: string,
   ): Promise<{ campaign: CampaignRecord } | { error: 'NOT_FOUND' | 'CAMPAIGN_ACTIVE' }> {
     const campaign = await this.resolveCampaign(campaignId, ownerEmail);
@@ -533,6 +545,9 @@ export class CampaignService {
     const patch: Partial<CampaignRecord> = { updatedAt: this.now().toISOString() };
     if (updates.title) patch.title = updates.title;
     if (updates.scheduledAt !== undefined) patch.scheduledAt = updates.scheduledAt;
+    if (updates.playlistId !== undefined) patch.playlistId = updates.playlistId;
+    if (updates.autoMode !== undefined) patch.autoMode = updates.autoMode;
+    if (updates.schedulePattern !== undefined) patch.schedulePattern = updates.schedulePattern;
 
     const updated = await this.repository.update(campaignId, patch);
     return { campaign: updated! };

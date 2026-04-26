@@ -1,5 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir, unlink } from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import Busboy from 'busboy';
 import type { AppInstance, HttpRequest, HttpResponse } from './app';
 import type { AdminSession } from './auth/session.guard';
 import { isFrontendRoute, renderFrontendDocument, resolveFrontendAsset } from './frontend/ui-shell';
@@ -37,6 +41,53 @@ function serializeCookie(cookie: CookieEntry): string {
   if (opts.sameSite) str += `; SameSite=${opts.sameSite}`;
   if (opts.maxAge !== undefined) str += `; Max-Age=${opts.maxAge}`;
   return str;
+}
+
+interface MultipartField {
+  originalname: string;
+  mimetype: string;
+  filePath: string;
+  size: number;
+}
+
+function parseMultipart(req: IncomingMessage, tmpDir: string): Promise<{ fields: Record<string, string>; files: Record<string, MultipartField> }> {
+  return new Promise((resolve, reject) => {
+    const fields: Record<string, string> = {};
+    const files: Record<string, MultipartField> = {};
+    const busboy = Busboy({ headers: req.headers });
+    const pending: Promise<void>[] = [];
+
+    busboy.on('field', (name: string, value: string) => {
+      fields[name] = value;
+    });
+
+    busboy.on('file', (name: string, stream: NodeJS.ReadableStream, info: { filename: string; encoding: string; mimeType: string }) => {
+      const tmpPath = join(tmpDir, `${randomUUID()}_${info.filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`);
+      const ws = createWriteStream(tmpPath);
+      let size = 0;
+
+      stream.on('data', (chunk: Buffer) => { size += chunk.byteLength; });
+
+      const p = new Promise<void>((res, rej) => {
+        ws.on('finish', () => {
+          files[name] = { originalname: info.filename, mimetype: info.mimeType, filePath: tmpPath, size };
+          res();
+        });
+        ws.on('error', rej);
+        stream.on('error', rej);
+      });
+
+      pending.push(p);
+      stream.pipe(ws);
+    });
+
+    busboy.on('finish', () => {
+      Promise.all(pending).then(() => resolve({ fields, files })).catch(reject);
+    });
+
+    busboy.on('error', reject);
+    req.pipe(busboy);
+  });
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -279,6 +330,57 @@ export function createRequestHandler(
       }
     }
 
+    // Multipart streaming upload — bypasses JSON body buffer entirely
+    if (method === 'POST' && path === '/api/media') {
+      const contentType = req.headers['content-type'] ?? '';
+      if (contentType.includes('multipart/form-data')) {
+        const tmpDir = join(process.cwd(), 'storage', 'tmp');
+        await mkdir(tmpDir, { recursive: true });
+        const tmpFiles: string[] = [];
+        try {
+          const { files, fields } = await parseMultipart(req, tmpDir);
+          for (const f of Object.values(files)) tmpFiles.push(f.filePath);
+
+          const multipartBody: Record<string, unknown> = { ...fields };
+          if (files.video) {
+            multipartBody.video = {
+              originalName: files.video.originalname,
+              mimeType: files.video.mimetype,
+              filePath: files.video.filePath,
+              sizeBytes: files.video.size,
+            };
+            if (fields.videoDuration) {
+              (multipartBody.video as Record<string, unknown>).durationSeconds = Number(fields.videoDuration);
+            }
+          }
+          if (files.thumbnail) {
+            multipartBody.thumbnail = {
+              originalName: files.thumbnail.originalname,
+              mimeType: files.thumbnail.mimetype,
+              filePath: files.thumbnail.filePath,
+              sizeBytes: files.thumbnail.size,
+            };
+          }
+
+          const httpRequest: HttpRequest = { method, path, session, body: multipartBody, query };
+          const httpResponse: HttpResponse = await app.handleRequest(httpRequest);
+
+          res.setHeader('content-type', 'application/json');
+          if (httpResponse.cookies?.length) {
+            res.setHeader('set-cookie', httpResponse.cookies.map((c: CookieEntry) => serializeCookie(c)));
+          }
+          res.writeHead(httpResponse.status);
+          res.end(JSON.stringify(httpResponse.body));
+        } catch (err) {
+          for (const f of tmpFiles) await unlink(f).catch(() => {});
+          res.setHeader('content-type', 'application/json');
+          res.writeHead(500);
+          res.end(JSON.stringify({ error: 'Multipart parse error' }));
+        }
+        return;
+      }
+    }
+
     let body: unknown = undefined;
 
     if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
@@ -298,13 +400,19 @@ export function createRequestHandler(
     const httpRequest: HttpRequest = { method, path, session, body, query };
     const httpResponse: HttpResponse = await app.handleRequest(httpRequest);
 
-    res.setHeader('content-type', 'application/json');
-
     if (httpResponse.cookies && httpResponse.cookies.length > 0) {
       const serialized = httpResponse.cookies.map((c: CookieEntry) => serializeCookie(c));
       res.setHeader('set-cookie', serialized);
     }
 
+    if (httpResponse.redirect) {
+      res.setHeader('Location', httpResponse.redirect);
+      res.writeHead(302);
+      res.end();
+      return;
+    }
+
+    res.setHeader('content-type', 'application/json');
     res.writeHead(httpResponse.status);
     res.end(JSON.stringify(httpResponse.body));
   };

@@ -9,7 +9,7 @@ import { createAccountsModule } from './accounts/accounts.module';
 import type { AccountsServiceOptions } from './accounts/accounts.service';
 import type { MediaModuleInstance } from './media/media.module';
 import { createMediaModule } from './media/media.module';
-import type { MediaServiceOptions } from './media/media.service';
+import type { MediaModuleOptions } from './media/media.module';
 import { createApiRouter, type ApiRouter, type ApiResponse } from './router';
 import { createIntegratedWorker } from './campaigns/integrated-worker';
 import { youtubeResumableUpload } from './campaigns/youtube-upload.worker';
@@ -29,7 +29,7 @@ export interface AppConfig {
   authModuleOptions?: AuthServiceOptions;
   campaignsModuleOptions?: CampaignsModuleOptions;
   accountsModuleOptions?: AccountsServiceOptions;
-  mediaModuleOptions?: MediaServiceOptions;
+  mediaModuleOptions?: MediaModuleOptions;
   accountPlanStore?: AccountPlanStore;
 }
 
@@ -45,6 +45,7 @@ export interface HttpResponse {
   status: number;
   body: any;
   cookies?: any[];
+  redirect?: string;
 }
 
 export interface AppInstance {
@@ -165,6 +166,7 @@ export function createApp(config: AppConfig = {}): AppInstance {
     authController: authModule.authController,
     accountsController: accountsModule.accountsController,
     mediaController: mediaModule.mediaController,
+    playlistController: mediaModule.playlistController,
     backgroundProcessor,
     accountPlanController,
   });
@@ -179,7 +181,7 @@ export function createApp(config: AppConfig = {}): AppInstance {
       query: request.query,
     });
 
-    return { status: apiResult.status, body: apiResult.body, cookies: apiResult.cookies };
+    return { status: apiResult.status, body: apiResult.body, cookies: apiResult.cookies, redirect: (apiResult as any).redirect };
   }
 
   return {

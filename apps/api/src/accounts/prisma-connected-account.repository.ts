@@ -62,7 +62,7 @@ export class PrismaConnectedAccountRepository implements ConnectedAccountReposit
   }
 
   async findAll(): Promise<ConnectedAccount[]> {
-    const rows = await this.prisma.connectedAccount.findMany();
+    const rows = await this.prisma.connectedAccount.findMany({});
     return rows.map(toConnectedAccount);
   }
 
@@ -72,10 +72,24 @@ export class PrismaConnectedAccountRepository implements ConnectedAccountReposit
   }
 
   async update(id: string, data: Partial<ConnectedAccount>): Promise<ConnectedAccount | null> {
+    const mapped: Record<string, unknown> = {};
+    if (data.ownerEmail !== undefined) mapped.ownerEmail = data.ownerEmail;
+    if (data.provider !== undefined) mapped.provider = data.provider;
+    if (data.providerSubject !== undefined) mapped.googleSubject = data.providerSubject;
+    if (data.googleSubject !== undefined) mapped.googleSubject = data.googleSubject;
+    if (data.email !== undefined) mapped.email = data.email;
+    if (data.displayName !== undefined) mapped.displayName = data.displayName;
+    if (data.accessTokenEnc !== undefined) mapped.accessTokenEnc = data.accessTokenEnc;
+    if (data.refreshTokenEnc !== undefined) mapped.refreshTokenEnc = data.refreshTokenEnc;
+    if (data.scopes !== undefined) mapped.scopes = data.scopes;
+    if (data.tokenExpiresAt !== undefined) mapped.tokenExpiresAt = data.tokenExpiresAt;
+    if (data.status !== undefined) mapped.status = data.status;
+    if (data.connectedAt !== undefined) mapped.connectedAt = data.connectedAt;
+    if (data.updatedAt !== undefined) mapped.updatedAt = data.updatedAt;
     try {
       const row = await this.prisma.connectedAccount.update({
         where: { id },
-        data,
+        data: mapped,
       });
       return toConnectedAccount(row);
     } catch (error: any) {

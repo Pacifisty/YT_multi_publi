@@ -65,6 +65,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.17.1",
+    "busboy": "^1.6.0",
     "googleapis": "^171.4.0"
   }
 }

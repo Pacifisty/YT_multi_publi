@@ -98,10 +98,56 @@ model MediaAsset {
 
   campaigns         Campaign[]
   campaignTargets   CampaignTarget[]
+  preset            MediaAssetPreset?
+  playlistItems     PlaylistItem[]
 
   @@index([ownerEmail])
   @@index([linkedVideoAssetId])
   @@map("media_assets")
+}
+
+model MediaAssetPreset {
+  id              String     @id @default(cuid())
+  videoAssetId    String     @unique @map("video_asset_id")
+  videoAsset      MediaAsset @relation(fields: [videoAssetId], references: [id], onDelete: Cascade)
+  title           String     @default("")
+  description     String     @default("")
+  tags            String[]   @default([])
+  privacy         String     @default("private")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  @@map("media_asset_presets")
+}
+
+model Playlist {
+  id          String   @id @default(cuid())
+  ownerEmail  String?  @map("owner_email")
+  name        String
+  folderPath  String   @map("folder_path")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  items       PlaylistItem[]
+  campaigns   Campaign[]
+
+  @@index([ownerEmail])
+  @@map("playlists")
+}
+
+model PlaylistItem {
+  id           String     @id @default(cuid())
+  playlistId   String     @map("playlist_id")
+  playlist     Playlist   @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  videoAssetId String     @map("video_asset_id")
+  videoAsset   MediaAsset @relation(fields: [videoAssetId], references: [id], onDelete: Cascade)
+  position     Int        @default(0)
+  usedAt       DateTime?  @map("used_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  @@unique([playlistId, videoAssetId])
+  @@index([playlistId])
+  @@map("playlist_items")
 }
 
 enum CampaignStatus {
@@ -120,6 +166,10 @@ model Campaign {
   videoAsset       MediaAsset     @relation(fields: [videoAssetId], references: [id])
   status           CampaignStatus @default(draft)
   scheduledAt      DateTime?      @map("scheduled_at")
+  playlistId       String?        @map("playlist_id")
+  playlist         Playlist?      @relation(fields: [playlistId], references: [id])
+  autoMode         Boolean        @default(false) @map("auto_mode")
+  schedulePattern  String?        @map("schedule_pattern")
   createdAt        DateTime       @default(now()) @map("created_at")
   updatedAt        DateTime       @updatedAt @map("updated_at")
 
@@ -127,6 +177,7 @@ model Campaign {
 
   @@index([ownerEmail])
   @@index([videoAssetId])
+  @@index([playlistId])
   @@map("campaigns")
 }
 

@@ -164,22 +164,35 @@ function readVideoDurationFromUrl(sourceUrl) {
   });
 }
 
-async function buildUploadPayloadFromFile(file, options = {}) {
-  const arrayBuffer = await file.arrayBuffer();
-  const payload = {
-    originalName: file.name,
-    mimeType: file.type || 'application/octet-stream',
-    base64Data: arrayBufferToBase64(arrayBuffer),
-    sizeBytes: file.size,
-  };
-  const shouldReadDuration = options.includeDuration ?? isProbablyVideoFile(file);
-  if (shouldReadDuration) {
-    const durationSeconds = await readVideoDurationSeconds(file);
-    if (typeof durationSeconds === 'number') {
-      payload.durationSeconds = durationSeconds;
-    }
+async function uploadMediaFiles(videoFile, thumbnailFile) {
+  const form = new FormData();
+  form.append('video', videoFile, videoFile.name);
+  if (thumbnailFile) {
+    form.append('thumbnail', thumbnailFile, thumbnailFile.name);
   }
-  return payload;
+  const durationSeconds = await readVideoDurationSeconds(videoFile);
+  if (typeof durationSeconds === 'number') {
+    form.append('videoDuration', String(durationSeconds));
+  }
+
+  const response = await fetch('/api/media', {
+    method: 'POST',
+    credentials: 'include',
+    body: form,
+  });
+
+  let payload = null;
+  const ct = response.headers.get('content-type') ?? '';
+  if (ct.includes('application/json')) {
+    payload = await response.json();
+  } else {
+    payload = await response.text();
+  }
+
+  if (!response.ok) {
+    return { ok: false, status: response.status, error: payload?.error ?? `Upload failed with ${response.status}`, body: payload };
+  }
+  return { ok: true, status: response.status, body: payload };
 }
 
 const BACKGROUND_THEME_STORAGE_KEY = 'ytmp-workspace-background-theme';
@@ -1129,6 +1142,19 @@ const api = {
   uploadMedia: (payload) => apiRequest('POST', '/api/media', payload),
   updateMediaDuration: (id, durationSeconds) => apiRequest('PATCH', `/api/media/${encodeURIComponent(id)}`, { durationSeconds }),
   deleteMedia: (id) => apiRequest('DELETE', `/api/media/${encodeURIComponent(id)}`),
+  // Playlist
+  playlists: () => apiRequest('GET', '/api/playlists'),
+  getPlaylist: (id) => apiRequest('GET', `/api/playlists/${encodeURIComponent(id)}`),
+  createPlaylist: (name, folderPath) => apiRequest('POST', '/api/playlists', { name, folderPath }),
+  deletePlaylist: (id) => apiRequest('DELETE', `/api/playlists/${encodeURIComponent(id)}`),
+  scanFolderForPlaylists: (rootPath) => apiRequest('POST', '/api/playlists/scan', { rootPath }),
+  addPlaylistItem: (playlistId, videoAssetId) => apiRequest('POST', `/api/playlists/${encodeURIComponent(playlistId)}/items`, { videoAssetId }),
+  removePlaylistItem: (playlistId, videoAssetId) => apiRequest('DELETE', `/api/playlists/${encodeURIComponent(playlistId)}/items/${encodeURIComponent(videoAssetId)}`),
+  nextPlaylistVideo: (playlistId) => apiRequest('GET', `/api/playlists/${encodeURIComponent(playlistId)}/next`),
+  // Presets
+  getPreset: (videoAssetId) => apiRequest('GET', `/api/media/${encodeURIComponent(videoAssetId)}/preset`),
+  upsertPreset: (videoAssetId, data) => apiRequest('PUT', `/api/media/${encodeURIComponent(videoAssetId)}/preset`, data),
+  deletePreset: (videoAssetId) => apiRequest('DELETE', `/api/media/${encodeURIComponent(videoAssetId)}/preset`),
 };
 
 const state = {
@@ -1450,6 +1476,19 @@ function showModal({
           </label>
         `;
       }
+      if (field.type === 'select') {
+        const optionsHtml = (field.options ?? []).map((opt) => {
+          const optVal = typeof opt === 'string' ? opt : opt.value;
+          const optLabel = typeof opt === 'string' ? opt : (opt.label ?? opt.value);
+          return `<option value="${escapeAttribute(optVal)}" ${optVal === value ? 'selected' : ''}>${escapeHtml(optLabel)}</option>`;
+        }).join('');
+        return `
+          <label class="modal-field">
+            <span>${escapeHtml(field.label)}</span>
+            <select name="${escapeAttribute(field.name)}" ${field.required ? 'required' : ''}>${optionsHtml}</select>
+          </label>
+        `;
+      }
       return `
         <label class="modal-field">
           <span>${escapeHtml(field.label)}</span>
@@ -1549,6 +1588,7 @@ async function showFormDialog({ title, message = '', fields, confirmLabel = 'Sav
 
 function activeTab(pathname) {
   if (pathname.startsWith('/workspace/accounts')) return 'accounts';
+  if (pathname.startsWith('/workspace/playlists')) return 'playlists';
   if (pathname.startsWith('/workspace/media')) return 'media';
   if (pathname.startsWith('/workspace/campanhas')) return 'campanhas';
   if (pathname.startsWith('/workspace/planos')) return 'planos';
@@ -1561,6 +1601,7 @@ function renderWorkspaceShell(options) {
     { id: 'campanhas', label: 'Campanhas', href: '/workspace/campanhas' },
     { id: 'accounts', label: 'Accounts', href: '/workspace/accounts' },
     { id: 'media', label: 'Media', href: '/workspace/media' },
+    { id: 'playlists', label: 'Playlists', href: '/workspace/playlists' },
     { id: 'planos', label: 'Planos', href: '/workspace/planos' },
   ];
   const pathname = window.location.pathname;
@@ -1674,12 +1715,61 @@ function renderWorkspaceShell(options) {
     <div class="${pageClasses.join(' ')}">
       <header class="header header-fullwidth">
         <div class="header-shell header-shell-fullwidth">
-          <div class="header-brand-block">
-            <span class="brand-kicker">Platform Command</span>
-            <div class="brand">
-              Plataform Multi Publi
+          <a class="header-brand-block pmp-brand" href="/workspace/dashboard" data-link aria-label="Platform Multi Publisher">
+            <div class="pmp-logo-mark" aria-hidden="true">
+              <svg class="pmp-logo-svg" viewBox="0 0 100 100" role="img">
+                <defs>
+                  <linearGradient id="pmpRing" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#3b82f6" />
+                    <stop offset="55%" stop-color="#6366f1" />
+                    <stop offset="100%" stop-color="#a855f7" />
+                  </linearGradient>
+                  <linearGradient id="pmpLetters" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#22d3ee" />
+                    <stop offset="50%" stop-color="#6366f1" />
+                    <stop offset="100%" stop-color="#c084fc" />
+                  </linearGradient>
+                  <radialGradient id="pmpInnerGlow" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stop-color="rgba(99,102,241,0.35)" />
+                    <stop offset="60%" stop-color="rgba(99,102,241,0.05)" />
+                    <stop offset="100%" stop-color="transparent" />
+                  </radialGradient>
+                  <filter id="pmpGlow" x="-30%" y="-30%" width="160%" height="160%">
+                    <feGaussianBlur stdDeviation="1.6" result="b" />
+                    <feMerge>
+                      <feMergeNode in="b" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+                </defs>
+                <circle cx="50" cy="50" r="46" fill="url(#pmpInnerGlow)" />
+                <circle class="pmp-logo-ring" cx="50" cy="50" r="44" fill="none" stroke="url(#pmpRing)" stroke-width="2.5" />
+                <g class="pmp-logo-share" stroke="url(#pmpLetters)" stroke-width="1.8" fill="none" stroke-linecap="round">
+                  <circle cx="42" cy="26" r="2.4" fill="url(#pmpLetters)" />
+                  <circle cx="58" cy="26" r="2.4" fill="url(#pmpLetters)" />
+                  <circle cx="50" cy="34" r="2.4" fill="url(#pmpLetters)" />
+                  <line x1="42" y1="26" x2="50" y2="34" />
+                  <line x1="58" y1="26" x2="50" y2="34" />
+                </g>
+                <text class="pmp-logo-text" x="50" y="68" text-anchor="middle"
+                  font-family="'Inter', system-ui, sans-serif"
+                  font-size="22" font-weight="900"
+                  fill="url(#pmpLetters)" filter="url(#pmpGlow)"
+                  letter-spacing="-0.5">PMP</text>
+                <g class="pmp-logo-bars" stroke="url(#pmpLetters)" stroke-width="1.6" stroke-linecap="round" opacity="0.85">
+                  <line x1="44" y1="80" x2="44" y2="76" />
+                  <line x1="48" y1="80" x2="48" y2="74" />
+                  <line x1="52" y1="80" x2="52" y2="71" />
+                  <line x1="56" y1="80" x2="56" y2="73" />
+                </g>
+              </svg>
+              <span class="pmp-logo-pulse" aria-hidden="true"></span>
             </div>
-          </div>
+            <div class="pmp-brand-text">
+              <span class="pmp-brand-kicker">PLATFORM</span>
+              <span class="pmp-brand-name">Multi Publisher</span>
+            </div>
+          </a>
           <nav class="nav header-nav" aria-label="Workspace">${navHtml}</nav>
           <div class="header-actions">
             ${tokenHtml}
@@ -2899,8 +2989,8 @@ function renderVideoPreviewCell(asset) {
           muted
           playsinline
           loop
-          preload="none"
-          src="${escapeHtml(videoUrl)}"
+          preload="metadata"
+          src="${escapeHtml(videoUrl)}#t=0.5"
           ${posterUrl ? `poster="${escapeHtml(posterUrl)}"` : ''}
         ></video>
         <div class="media-preview-overlay">
@@ -3103,304 +3193,8 @@ function shouldAutoRefreshDashboard(stats) {
 
 async function renderDashboardPage() {
   return renderPlatformDashboardPage();
-  const result = await api.dashboard();
-  if (!result.ok) {
-    if (result.status === 401) {
-      unauthorizedRedirect();
-      return;
-    }
-    renderWorkspaceShell({
-      title: 'Dashboard',
-      subtitle: 'Campaign health and operational summaries.',
-      noticeHtml: `<div class="notice error">${escapeHtml(result.error)}</div>`,
-      contentHtml: '<section class="card">Unable to load dashboard data.</section>',
-    });
-    return;
-  }
-
-  const stats = result.body ?? {};
-  const campaignsByStatus = stats?.campaigns?.byStatus ?? {};
-  const targetsByStatus = stats?.targets?.byStatus ?? {};
-  const jobsByStatus = stats?.jobs?.byStatus ?? {};
-  const channels = Array.isArray(stats?.channels) ? [...stats.channels] : [];
-  const rankedChannels = [...channels].sort((left, right) => {
-    const leftTopViews = Number(left?.topVideoViews ?? 0);
-    const rightTopViews = Number(right?.topVideoViews ?? 0);
-    if (rightTopViews !== leftTopViews) {
-      return rightTopViews - leftTopViews;
-    }
-
-    const leftTotalViews = Number(left?.totalViews ?? 0);
-    const rightTotalViews = Number(right?.totalViews ?? 0);
-    if (rightTotalViews !== leftTotalViews) {
-      return rightTotalViews - leftTotalViews;
-    }
-
-    const leftPublished = Number(left?.published ?? 0);
-    const rightPublished = Number(right?.published ?? 0);
-    if (rightPublished !== leftPublished) {
-      return rightPublished - leftPublished;
-    }
-
-    return String(left?.channelId ?? '').localeCompare(String(right?.channelId ?? ''));
-  });
-
-  const summaryCards = [
-    { label: 'Campaigns', value: formatNumber(stats?.campaigns?.total ?? 0), hint: 'Total campaigns tracked', tone: 'info' },
-    { label: 'Targets', value: formatNumber(stats?.targets?.total ?? 0), hint: 'All targets across campaigns', tone: 'info' },
-    { label: 'Jobs', value: formatNumber(stats?.jobs?.total ?? 0), hint: 'Upload jobs queued + finished', tone: 'info' },
-    { label: 'Published', value: formatNumber(targetsByStatus.publicado ?? 0), hint: 'Targets successfully published', tone: 'success' },
-    { label: 'Failed', value: formatNumber(targetsByStatus.erro ?? 0), hint: 'Targets in error state', tone: 'danger' },
-    { label: 'Success Rate', value: formatPercent(stats?.targets?.successRate ?? 0), hint: 'Published / terminal targets', tone: 'success' },
-    { label: 'Retry Attempts', value: formatNumber(stats?.jobs?.totalRetries ?? 0), hint: 'Retries spent so far', tone: 'warning' },
-    { label: 'Blocked Targets', value: formatNumber(stats?.reauth?.blockedTargets ?? 0), hint: 'Need account reauth', tone: 'danger' },
-  ];
-
-  const cardsHtml = summaryCards.map((card) => (
-    `<article class="card" data-tone="${escapeHtml(card.tone)}">
-      <div class="summary-value">${escapeHtml(card.value)}</div>
-      <div class="summary-label">${escapeHtml(card.label)}</div>
-      <div class="summary-hint">${escapeHtml(card.hint)}</div>
-    </article>`
-  )).join('');
-
-  const channelsTable = channels.length === 0
-    ? '<p class="muted">No channel metrics available yet.</p>'
-    : `<table>
-        <thead>
-          <tr>
-            <th>Channel</th>
-            <th>Targets</th>
-            <th>Published</th>
-            <th>Failed</th>
-            <th>Success</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${channels.slice(0, 12).map((channel) => `
-            <tr>
-              <td>${escapeHtml(channel.channelId)}</td>
-              <td>${formatNumber(channel.totalTargets)}</td>
-              <td>${formatNumber(channel.published)}</td>
-              <td>${formatNumber(channel.failed)}</td>
-              <td>${escapeHtml(formatPercent(channel.successRate))}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>`;
-
-  const quotaWarningState = stats?.quota?.warningState ?? 'healthy';
-  const quotaNoticeTone = quotaWarningState === 'critical' ? 'error' : quotaWarningState === 'warning' ? 'warning' : 'info';
-  const quotaUsedPercent = clampPercent(stats?.quota?.usagePercent);
-  const quotaProjectedPercent = clampPercent(stats?.quota?.projectedPercent);
-  const failureReasons = Array.isArray(stats?.failures?.reasons) ? stats.failures.reasons : [];
-  const failureReasonsTable = failureReasons.length === 0
-    ? '<p class="muted">No failure reasons recorded.</p>'
-    : `<table>
-        <thead>
-          <tr>
-            <th>Reason</th>
-            <th>Count</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${failureReasons.map((entry) => `
-            <tr>
-              <td>${escapeHtml(normalizeLabel(entry.reason))}</td>
-              <td>${formatNumber(entry.count)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>`;
-
-  const auditByTypeRows = Object.entries(stats?.audit?.byType ?? {})
-    .filter(([, count]) => Number(count ?? 0) > 0)
-    .sort((left, right) => Number(right[1] ?? 0) - Number(left[1] ?? 0));
-  const auditBreakdown = auditByTypeRows.length === 0
-    ? '<p class="muted">No audit events yet.</p>'
-    : `<table>
-        <thead>
-          <tr>
-            <th>Event</th>
-            <th>Count</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${auditByTypeRows.map(([eventType, count]) => `
-            <tr>
-              <td>${escapeHtml(normalizeLabel(eventType))}</td>
-              <td>${formatNumber(count)}</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>`;
-
-  const notices = [];
-  if (quotaWarningState !== 'healthy') {
-    notices.push(`
-      <div class="notice ${quotaNoticeTone}">
-        <h4>Quota ${quotaWarningState === 'critical' ? 'critical' : 'warning'}</h4>
-        <p>Projected usage is ${formatPercent(stats?.quota?.projectedPercent ?? 0)} of the daily limit.</p>
-      </div>
-    `);
-  }
-  if (Number(stats?.reauth?.blockedTargets ?? 0) > 0) {
-    notices.push(`
-      <div class="notice warning">
-        <h4>Account reauthorization needed</h4>
-        <p>${formatNumber(stats.reauth.blockedTargets)} targets are blocked across ${formatNumber(stats.reauth.blockedChannelCount ?? 0)} channels.</p>
-      </div>
-    `);
-  }
-  if (Number(stats?.failures?.failedTargets ?? 0) > 0) {
-    notices.push(`
-      <div class="notice warning">
-        <h4>Failures detected</h4>
-        <p>${formatNumber(stats.failures.failedTargets)} targets failed in ${formatNumber(stats.failures.failedCampaigns ?? 0)} campaigns.</p>
-      </div>
-    `);
-  }
-
-  renderWorkspaceShell({
-    title: 'Dashboard',
-    subtitle: 'Campaign health and operational summaries.',
-    actionsHtml: `
-      <div class="inline-actions">
-        <a class="btn" data-link href="/workspace/campanhas">Open campaigns</a>
-        <a class="btn" data-link href="/workspace/accounts">Review accounts</a>
-        <a class="btn" data-link href="${escapeHtml(buildUrl('/workspace/dashboard'))}">Refresh</a>
-      </div>
-    `,
-    noticeHtml: notices.join(''),
-    contentHtml: `
-      <section class="dash-hero">
-        <article class="dash-hero-card" data-tone="success">
-          <div class="dash-hero-label">Published</div>
-          <div class="dash-hero-value">${formatNumber(targetsByStatus.publicado ?? 0)}</div>
-          <div class="dash-hero-hint">Targets successfully published</div>
-        </article>
-        <article class="dash-hero-card" data-tone="success">
-          <div class="dash-hero-label">Success Rate</div>
-          <div class="dash-hero-value">${formatPercent(stats?.targets?.successRate ?? 0)}</div>
-          <div class="dash-hero-hint">Published / terminal targets</div>
-        </article>
-        <article class="dash-hero-card" data-tone="info">
-          <div class="dash-hero-label">Campaigns</div>
-          <div class="dash-hero-value">${formatNumber(stats?.campaigns?.total ?? 0)}</div>
-          <div class="dash-hero-hint">${formatNumber(stats?.targets?.total ?? 0)} targets · ${formatNumber(stats?.jobs?.total ?? 0)} jobs</div>
-        </article>
-        <article class="dash-hero-card" data-tone="danger">
-          <div class="dash-hero-label">Failed</div>
-          <div class="dash-hero-value">${formatNumber(targetsByStatus.erro ?? 0)}</div>
-          <div class="dash-hero-hint">${formatNumber(stats?.reauth?.blockedTargets ?? 0)} blocked · ${formatNumber(stats?.jobs?.totalRetries ?? 0)} retries</div>
-        </article>
-      </section>
-      <section class="grid-3">
-        <article class="card stack">
-          <h3>Campaign pipeline</h3>
-          <div class="status-bar-section">
-            <h4>Campaigns</h4>
-            ${renderStatusBars(campaignsByStatus, { draft: 'muted', ready: 'info', launching: 'warning', completed: 'success', failed: 'danger' }, 'No campaigns yet.')}
-            <h4>Targets</h4>
-            ${renderStatusBars(targetsByStatus, { aguardando: 'muted', enviando: 'warning', publicado: 'success', erro: 'danger' }, 'No targets yet.')}
-            <h4>Jobs</h4>
-            ${renderStatusBars(jobsByStatus, { queued: 'muted', processing: 'info', completed: 'success', failed: 'danger' }, 'No jobs yet.')}
-          </div>
-        </article>
-        <article class="card stack">
-          <h3>Quota forecast</h3>
-          <div class="progress-block">
-            <div class="progress-meta">
-              <span>Consumed</span>
-              <strong>${formatPercent(stats?.quota?.usagePercent ?? 0)}</strong>
-            </div>
-            <div class="progress-track"><span class="progress-fill" style="width:${quotaUsedPercent}%"></span></div>
-          </div>
-          <div class="progress-block">
-            <div class="progress-meta">
-              <span>Projected</span>
-              <strong>${formatPercent(stats?.quota?.projectedPercent ?? 0)}</strong>
-            </div>
-            <div class="progress-track"><span class="progress-fill projected" style="width:${quotaProjectedPercent}%"></span></div>
-          </div>
-          <table>
-            <tbody>
-              <tr><th>Daily limit</th><td>${formatNumber(stats?.quota?.dailyLimitUnits ?? 0)}</td></tr>
-              <tr><th>Consumed</th><td>${formatNumber(stats?.quota?.estimatedConsumedUnits ?? 0)}</td></tr>
-              <tr><th>Queued</th><td>${formatNumber(stats?.quota?.estimatedQueuedUnits ?? 0)}</td></tr>
-              <tr><th>Projected</th><td>${formatNumber(stats?.quota?.estimatedProjectedUnits ?? 0)}</td></tr>
-              <tr><th>Remaining</th><td>${formatNumber(stats?.quota?.estimatedRemainingUnits ?? 0)}</td></tr>
-            </tbody>
-          </table>
-        </article>
-        <article class="card stack">
-          <h3>Health & retries</h3>
-          <div class="summary-inline">
-            <span>Total retries: ${formatNumber(stats?.jobs?.totalRetries ?? 0)}</span>
-            <span>Retried targets: ${formatNumber(stats?.retries?.retriedTargets ?? 0)}</span>
-            <span>Highest attempt: ${formatNumber(stats?.retries?.highestAttempt ?? 0)}</span>
-            <span>Hotspot: ${escapeHtml(stats?.retries?.hotspotChannelId ?? '-')} (${formatNumber(stats?.retries?.hotspotRetryCount ?? 0)})</span>
-          </div>
-          <div class="summary-inline">
-            <span>Blocked campaigns: ${formatNumber(stats?.reauth?.blockedCampaigns ?? 0)}</span>
-            <span>Blocked targets: ${formatNumber(stats?.reauth?.blockedTargets ?? 0)}</span>
-            <span>Blocked channels: ${formatNumber(stats?.reauth?.blockedChannelCount ?? 0)}</span>
-          </div>
-          <h4>Failure reasons</h4>
-          ${failureReasonsTable}
-        </article>
-      </section>
-      <section class="grid-2">
-        <article class="card stack">
-          <h3>Audit</h3>
-          <div class="summary-inline">
-            <span>Total events: ${formatNumber(stats?.audit?.totalEvents ?? 0)}</span>
-            <span>Latest: ${escapeHtml(formatDate(stats?.audit?.lastEventAt))}</span>
-            <span>Type: ${escapeHtml(normalizeLabel(stats?.audit?.lastEventType ?? '-'))}</span>
-            <span>Actor: ${escapeHtml(stats?.audit?.lastActorEmail ?? '-')}</span>
-          </div>
-          ${auditBreakdown}
-        </article>
-        <article class="card stack">
-          <h3>Top channels</h3>
-          <div class="summary-inline">
-            <span>Targets tracked: ${formatNumber(stats?.targets?.total ?? 0)}</span>
-            <span>Channels: ${formatNumber(channels.length)}</span>
-          </div>
-          ${channels.length === 0
-            ? '<p class="muted">No channel metrics yet.</p>'
-            : `<table>
-                <thead><tr><th>Channel</th><th>Published</th><th>Failed</th><th>Success</th></tr></thead>
-                <tbody>
-                  ${channels.slice(0, 6).map((ch) => `
-                    <tr>
-                      <td>${escapeHtml(ch.channelId)}</td>
-                      <td>${formatNumber(ch.published)}</td>
-                      <td>${formatNumber(ch.failed)}</td>
-                      <td>${escapeHtml(formatPercent(ch.successRate))}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>`}
-        </article>
-      </section>
-      <section class="card stack">
-        <h3>Channel leaderboard</h3>
-        ${channelsTable}
-      </section>
-    `,
-  });
-
-  if (shouldAutoRefreshDashboard(stats)) {
-    clearAutoRefreshTimer();
-    state.autoRefreshTimer = setTimeout(() => {
-      if (window.location.pathname !== '/workspace/dashboard') {
-        return;
-      }
-      void renderDashboardPage();
-    }, 3000);
-  }
 }
+
 
 // ─── Platform Dashboard design system ────────────────────────────────────────
 
@@ -3496,7 +3290,9 @@ function applyOdThemeFromSettings() {
   });
 }
 
+let _odGlobeCache = null;
 function buildOdGlobe() {
+  if (_odGlobeCache) return _odGlobeCache;
   const LAT = 20, LON = 40;
   const dots = [];
   for (let i = 1; i < LAT; i++) {
@@ -3516,7 +3312,8 @@ function buildOdGlobe() {
     const ry = (Math.sqrt(Math.max(0, 1 - yv * yv)) * 0.15).toFixed(3);
     return `<ellipse cx="0" cy="${yv}" rx="${rx}" ry="${ry}" fill="none" stroke="var(--od-accent)" stroke-opacity="0.12" stroke-width="0.005"/>`;
   }).join('');
-  return `<svg viewBox="-1.1 -1.1 2.2 2.2" class="od-globe-svg">${latLines}${dots.join('')}</svg>`;
+  _odGlobeCache = `<svg viewBox="-1.1 -1.1 2.2 2.2" class="od-globe-svg">${latLines}${dots.join('')}</svg>`;
+  return _odGlobeCache;
 }
 
 async function renderPlatformDashboardPage() {
@@ -3727,8 +3524,10 @@ async function renderPlatformDashboardPage() {
 
   if (shouldAutoRefreshDashboard(stats)) {
     state.autoRefreshTimer = setTimeout(() => {
-      if (window.location.pathname === '/workspace/dashboard') void renderPlatformDashboardPage();
-    }, 4000);
+      if (window.location.pathname !== '/workspace/dashboard') return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      void renderPlatformDashboardPage();
+    }, 12000);
   }
 }
 
@@ -3887,11 +3686,25 @@ async function renderAccountsPage() {
     : null;
   const allChannels = accounts.flatMap((account) => {
     const accountChannels = channelsByAccountId.get(account.id) ?? [];
-    return accountChannels.map((channel) => ({
-      ...channel,
-      connectedAccountLabel: account.displayName ?? getProviderLabel(account.provider),
-      connectedAccountId: account.id,
-    }));
+    if (accountChannels.length > 0) {
+      return accountChannels.map((channel) => ({
+        ...channel,
+        connectedAccountLabel: account.displayName ?? getProviderLabel(account.provider),
+        connectedAccountId: account.id,
+      }));
+    }
+    if (!supportsChannels(account.provider)) {
+      return [{
+        id: account.id,
+        title: account.displayName ?? account.email ?? account.id,
+        handle: account.email ?? '-',
+        isActive: account.status === 'connected',
+        connectedAccountLabel: getProviderLabel(account.provider),
+        connectedAccountId: account.id,
+        provider: account.provider,
+      }];
+    }
+    return [];
   });
 
   const connectedCount = accounts.filter((account) => account.status === 'connected').length;
@@ -4191,9 +4004,33 @@ async function renderAccountsPage() {
           </button>
         </div>
         ${selectedAccount && !selectedAccountSupportsChannels ? `
-          <div class="notice info">
-            <h4>${escapeHtml(getProviderLabel(selectedAccount.provider))} does not expose channels here</h4>
-            <p>This account is connected and saved correctly, but channel sync in this dashboard remains YouTube-only for now.</p>
+          <div class="table-scroll platform-page-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Account</th>
+                  <th>Handle</th>
+                  <th>State</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <div class="channel-cell">
+                      <strong>${escapeHtml(selectedAccount.displayName ?? selectedAccount.email ?? selectedAccount.id)}</strong>
+                      <small class="muted">${escapeHtml(getProviderLabel(selectedAccount.provider))}</small>
+                    </div>
+                  </td>
+                  <td>${escapeHtml(selectedAccount.email ?? '-')}</td>
+                  <td><span class="status-pill ${selectedAccount.status === 'connected' ? 'connected' : 'warn'}">${escapeHtml(selectedAccount.status ?? '')}</span></td>
+                  <td><span class="muted">Account = channel</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="notice info" style="margin-top:12px">
+            <p>For ${escapeHtml(getProviderLabel(selectedAccount.provider))}, the connected account itself is the publishing destination — there is no per-channel concept like YouTube.</p>
           </div>
         ` : `
           <div class="table-scroll platform-page-table-wrap">
@@ -4215,13 +4052,13 @@ async function renderAccountsPage() {
         <div class="platform-dashboard-panel-head">
           <div>
             <span class="platform-dashboard-kicker">Channel directory</span>
-            <h3>All linked YouTube channels</h3>
+            <h3>All linked publishing destinations</h3>
           </div>
           <span class="platform-dashboard-panel-meta">${formatNumber(allChannels.length)} discovered channels</span>
         </div>
         <div class="platform-page-summary-grid">
           <article class="platform-page-summary-card">
-            <span>Google accounts</span>
+            <span>Connected accounts</span>
             <strong>${formatNumber(accounts.length)}</strong>
           </article>
           <article class="platform-page-summary-card">
@@ -4425,6 +4262,49 @@ async function renderAccountsPage() {
   });
 }
 
+function attachVideoPreviewListeners(assetMap) {
+  document.querySelectorAll('[data-media-preview-frame]').forEach((frame) => {
+    const video = frame.querySelector('[data-preview-video]');
+    if (!(video instanceof HTMLVideoElement)) return;
+    const startPreview = () => {
+      frame.setAttribute('data-preview-playing', 'true');
+      const p = video.play();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    };
+    const stopPreview = () => {
+      frame.setAttribute('data-preview-playing', 'false');
+      video.pause();
+      if (video.currentTime > 0) video.currentTime = 0;
+    };
+    frame.addEventListener('mouseenter', startPreview);
+    frame.addEventListener('mouseleave', stopPreview);
+    frame.addEventListener('focusin', startPreview);
+    frame.addEventListener('focusout', stopPreview);
+  });
+
+  document.querySelectorAll('[data-action="open-media-preview"]').forEach((frame) => {
+    const openPreview = async () => {
+      const mediaId = frame.getAttribute('data-media-id');
+      if (!mediaId) return;
+      const asset = assetMap.get(mediaId);
+      if (!asset) return;
+      const previewVideo = frame.querySelector('[data-preview-video]');
+      if (previewVideo instanceof HTMLVideoElement) {
+        frame.setAttribute('data-preview-playing', 'false');
+        previewVideo.pause();
+        if (previewVideo.currentTime > 0) previewVideo.currentTime = 0;
+      }
+      await openMediaPreviewDialog(asset);
+    };
+    frame.addEventListener('click', openPreview);
+    frame.addEventListener('keydown', async (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      await openPreview();
+    });
+  });
+}
+
 async function renderMediaPage() {
   const result = await api.media();
   if (!result.ok) {
@@ -4600,55 +4480,60 @@ async function renderMediaPage() {
       </div>
     `,
     contentHtml: `
-      <section class="platform-dashboard-hero">
-        <article class="platform-surface platform-dashboard-hero-copy">
-          <div class="platform-dashboard-kicker-row">
-            <span class="platform-dashboard-kicker">Media vault</span>
-            <span class="platform-dashboard-live"><span class="platform-login-live-dot"></span> Synced ${escapeHtml(liveClock)}</span>
-          </div>
-          <h2>Keep every video and thumbnail launch-ready for the whole workspace.</h2>
-          <p>Upload assets once, keep previews handy and maintain a reusable media library for YouTube and TikTok campaigns.</p>
-          <div class="platform-dashboard-chip-row">
-            <span class="platform-chip">${renderPlatformGlyph('youtube', 'small')} Long-form masters</span>
-            <span class="platform-chip">${renderPlatformGlyph('tiktok', 'small')} Vertical cuts</span>
-          </div>
-          <div class="platform-dashboard-chip-row">
-            <span class="platform-dashboard-inline-stat">${formatNumber(videoAssetsCount)} videos</span>
-            <span class="platform-dashboard-inline-stat">${formatNumber(thumbnailAssetsCount)} thumbnails</span>
-            <span class="platform-dashboard-inline-stat">${formatBytes(totalSize)} stored</span>
-          </div>
-        </article>
-
-        <article class="platform-surface platform-dashboard-hero-visual">
-          <div class="platform-page-summary-grid">
-            <article class="platform-page-summary-card">
-              <span>Library assets</span>
-              <strong>${formatNumber(filteredAssets.length)}</strong>
-            </article>
-            <article class="platform-page-summary-card">
-              <span>Linked sets</span>
-              <strong>${formatNumber(linkedThumbnailAssets)}</strong>
-            </article>
-            <article class="platform-page-summary-card">
-              <span>Playback time</span>
-              <strong>${escapeHtml(formatDurationSeconds(totalDurationSeconds))}</strong>
-            </article>
-          </div>
-          <div class="platform-dashboard-orbit-footer">
-            <div>
-              <span>Video assets</span>
-              <strong>${formatNumber(videoAssetsCount)}</strong>
+      <section class="media-hero-interactive" id="media-hero-interactive">
+        <div class="media-hero-bg">
+          <div class="media-hero-orb media-hero-orb-1"></div>
+          <div class="media-hero-orb media-hero-orb-2"></div>
+          <div class="media-hero-orb media-hero-orb-3"></div>
+          <div class="media-hero-grid-overlay"></div>
+        </div>
+        <div class="media-hero-content">
+          <div class="media-hero-header">
+            <div class="platform-dashboard-kicker-row">
+              <span class="platform-dashboard-kicker">Media vault</span>
+              <span class="platform-dashboard-live"><span class="platform-login-live-dot"></span> Synced ${escapeHtml(liveClock)}</span>
             </div>
-            <div>
-              <span>Thumbnails</span>
-              <strong>${formatNumber(thumbnailAssetsCount)}</strong>
+            <h2 class="media-hero-title">Keep every video and thumbnail launch-ready.</h2>
+            <p class="media-hero-subtitle">Upload assets once, reuse them across YouTube and TikTok campaigns.</p>
+          </div>
+          <div class="media-hero-tiles">
+            <button type="button" class="media-hero-tile" data-media-filter="all" data-active="${typeFilter === 'all' ? 'true' : 'false'}">
+              <div class="media-hero-tile-icon">📦</div>
+              <div class="media-hero-tile-info">
+                <span class="media-hero-tile-label">All assets</span>
+                <strong class="media-hero-tile-value" data-counter="${filteredAssets.length}">0</strong>
+              </div>
+            </button>
+            <button type="button" class="media-hero-tile" data-media-filter="video" data-active="${typeFilter === 'video' ? 'true' : 'false'}">
+              <div class="media-hero-tile-icon">🎬</div>
+              <div class="media-hero-tile-info">
+                <span class="media-hero-tile-label">Videos</span>
+                <strong class="media-hero-tile-value" data-counter="${videoAssetsCount}">0</strong>
+              </div>
+            </button>
+            <button type="button" class="media-hero-tile" data-media-filter="thumbnail" data-active="${typeFilter === 'thumbnail' ? 'true' : 'false'}">
+              <div class="media-hero-tile-icon">🖼️</div>
+              <div class="media-hero-tile-info">
+                <span class="media-hero-tile-label">Thumbnails</span>
+                <strong class="media-hero-tile-value" data-counter="${thumbnailAssetsCount}">0</strong>
+              </div>
+            </button>
+            <div class="media-hero-tile media-hero-tile-static">
+              <div class="media-hero-tile-icon">💾</div>
+              <div class="media-hero-tile-info">
+                <span class="media-hero-tile-label">Stored</span>
+                <strong class="media-hero-tile-value-static">${formatBytes(totalSize)}</strong>
+              </div>
             </div>
-            <div>
-              <span>Filter</span>
-              <strong>${escapeHtml(typeFilter === 'all' ? 'All' : typeFilter)}</strong>
+            <div class="media-hero-tile media-hero-tile-static">
+              <div class="media-hero-tile-icon">⏱️</div>
+              <div class="media-hero-tile-info">
+                <span class="media-hero-tile-label">Playback</span>
+                <strong class="media-hero-tile-value-static">${escapeHtml(formatDurationSeconds(totalDurationSeconds))}</strong>
+              </div>
             </div>
           </div>
-        </article>
+        </div>
       </section>
 
       <section class="platform-dashboard-stat-grid">
@@ -4776,14 +4661,7 @@ async function renderMediaPage() {
 
     setButtonBusy(submitButton, true, 'Uploading...');
     try {
-      const payload = {
-        video: await buildUploadPayloadFromFile(videoFile, { includeDuration: true }),
-      };
-      if (thumbnailFile) {
-        payload.thumbnail = await buildUploadPayloadFromFile(thumbnailFile, { includeDuration: false });
-      }
-
-      const uploadResult = await api.uploadMedia(payload);
+      const uploadResult = await uploadMediaFiles(videoFile, thumbnailFile ?? null);
       if (!uploadResult.ok) {
         setUiNotice('error', 'Upload failed', uploadResult.error);
         await renderMediaPage();
@@ -4812,6 +4690,54 @@ async function renderMediaPage() {
     navigate(href);
   });
 
+  document.querySelectorAll('.media-hero-tile[data-media-filter]').forEach((tile) => {
+    tile.addEventListener('click', () => {
+      const filterValue = tile.getAttribute('data-media-filter');
+      if (!filterValue) return;
+      navigate(buildUrl('/workspace/media', { search: searchInput, type: filterValue }));
+    });
+  });
+
+  document.querySelectorAll('.media-hero-tile-value[data-counter]').forEach((el) => {
+    const target = Number(el.getAttribute('data-counter') ?? 0);
+    if (!Number.isFinite(target) || target <= 0) {
+      el.textContent = String(target);
+      return;
+    }
+    const duration = 900;
+    const start = performance.now();
+    const tick = (now) => {
+      const elapsed = now - start;
+      const progress = Math.min(1, elapsed / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      el.textContent = String(Math.floor(target * eased));
+      if (progress < 1) requestAnimationFrame(tick);
+      else el.textContent = String(target);
+    };
+    requestAnimationFrame(tick);
+  });
+
+  const heroEl = document.getElementById('media-hero-interactive');
+  if (heroEl && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    heroEl.addEventListener('mousemove', (event) => {
+      const rect = heroEl.getBoundingClientRect();
+      const px = ((event.clientX - rect.left) / rect.width - 0.5) * 2;
+      const py = ((event.clientY - rect.top) / rect.height - 0.5) * 2;
+      heroEl.style.setProperty('--media-hero-px', String(px));
+      heroEl.style.setProperty('--media-hero-py', String(py));
+      const orbs = heroEl.querySelectorAll('.media-hero-orb');
+      orbs.forEach((orb, idx) => {
+        const factor = (idx + 1) * 8;
+        orb.style.transform = `translate(${px * factor}px, ${py * factor}px)`;
+      });
+    });
+    heroEl.addEventListener('mouseleave', () => {
+      heroEl.querySelectorAll('.media-hero-orb').forEach((orb) => {
+        orb.style.transform = '';
+      });
+    });
+  }
+
   document.querySelectorAll('[data-action="copy-media-id"]').forEach((button) => {
     button.addEventListener('click', async () => {
       const mediaId = button.getAttribute('data-media-id');
@@ -4825,34 +4751,6 @@ async function renderMediaPage() {
         await renderMediaPage();
       }
     });
-  });
-
-  document.querySelectorAll('[data-media-preview-frame]').forEach((frame) => {
-    const video = frame.querySelector('[data-preview-video]');
-    if (!(video instanceof HTMLVideoElement)) {
-      return;
-    }
-
-    const startPreview = () => {
-      frame.setAttribute('data-preview-playing', 'true');
-      const playPromise = video.play();
-      if (playPromise && typeof playPromise.catch === 'function') {
-        playPromise.catch(() => {});
-      }
-    };
-
-    const stopPreview = () => {
-      frame.setAttribute('data-preview-playing', 'false');
-      video.pause();
-      if (video.currentTime > 0) {
-        video.currentTime = 0;
-      }
-    };
-
-    frame.addEventListener('mouseenter', startPreview);
-    frame.addEventListener('mouseleave', stopPreview);
-    frame.addEventListener('focusin', startPreview);
-    frame.addEventListener('focusout', stopPreview);
   });
 
   document.querySelectorAll('[data-action="set-media-preview-size"]').forEach((button) => {
@@ -4869,40 +4767,7 @@ async function renderMediaPage() {
     });
   });
 
-  const assetById = new Map(assets.map((asset) => [asset.id, asset]));
-  document.querySelectorAll('[data-action="open-media-preview"]').forEach((frame) => {
-    const openPreview = async () => {
-      const mediaId = frame.getAttribute('data-media-id');
-      if (!mediaId) {
-        return;
-      }
-
-      const asset = assetById.get(mediaId);
-      if (!asset) {
-        return;
-      }
-
-      const previewVideo = frame.querySelector('[data-preview-video]');
-      if (previewVideo instanceof HTMLVideoElement) {
-        frame.setAttribute('data-preview-playing', 'false');
-        previewVideo.pause();
-        if (previewVideo.currentTime > 0) {
-          previewVideo.currentTime = 0;
-        }
-      }
-
-      await openMediaPreviewDialog(asset);
-    };
-
-    frame.addEventListener('click', openPreview);
-    frame.addEventListener('keydown', async (event) => {
-      if (event.key !== 'Enter' && event.key !== ' ') {
-        return;
-      }
-      event.preventDefault();
-      await openPreview();
-    });
-  });
+  attachVideoPreviewListeners(new Map(assets.map((asset) => [asset.id, asset])));
 
   document.querySelectorAll('[data-action="delete-media"]').forEach((button) => {
     button.addEventListener('click', async () => {
@@ -5036,6 +4901,567 @@ function animateCampaignControl() {
       panel.querySelectorAll('.radar-dot').forEach((d) => d.classList.remove('radar-dot-active'));
     });
   });
+
+  animateMissionInsights();
+}
+
+function animateMissionInsights() {
+  const panel = document.getElementById('mission-insights');
+  if (!panel) return;
+
+  const arc = panel.querySelector('.mission-success-arc');
+  if (arc) {
+    const targetOffset = Number(arc.getAttribute('data-target-offset') ?? 0);
+    requestAnimationFrame(() => {
+      arc.setAttribute('stroke-dashoffset', String(targetOffset));
+    });
+  }
+
+  const rateEl = panel.querySelector('[data-target-rate]');
+  if (rateEl) {
+    const target = Number(rateEl.getAttribute('data-target-rate') ?? 0);
+    const duration = 1200;
+    const start = performance.now();
+    const tick = (now) => {
+      const progress = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      rateEl.textContent = `${Math.round(target * eased)}%`;
+      if (progress < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
+  panel.querySelectorAll('[data-counter]').forEach((el) => {
+    const target = Number(el.getAttribute('data-counter') ?? 0);
+    const duration = 900;
+    const start = performance.now();
+    const tick = (now) => {
+      const progress = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      el.textContent = String(Math.round(target * eased));
+      if (progress < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+
+  const countdownEl = panel.querySelector('#mission-countdown');
+  if (countdownEl) {
+    const ms = Number(countdownEl.getAttribute('data-countdown-ms'));
+    if (Number.isFinite(ms) && ms > 0) {
+      const startedAt = Date.now();
+      const initial = ms;
+      const tickCountdown = () => {
+        const remaining = Math.max(0, initial - (Date.now() - startedAt));
+        const totalSec = Math.floor(remaining / 1000);
+        const d = Math.floor(totalSec / 86400);
+        const h = Math.floor((totalSec % 86400) / 3600);
+        const m = Math.floor((totalSec % 3600) / 60);
+        const s = totalSec % 60;
+        let label;
+        if (d > 0) label = `${d}d ${h}h`;
+        else if (h > 0) label = `${h}h ${m}m`;
+        else if (m > 0) label = `${m}m ${String(s).padStart(2, '0')}s`;
+        else label = `${s}s`;
+        countdownEl.textContent = label;
+        if (remaining > 0 && document.body.contains(countdownEl)) {
+          setTimeout(tickCountdown, 1000);
+        }
+      };
+      tickCountdown();
+    }
+  }
+
+  panel.querySelectorAll('.mission-tile[data-link-href]').forEach((tile) => {
+    tile.addEventListener('click', () => {
+      const href = tile.getAttribute('data-link-href');
+      if (href) navigate(href);
+    });
+  });
+}
+
+async function renderPlaylistsPage() {
+  const [playlistsResult, mediaResult] = await Promise.all([api.playlists(), api.media()]);
+  if (!playlistsResult.ok) {
+    if (playlistsResult.status === 401) { unauthorizedRedirect(); return; }
+    renderWorkspaceShell({ title: 'Playlists', subtitle: 'Organize videos em playlists a partir de pastas locais.', noticeHtml: `<div class="notice error">${escapeHtml(playlistsResult.error)}</div>`, contentHtml: '' });
+    return;
+  }
+
+  const playlists = Array.isArray(playlistsResult.body?.playlists) ? playlistsResult.body.playlists : [];
+  const allAssets = Array.isArray(mediaResult.body?.assets) ? mediaResult.body.assets : [];
+  const totalVideos = playlists.reduce((sum, pl) => sum + (pl.items?.length ?? 0), 0);
+  const totalUsed = playlists.reduce((sum, pl) => sum + (pl.items?.filter((i) => i.usedAt).length ?? 0), 0);
+  const liveClock = formatClockLabel();
+
+  const metricsHtml = [
+    { label: 'Playlists', value: formatNumber(playlists.length), hint: 'Total de playlists criadas', tone: 'info' },
+    { label: 'Videos', value: formatNumber(totalVideos), hint: 'Videos distribuidos em playlists', tone: 'info' },
+    { label: 'Ja usados', value: formatNumber(totalUsed), hint: 'Videos que ja foram postados via Auto', tone: 'success' },
+    { label: 'Disponiveis', value: formatNumber(totalVideos - totalUsed), hint: 'Ainda nao postados', tone: totalVideos - totalUsed > 0 ? 'info' : 'warning' },
+  ].map((card) => `
+    <article class="platform-dashboard-stat" data-tone="${escapeHtml(card.tone)}">
+      <span class="platform-dashboard-stat-label">${escapeHtml(card.label)}</span>
+      <strong>${escapeHtml(card.value)}</strong>
+      <span class="platform-dashboard-stat-detail">${escapeHtml(card.hint)}</span>
+    </article>
+  `).join('');
+
+  const playlistCardsHtml = playlists.length === 0
+    ? ''
+    : playlists.map((pl) => {
+        const itemCount = pl.items?.length ?? 0;
+        const usedCount = pl.items?.filter((i) => i.usedAt).length ?? 0;
+        const availCount = itemCount - usedCount;
+        const usedPct = itemCount > 0 ? Math.round((usedCount / itemCount) * 100) : 0;
+        return `
+          <article class="platform-media-card">
+            <div class="platform-media-card-head">
+              <div>
+                <span class="platform-dashboard-kicker">playlist</span>
+                <h3>${escapeHtml(pl.name)}</h3>
+                <p>${escapeHtml(pl.folderPath || 'Pasta manual')} · ${escapeHtml(formatDate(pl.createdAt))}</p>
+              </div>
+              <div class="inline-actions">
+                ${statusPill(`${formatNumber(itemCount)} videos`)}
+                ${availCount > 0 ? statusPill(`${formatNumber(availCount)} disp`) : statusPill('esgotada')}
+              </div>
+            </div>
+            <div class="platform-media-card-body">
+              <div class="platform-media-card-preview" style="display:flex;align-items:center;justify-content:center;min-height:80px;background:var(--surface-muted);border-radius:6px;">
+                <div style="text-align:center;padding:1rem;">
+                  <div style="font-size:2rem;font-weight:800;color:var(--primary);">${formatNumber(itemCount)}</div>
+                  <div class="muted" style="font-size:0.8rem;">videos</div>
+                </div>
+              </div>
+              <div class="platform-media-card-meta">
+                <div><span>Total</span><strong>${formatNumber(itemCount)}</strong></div>
+                <div><span>Usados</span><strong>${formatNumber(usedCount)}</strong></div>
+                <div><span>Disponiveis</span><strong>${formatNumber(availCount)}</strong></div>
+                <div><span>Progresso</span><strong>${usedPct}%</strong></div>
+              </div>
+            </div>
+            <div class="platform-media-card-actions inline-actions">
+              <a class="btn" data-link href="/workspace/playlists/${encodeURIComponent(pl.id)}">Abrir</a>
+              <button class="btn-danger" type="button" data-action="delete-playlist" data-playlist-id="${escapeHtml(pl.id)}">Excluir</button>
+            </div>
+          </article>
+        `;
+      }).join('');
+
+  const emptyState = playlists.length === 0
+    ? renderEmptyStateCard({
+        title: 'Nenhuma playlist ainda',
+        message: 'Escaneie uma pasta local — cada subpasta vira uma playlist com seus videos importados automaticamente.',
+        tone: 'info',
+      })
+    : '';
+
+  renderWorkspaceShell({
+    title: 'Playlists',
+    subtitle: 'Organize videos em playlists a partir de pastas locais.',
+    actionsHtml: `
+      <div class="inline-actions">
+        <a class="btn" data-link href="/workspace/playlists">Refresh</a>
+      </div>
+    `,
+    contentHtml: `
+      <section class="platform-dashboard-hero">
+        <article class="platform-surface platform-dashboard-hero-copy">
+          <div class="platform-dashboard-kicker-row">
+            <span class="platform-dashboard-kicker">Playlist vault</span>
+            <span class="platform-dashboard-live"><span class="platform-login-live-dot"></span> Synced ${escapeHtml(liveClock)}</span>
+          </div>
+          <h2>Organize videos em playlists e publique aleatoriamente sem repetir.</h2>
+          <p>Aponte uma pasta local no servidor. Cada subpasta vira uma playlist e seus videos sao importados como assets para uso em campanhas automaticas.</p>
+          <div class="platform-dashboard-chip-row">
+            <span class="platform-chip">📁 Pastas locais</span>
+            <span class="platform-chip">🔀 Auto aleatorio</span>
+          </div>
+          <div class="platform-dashboard-chip-row">
+            <span class="platform-dashboard-inline-stat">${formatNumber(playlists.length)} playlists</span>
+            <span class="platform-dashboard-inline-stat">${formatNumber(totalVideos)} videos</span>
+            <span class="platform-dashboard-inline-stat">${formatNumber(totalVideos - totalUsed)} disponiveis</span>
+          </div>
+        </article>
+        <article class="platform-surface platform-dashboard-hero-visual">
+          <div class="platform-page-summary-grid">
+            <article class="platform-page-summary-card">
+              <span>Playlists</span>
+              <strong>${formatNumber(playlists.length)}</strong>
+            </article>
+            <article class="platform-page-summary-card">
+              <span>Videos</span>
+              <strong>${formatNumber(totalVideos)}</strong>
+            </article>
+            <article class="platform-page-summary-card">
+              <span>Disponiveis</span>
+              <strong>${formatNumber(totalVideos - totalUsed)}</strong>
+            </article>
+          </div>
+          <div class="platform-dashboard-orbit-footer">
+            <div><span>Usados</span><strong>${formatNumber(totalUsed)}</strong></div>
+            <div><span>Assets</span><strong>${formatNumber(allAssets.filter((a) => a.asset_type === 'video').length)}</strong></div>
+            <div><span>Status</span><strong>${playlists.length > 0 ? 'Ativo' : 'Vazio'}</strong></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="platform-dashboard-stat-grid">
+        ${metricsHtml}
+      </section>
+
+      <section class="platform-dashboard-main-grid">
+        <section class="platform-surface platform-dashboard-panel">
+          <div class="platform-dashboard-panel-head">
+            <div>
+              <span class="platform-dashboard-kicker">Import bay</span>
+              <h3>Escanear pasta local</h3>
+            </div>
+            <span class="platform-dashboard-panel-meta">Subpastas → Playlists</span>
+          </div>
+          <div class="media-upload-zone">
+            <div class="media-upload-zone-header">
+              <span class="media-upload-zone-icon">📁</span>
+              <div>
+                <p class="media-upload-zone-title">Importar da pasta do servidor</p>
+                <p class="media-upload-zone-sub">Cada subpasta vira uma playlist automaticamente</p>
+              </div>
+            </div>
+            <form id="scan-folder-form" class="form-grid">
+              <label>
+                Caminho da pasta raiz <em style="font-style:normal;font-size:0.78rem;color:var(--danger)">*obrigatorio</em>
+                <input name="rootPath" required placeholder="Ex: C:\\Videos ou /home/user/videos" />
+              </label>
+            </form>
+          </div>
+          <div class="inline-actions">
+            <button class="btn-primary" type="button" id="scan-folder-submit">Escanear e importar</button>
+          </div>
+        </section>
+        <section class="platform-surface platform-dashboard-panel">
+          <div class="platform-dashboard-panel-head">
+            <div>
+              <span class="platform-dashboard-kicker">Manual</span>
+              <h3>Criar playlist</h3>
+            </div>
+            <span class="platform-dashboard-panel-meta">${formatNumber(playlists.length)} criadas</span>
+          </div>
+          <p class="muted">Crie uma playlist vazia e adicione videos manualmente depois.</p>
+          <div class="inline-actions">
+            <button class="btn-primary" type="button" data-action="create-playlist-manual">+ Nova playlist</button>
+          </div>
+          <div class="platform-page-summary-grid">
+            <article class="platform-page-summary-card">
+              <span>Playlists</span>
+              <strong>${formatNumber(playlists.length)}</strong>
+            </article>
+            <article class="platform-page-summary-card">
+              <span>Total videos</span>
+              <strong>${formatNumber(totalVideos)}</strong>
+            </article>
+            <article class="platform-page-summary-card">
+              <span>Ja usados</span>
+              <strong>${formatNumber(totalUsed)}</strong>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      ${emptyState}
+      <section class="platform-surface platform-dashboard-panel">
+        <div class="platform-dashboard-panel-head">
+          <div>
+            <span class="platform-dashboard-kicker">Playlist library</span>
+            <h3>Playlists (${formatNumber(playlists.length)})</h3>
+          </div>
+          <span class="platform-dashboard-panel-meta">Auto · Sem repeticao</span>
+        </div>
+        ${playlistCardsHtml ? `<div class="platform-media-grid">${playlistCardsHtml}</div>` : '<p class="muted">Nenhuma playlist encontrada.</p>'}
+      </section>
+    `,
+  });
+
+  document.getElementById('scan-folder-submit')?.addEventListener('click', async () => {
+    const form = document.getElementById('scan-folder-form');
+    if (!form) return;
+    const rootPath = String(new FormData(form).get('rootPath') ?? '').trim();
+    if (!rootPath) return;
+    const btn = document.getElementById('scan-folder-submit');
+    setButtonBusy(btn, true, 'Escaneando...');
+    const result = await api.scanFolderForPlaylists(rootPath);
+    setButtonBusy(btn, false);
+    if (!result.ok) {
+      setUiNotice('error', 'Erro ao escanear', result.error);
+    } else {
+      const { created, updated } = result.body ?? {};
+      setUiNotice('success', 'Scan concluido', `${created} playlists criadas, ${updated} atualizadas.`);
+    }
+    await renderPlaylistsPage();
+  });
+
+  document.querySelector('[data-action="create-playlist-manual"]')?.addEventListener('click', async () => {
+    const result = await showFormDialog({
+      title: 'Nova Playlist',
+      fields: [
+        { name: 'name', label: 'Nome', type: 'text', required: true },
+        { name: 'folderPath', label: 'Caminho da pasta (opcional)', type: 'text' },
+      ],
+    });
+    if (!result) return;
+    const r = await api.createPlaylist(result.name, result.folderPath ?? '');
+    if (!r.ok) { setUiNotice('error', 'Erro', r.error); } else { setUiNotice('success', 'Playlist criada', ''); }
+    await renderPlaylistsPage();
+  });
+
+  document.querySelectorAll('[data-action="delete-playlist"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const playlistId = btn.getAttribute('data-playlist-id');
+      const confirmed = await showConfirmDialog({ title: 'Excluir playlist?', message: 'Os assets de video nao serao deletados, apenas a playlist.', tone: 'danger' });
+      if (!confirmed) return;
+      const r = await api.deletePlaylist(playlistId);
+      if (!r.ok) { setUiNotice('error', 'Erro ao excluir', r.error); } else { setUiNotice('success', 'Playlist excluida', ''); }
+      await renderPlaylistsPage();
+    });
+  });
+}
+
+async function renderPlaylistDetailPage(playlistId) {
+  const [plResult, mediaResult] = await Promise.all([api.getPlaylist(playlistId), api.media()]);
+  if (!plResult.ok) {
+    if (plResult.status === 401) { unauthorizedRedirect(); return; }
+    renderWorkspaceShell({ title: 'Playlist', subtitle: '', noticeHtml: `<div class="notice error">${escapeHtml(plResult.error)}</div>`, contentHtml: '' });
+    return;
+  }
+
+  const playlist = plResult.body?.playlist;
+  const allAssets = Array.isArray(mediaResult.body?.assets) ? mediaResult.body.assets : [];
+  const videoById = Object.fromEntries(allAssets.filter((a) => a.asset_type === 'video').map((a) => [a.id, a]));
+  const items = playlist.items ?? [];
+  const usedCount = items.filter((i) => i.usedAt).length;
+  const availCount = items.length - usedCount;
+  const liveClock = formatClockLabel();
+
+  const metricsHtml = [
+    { label: 'Videos', value: formatNumber(items.length), hint: 'Total na playlist', tone: 'info' },
+    { label: 'Disponiveis', value: formatNumber(availCount), hint: 'Ainda nao postados via Auto', tone: availCount > 0 ? 'info' : 'warning' },
+    { label: 'Ja usados', value: formatNumber(usedCount), hint: 'Postados pelo modo Auto', tone: 'success' },
+    { label: 'Progresso', value: items.length > 0 ? `${Math.round((usedCount / items.length) * 100)}%` : '—', hint: 'Completude da playlist', tone: 'info' },
+  ].map((card) => `
+    <article class="platform-dashboard-stat" data-tone="${escapeHtml(card.tone)}">
+      <span class="platform-dashboard-stat-label">${escapeHtml(card.label)}</span>
+      <strong>${escapeHtml(card.value)}</strong>
+      <span class="platform-dashboard-stat-detail">${escapeHtml(card.hint)}</span>
+    </article>
+  `).join('');
+
+  const itemCardsHtml = items.map((item) => {
+    const asset = videoById[item.videoAssetId];
+    const usedLabel = item.usedAt ? `Usado ${new Date(item.usedAt).toLocaleString()}` : 'Disponivel';
+    const usedTone = item.usedAt ? '' : 'success';
+    const previewHtml = asset ? renderVideoPreviewCell(asset) : '<span class="muted">Asset nao encontrado</span>';
+    return `
+      <article class="platform-media-card">
+        <div class="platform-media-card-head">
+          <div>
+            <span class="platform-dashboard-kicker">video</span>
+            <h3>${escapeHtml(asset?.original_name ?? item.videoAssetId)}</h3>
+            <p>${escapeHtml(asset?.mime_type ?? '')}${asset?.created_at ? ' · ' + escapeHtml(formatDate(asset.created_at)) : ''}</p>
+          </div>
+          <div class="inline-actions">
+            ${statusPill(item.usedAt ? 'usado' : 'disponivel')}
+          </div>
+        </div>
+        <div class="platform-media-card-body playlist-card-body">
+          <div class="platform-media-card-preview playlist-card-preview">
+            ${previewHtml}
+          </div>
+          <div class="platform-media-card-meta playlist-card-meta">
+            <div><span>Duracao</span><strong>${escapeHtml(formatDurationSeconds(asset?.duration_seconds ?? 0))}</strong></div>
+            <div><span>Tamanho</span><strong>${escapeHtml(formatBytes(asset?.size_bytes ?? 0))}</strong></div>
+            <div><span>Status</span><strong class="${usedTone}">${escapeHtml(usedLabel)}</strong></div>
+            <div title="${escapeHtml(item.videoAssetId)}"><span>Asset ID</span><strong><code class="playlist-card-asset-id">${escapeHtml(item.videoAssetId)}</code></strong></div>
+          </div>
+        </div>
+        <div class="platform-media-card-actions inline-actions">
+          <button class="btn" type="button" data-action="edit-preset" data-video-asset-id="${escapeHtml(item.videoAssetId)}" data-name="${escapeHtml(asset?.original_name ?? '')}">Preset</button>
+          <button class="btn-danger" type="button" data-action="remove-pl-item" data-video-asset-id="${escapeHtml(item.videoAssetId)}">Remover</button>
+        </div>
+      </article>
+    `;
+  }).join('');
+
+  const availableForAdd = allAssets.filter((a) => a.asset_type === 'video' && !items.some((i) => i.videoAssetId === a.id));
+  const videoOptions = availableForAdd.map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.original_name)}</option>`).join('');
+
+  renderWorkspaceShell({
+    title: escapeHtml(playlist.name),
+    subtitle: escapeHtml(playlist.folderPath || 'Playlist manual'),
+    actionsHtml: `
+      <div class="inline-actions">
+        <a class="btn" data-link href="/workspace/playlists">← Playlists</a>
+        <a class="btn" data-link href="/workspace/playlists/${encodeURIComponent(playlistId)}">Refresh</a>
+      </div>
+    `,
+    contentHtml: `
+      <section class="platform-dashboard-hero">
+        <article class="platform-surface platform-dashboard-hero-copy">
+          <div class="platform-dashboard-kicker-row">
+            <span class="platform-dashboard-kicker">Playlist</span>
+            <span class="platform-dashboard-live"><span class="platform-login-live-dot"></span> Synced ${escapeHtml(liveClock)}</span>
+          </div>
+          <h2>${escapeHtml(playlist.name)}</h2>
+          <p>${escapeHtml(playlist.folderPath || 'Criada manualmente')}</p>
+          <div class="platform-dashboard-chip-row">
+            <span class="platform-chip">🔀 Auto aleatorio</span>
+            <span class="platform-chip">📌 Sem repeticao</span>
+          </div>
+          <div class="platform-dashboard-chip-row">
+            <span class="platform-dashboard-inline-stat">${formatNumber(items.length)} videos</span>
+            <span class="platform-dashboard-inline-stat">${formatNumber(availCount)} disponiveis</span>
+            <span class="platform-dashboard-inline-stat">${formatNumber(usedCount)} usados</span>
+          </div>
+        </article>
+        <article class="platform-surface platform-dashboard-hero-visual">
+          <div class="platform-page-summary-grid">
+            <article class="platform-page-summary-card">
+              <span>Videos</span>
+              <strong>${formatNumber(items.length)}</strong>
+            </article>
+            <article class="platform-page-summary-card">
+              <span>Disponiveis</span>
+              <strong>${formatNumber(availCount)}</strong>
+            </article>
+            <article class="platform-page-summary-card">
+              <span>Usados</span>
+              <strong>${formatNumber(usedCount)}</strong>
+            </article>
+          </div>
+          <div class="platform-dashboard-orbit-footer">
+            <div><span>Folder</span><strong>${escapeHtml(playlist.folderPath ? 'Pasta local' : 'Manual')}</strong></div>
+            <div><span>Criada</span><strong>${escapeHtml(formatDate(playlist.createdAt))}</strong></div>
+            <div><span>Status</span><strong>${availCount > 0 ? 'Com videos' : 'Esgotada'}</strong></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="platform-dashboard-stat-grid">
+        ${metricsHtml}
+      </section>
+
+      <section class="platform-dashboard-main-grid">
+        <section class="platform-surface platform-dashboard-panel">
+          <div class="platform-dashboard-panel-head">
+            <div>
+              <span class="platform-dashboard-kicker">Add video</span>
+              <h3>Adicionar video existente</h3>
+            </div>
+            <span class="platform-dashboard-panel-meta">${formatNumber(availableForAdd.length)} disponiveis na biblioteca</span>
+          </div>
+          ${videoOptions ? `
+            <div class="media-upload-zone">
+              <div class="media-upload-zone-header">
+                <span class="media-upload-zone-icon">➕</span>
+                <div>
+                  <p class="media-upload-zone-title">Selecione um video da biblioteca</p>
+                  <p class="media-upload-zone-sub">Videos ja na playlist nao aparecem</p>
+                </div>
+              </div>
+              <form id="add-pl-item-form" class="form-grid">
+                <label>
+                  Video
+                  <select name="videoAssetId"><option value="">Selecione...</option>${videoOptions}</select>
+                </label>
+              </form>
+            </div>
+            <div class="inline-actions">
+              <button class="btn-primary" type="button" id="add-pl-item-submit">Adicionar a playlist</button>
+            </div>
+          ` : '<p class="muted">Todos os videos da biblioteca ja estao nesta playlist.</p>'}
+        </section>
+        <section class="platform-surface platform-dashboard-panel">
+          <div class="platform-dashboard-panel-head">
+            <div>
+              <span class="platform-dashboard-kicker">Progresso</span>
+              <h3>Status de uso</h3>
+            </div>
+            <span class="platform-dashboard-panel-meta">${items.length > 0 ? Math.round((usedCount / items.length) * 100) : 0}% usada</span>
+          </div>
+          <div class="platform-page-summary-grid">
+            <article class="platform-page-summary-card">
+              <span>Total</span>
+              <strong>${formatNumber(items.length)}</strong>
+            </article>
+            <article class="platform-page-summary-card">
+              <span>Usados</span>
+              <strong>${formatNumber(usedCount)}</strong>
+            </article>
+            <article class="platform-page-summary-card">
+              <span>Restantes</span>
+              <strong>${formatNumber(availCount)}</strong>
+            </article>
+          </div>
+          <p class="muted" style="font-size:0.85rem;">Quando todos os videos forem usados, o ciclo reinicia automaticamente a partir dos mais antigos.</p>
+        </section>
+      </section>
+
+      ${items.length === 0 ? renderEmptyStateCard({ title: 'Playlist vazia', message: 'Adicione videos da biblioteca ou escaneie novamente a pasta.', tone: 'info' }) : ''}
+      <section class="platform-surface platform-dashboard-panel">
+        <div class="platform-dashboard-panel-head">
+          <div>
+            <span class="platform-dashboard-kicker">Video library</span>
+            <h3>Videos da playlist (${formatNumber(items.length)})</h3>
+          </div>
+          <span class="platform-dashboard-panel-meta">${formatNumber(availCount)} disponiveis · ${formatNumber(usedCount)} usados</span>
+        </div>
+        ${itemCardsHtml ? `<div class="platform-media-grid">${itemCardsHtml}</div>` : '<p class="muted">Nenhum video nesta playlist.</p>'}
+      </section>
+    `,
+  });
+
+  document.getElementById('add-pl-item-submit')?.addEventListener('click', async () => {
+    const form = document.getElementById('add-pl-item-form');
+    if (!form) return;
+    const vid = String(new FormData(form).get('videoAssetId') ?? '').trim();
+    if (!vid) return;
+    const r = await api.addPlaylistItem(playlistId, vid);
+    if (!r.ok) { setUiNotice('error', 'Erro', r.error); } else { setUiNotice('success', 'Video adicionado', ''); }
+    await renderPlaylistDetailPage(playlistId);
+  });
+
+  document.querySelectorAll('[data-action="remove-pl-item"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const vid = btn.getAttribute('data-video-asset-id');
+      const r = await api.removePlaylistItem(playlistId, vid);
+      if (!r.ok) { setUiNotice('error', 'Erro ao remover', r.error); } else { setUiNotice('success', 'Removido', ''); }
+      await renderPlaylistDetailPage(playlistId);
+    });
+  });
+
+  document.querySelectorAll('[data-action="edit-preset"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const videoAssetId = btn.getAttribute('data-video-asset-id');
+      const name = btn.getAttribute('data-name') ?? videoAssetId;
+      const existing = await api.getPreset(videoAssetId);
+      const preset = existing.ok ? existing.body?.preset : null;
+      const result = await showFormDialog({
+        title: `Preset — ${name}`,
+        message: 'Pre-configure titulo, descricao e tags para uso automatico em campanhas.',
+        fields: [
+          { name: 'title', label: 'Titulo', type: 'text', value: preset?.title ?? '' },
+          { name: 'description', label: 'Descricao', type: 'textarea', value: preset?.description ?? '' },
+          { name: 'tags', label: 'Tags (virgula)', type: 'text', value: (preset?.tags ?? []).join(', ') },
+          { name: 'privacy', label: 'Privacidade', type: 'select', options: ['private', 'unlisted', 'public'], value: preset?.privacy ?? 'private' },
+        ],
+      });
+      if (!result) return;
+      const tags = String(result.tags ?? '').split(',').map((t) => t.trim()).filter(Boolean);
+      const r = await api.upsertPreset(videoAssetId, { title: result.title, description: result.description, tags, privacy: result.privacy });
+      if (!r.ok) { setUiNotice('error', 'Erro ao salvar preset', r.error); } else { setUiNotice('success', 'Preset salvo', ''); }
+      await renderPlaylistDetailPage(playlistId);
+    });
+  });
+
+  attachVideoPreviewListeners(new Map(Object.entries(videoById)));
 }
 
 async function renderCampaignsPage() {
@@ -5081,6 +5507,59 @@ async function renderCampaignsPage() {
     completed: campaigns.filter((campaign) => campaign.status === 'completed').length,
     failed: campaigns.filter((campaign) => campaign.status === 'failed').length,
   };
+
+  // Mission Insights computations
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const finishedCount = statusTotals.completed + statusTotals.failed;
+  const successRate = finishedCount > 0 ? Math.round((statusTotals.completed / finishedCount) * 100) : 0;
+  const upcoming = campaigns
+    .filter((c) => c.scheduledAt && new Date(c.scheduledAt).getTime() > now.getTime() && (c.status === 'ready' || c.status === 'draft'))
+    .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
+  const nextScheduled = upcoming[0] ?? null;
+  const todayLaunches = campaigns.filter((c) => c.scheduledAt && new Date(c.scheduledAt).getTime() >= todayStart && new Date(c.scheduledAt).getTime() < todayStart + 86400000).length;
+  const platformCounts = {};
+  campaigns.forEach((c) => {
+    (c.targets ?? []).forEach((t) => {
+      const p = (t.platform ?? '').toLowerCase();
+      if (!p) return;
+      platformCounts[p] = (platformCounts[p] ?? 0) + 1;
+    });
+  });
+  const topPlatform = Object.entries(platformCounts).sort((a, b) => b[1] - a[1])[0] ?? null;
+  const last7Days = [];
+  for (let i = 6; i >= 0; i -= 1) {
+    const dayStart = todayStart - i * 86400000;
+    const dayEnd = dayStart + 86400000;
+    const count = campaigns.filter((c) => {
+      const t = c.scheduledAt ? new Date(c.scheduledAt).getTime() : new Date(c.createdAt ?? 0).getTime();
+      return t >= dayStart && t < dayEnd;
+    }).length;
+    const date = new Date(dayStart);
+    last7Days.push({
+      label: ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'][date.getDay()],
+      count,
+      iso: date.toISOString().slice(0, 10),
+    });
+  }
+  const max7 = Math.max(1, ...last7Days.map((d) => d.count));
+  const nextCountdown = nextScheduled ? Math.max(0, new Date(nextScheduled.scheduledAt).getTime() - now.getTime()) : null;
+  const formatCountdown = (ms) => {
+    if (ms === null) return '—';
+    const totalSec = Math.floor(ms / 1000);
+    const d = Math.floor(totalSec / 86400);
+    const h = Math.floor((totalSec % 86400) / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    if (d > 0) return `${d}d ${h}h`;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  };
+  const platformLabel = topPlatform ? (topPlatform[0] === 'youtube' ? 'YouTube' : topPlatform[0] === 'tiktok' ? 'TikTok' : topPlatform[0]) : '—';
+  const platformIcon = topPlatform?.[0] === 'tiktok' ? '🎵' : topPlatform?.[0] === 'youtube' ? '▶️' : '📡';
+  const successCircumference = 2 * Math.PI * 36;
+  const successOffset = successCircumference * (1 - successRate / 100);
 
   const metricsHtml = [
     { label: 'Total', value: formatNumber(total), hint: `Page ${formatNumber(currentPage)} of ${formatNumber(totalPages)}`, tone: 'info' },
@@ -5233,6 +5712,7 @@ async function renderCampaignsPage() {
       </div>
     `,
     contentHtml: `
+      <div class="campaign-cockpit-row">
       <section class="campaign-control-panel" id="campaign-control-panel">
         <div class="campaign-control-bg-grid" aria-hidden="true"></div>
         <div class="campaign-control-glow" aria-hidden="true"></div>
@@ -5318,6 +5798,88 @@ async function renderCampaignsPage() {
           </div>
         </div>
       </section>
+
+      <section class="mission-insights" id="mission-insights" data-next-iso="${nextScheduled ? escapeHtml(nextScheduled.scheduledAt) : ''}">
+        <div class="mission-insights-bg" aria-hidden="true">
+          <div class="mission-insights-orb"></div>
+          <div class="mission-insights-grid"></div>
+        </div>
+        <header class="mission-insights-head">
+          <span class="mission-insights-kicker"><span class="mission-insights-dot"></span> MISSION INSIGHTS</span>
+          <span class="mission-insights-clock">${escapeHtml(liveClock)}</span>
+        </header>
+
+        <div class="mission-insights-hero">
+          <svg class="mission-success-ring" viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="36" fill="none" stroke="currentColor" stroke-opacity="0.15" stroke-width="6" />
+            <circle class="mission-success-arc" cx="40" cy="40" r="36" fill="none"
+              stroke="currentColor" stroke-width="6" stroke-linecap="round"
+              stroke-dasharray="${successCircumference}"
+              stroke-dashoffset="${successCircumference}"
+              data-target-offset="${successOffset}"
+              transform="rotate(-90 40 40)" />
+          </svg>
+          <div class="mission-success-info">
+            <span class="mission-success-label">Success rate</span>
+            <strong class="mission-success-value" data-target-rate="${successRate}">0%</strong>
+            <span class="mission-success-detail">${formatNumber(statusTotals.completed)} ok · ${formatNumber(statusTotals.failed)} fail</span>
+          </div>
+        </div>
+
+        <div class="mission-insights-tiles">
+          <button type="button" class="mission-tile mission-tile-countdown" ${nextScheduled ? `data-link-href="/workspace/campanhas/${escapeHtml(nextScheduled.id)}"` : 'disabled'}>
+            <div class="mission-tile-icon">⏱️</div>
+            <div class="mission-tile-info">
+              <span class="mission-tile-label">Next launch</span>
+              <strong class="mission-tile-value" id="mission-countdown" data-countdown-ms="${nextCountdown ?? ''}">${nextScheduled ? escapeHtml(formatCountdown(nextCountdown)) : 'No queue'}</strong>
+              <span class="mission-tile-detail">${nextScheduled ? escapeHtml((nextScheduled.title ?? '').slice(0, 24)) : 'Schedule a campaign'}</span>
+            </div>
+          </button>
+
+          <button type="button" class="mission-tile" data-link-href="/workspace/campanhas?status=launching">
+            <div class="mission-tile-icon">🚀</div>
+            <div class="mission-tile-info">
+              <span class="mission-tile-label">Today</span>
+              <strong class="mission-tile-value" data-counter="${todayLaunches}">0</strong>
+              <span class="mission-tile-detail">launches scheduled</span>
+            </div>
+          </button>
+
+          <div class="mission-tile mission-tile-static">
+            <div class="mission-tile-icon">${platformIcon}</div>
+            <div class="mission-tile-info">
+              <span class="mission-tile-label">Top platform</span>
+              <strong class="mission-tile-value">${escapeHtml(platformLabel)}</strong>
+              <span class="mission-tile-detail">${topPlatform ? `${formatNumber(topPlatform[1])} targets` : 'No data yet'}</span>
+            </div>
+          </div>
+
+          <div class="mission-tile mission-tile-static">
+            <div class="mission-tile-icon">📊</div>
+            <div class="mission-tile-info">
+              <span class="mission-tile-label">Active</span>
+              <strong class="mission-tile-value" data-counter="${statusTotals.launching + statusTotals.ready}">0</strong>
+              <span class="mission-tile-detail">in pipeline</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="mission-insights-spark">
+          <div class="mission-spark-head">
+            <span>LAST 7 DAYS</span>
+            <span class="mission-spark-total">${formatNumber(last7Days.reduce((sum, d) => sum + d.count, 0))} total</span>
+          </div>
+          <div class="mission-spark-bars">
+            ${last7Days.map((d) => `
+              <div class="mission-spark-bar" data-count="${d.count}" title="${escapeHtml(d.iso)}: ${d.count} campaign${d.count === 1 ? '' : 's'}">
+                <div class="mission-spark-bar-fill" style="--h:${(d.count / max7) * 100}%"></div>
+                <span class="mission-spark-bar-label">${escapeHtml(d.label)}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </section>
+      </div>
 
       <section class="platform-dashboard-stat-grid">
         ${metricsHtml}
@@ -5511,7 +6073,7 @@ async function renderCampaignsPage() {
 }
 
 async function renderCampaignComposerPage() {
-  const [mediaResult, destinationsResult] = await Promise.all([api.media(), loadConnectedPublishDestinations()]);
+  const [mediaResult, destinationsResult, playlistsResult] = await Promise.all([api.media(), loadConnectedPublishDestinations(), api.playlists()]);
   if (!mediaResult.ok || !destinationsResult.ok) {
     const failing = !mediaResult.ok ? mediaResult : destinationsResult;
     if (failing.status === 401) {
@@ -5536,6 +6098,8 @@ async function renderCampaignComposerPage() {
   const activeChannels = connectedChannels.filter((channel) => channel.platform === 'youtube');
   const hasVideos = videos.length > 0;
   const hasChannels = connectedChannels.length > 0;
+  const playlists = Array.isArray(playlistsResult.body?.playlists) ? playlistsResult.body.playlists : [];
+  const playlistOptions = playlists.map((pl) => `<option value="${escapeHtml(pl.id)}">${escapeHtml(pl.name)} (${formatNumber(pl.items?.length ?? 0)} videos)</option>`).join('');
 
   const channelToggleCards = connectedChannels.length === 0
     ? '<p class="muted">No connected publishing destinations available.</p>'
@@ -5606,9 +6170,18 @@ async function renderCampaignComposerPage() {
           </article>
         </div>
         <form id="campaign-create-form" class="form-grid">
-          <label>
-            Campaign title
-            <input name="title" required placeholder="My campaign" />
+          <fieldset class="card">
+            <legend>1. Connected publishing destinations <small class="muted">(escolha onde publicar)</small></legend>
+            <div class="inline-actions">
+              <button class="btn" type="button" data-action="select-all-campaign-channels">Turn all ON</button>
+              <button class="btn" type="button" data-action="clear-campaign-channels">Turn all OFF</button>
+            </div>
+            <div class="notice info">Use the toggle to decide exactly which connected channels or social accounts will receive this campaign.</div>
+            <div class="channel-toggle-grid">${channelToggleCards}</div>
+          </fieldset>
+          <label id="campaign-title-field">
+            Campaign title <small class="muted" id="campaign-title-hint"></small>
+            <input name="title" id="campaign-title-input" placeholder="My campaign" />
           </label>
           <label>
             Publish format
@@ -5617,9 +6190,9 @@ async function renderCampaignComposerPage() {
               <option value="short">Reels / Shorts</option>
             </select>
           </label>
-          <label>
-            Video asset
-            <select name="videoAssetId" required>
+          <label id="video-asset-field">
+            Video asset <small class="muted" id="video-asset-hint"></small>
+            <select name="videoAssetId">
               <option value="">Select a video</option>
               ${videoOptions}
             </select>
@@ -5628,6 +6201,92 @@ async function renderCampaignComposerPage() {
             Scheduled at (optional)
             <input name="scheduledAt" type="datetime-local" />
           </label>
+          ${playlistOptions ? `
+          <label>
+            Playlist (opcional)
+            <select name="playlistId">
+              <option value="">Sem playlist (video manual)</option>
+              ${playlistOptions}
+            </select>
+          </label>
+          <input type="hidden" name="autoMode" id="auto-mode-toggle" value="" />
+          <fieldset class="card schedule-pattern-fieldset">
+            <legend class="schedule-pattern-legend">
+              <span><strong>Padrao de agendamento aleatorio</strong> <small class="muted">(opcional)</small></span>
+              <label class="schedule-toggle-switch" data-schedule-master>
+                <input type="checkbox" name="schedulePatternEnabled" value="1" id="schedule-pattern-toggle" />
+                <span class="schedule-toggle-track"><span class="schedule-toggle-thumb"></span></span>
+                <span class="schedule-toggle-label">OFF</span>
+              </label>
+            </legend>
+            <div class="schedule-pattern-panel" id="schedule-pattern-panel" data-disabled="true">
+              <div class="schedule-grid">
+                <div class="schedule-field">
+                  <span class="schedule-field-label">Quantidade de disparos no dia</span>
+                  <input name="scheduleTimesPerDay" id="schedule-times-per-day" type="number" min="1" max="48" value="1" />
+                  <small class="muted">Define quantos disparos sao gerados no dia</small>
+                </div>
+                <div class="schedule-field">
+                  <span class="schedule-field-label">
+                    <span>Fonte do video</span>
+                    <label class="schedule-toggle-switch schedule-sub-toggle" data-schedule-sub="source">
+                      <input type="checkbox" name="scheduleSourceAuto" value="1" checked />
+                      <span class="schedule-toggle-track"><span class="schedule-toggle-thumb"></span></span>
+                      <span class="schedule-toggle-label">AUTO</span>
+                    </label>
+                  </span>
+                  <select name="scheduleSource" disabled>
+                    <option value="playlist">Pasta da playlist</option>
+                    <option value="library">Library Media</option>
+                  </select>
+                  <small class="muted">AUTO = sorteia automatico. OFF = escolha manual.</small>
+                </div>
+                <div class="schedule-field schedule-field-wide">
+                  <span class="schedule-field-label">
+                    <span>Hora dos disparos</span>
+                    <label class="schedule-toggle-switch schedule-sub-toggle" data-schedule-sub="hour">
+                      <input type="checkbox" name="scheduleHourAuto" value="1" checked />
+                      <span class="schedule-toggle-track"><span class="schedule-toggle-thumb"></span></span>
+                      <span class="schedule-toggle-label">AUTO</span>
+                    </label>
+                  </span>
+                  <div id="schedule-hours-container" class="schedule-hours-container" data-disabled="true">
+                    <small class="muted">Defina o horario para cada disparo do dia.</small>
+                  </div>
+                  <small class="muted">AUTO = aleatorio. OFF = horario fixo para cada disparo do dia.</small>
+                </div>
+                <div class="schedule-field schedule-field-wide">
+                  <span class="schedule-field-label">
+                    <span>Dias com campanha</span>
+                    <span class="schedule-badge">manual</span>
+                  </span>
+                  <div id="schedule-dates-container" class="schedule-dates-container">
+                    <div class="schedule-dates-list" id="schedule-dates-list"></div>
+                    <div class="inline-actions">
+                      <input type="date" id="schedule-date-input" />
+                      <button type="button" class="btn" id="schedule-date-add">+ Adicionar dia</button>
+                    </div>
+                  </div>
+                  <small class="muted">Selecione um ou mais dias manualmente em que a campanha sera disparada.</small>
+                </div>
+                <div class="schedule-field schedule-field-wide">
+                  <span class="schedule-field-label">
+                    <span>Titulo aleatorio</span>
+                    <label class="schedule-toggle-switch schedule-sub-toggle" data-schedule-sub="title">
+                      <input type="checkbox" name="scheduleTitleEnabled" value="1" id="schedule-title-toggle" />
+                      <span class="schedule-toggle-track"><span class="schedule-toggle-thumb"></span></span>
+                      <span class="schedule-toggle-label">OFF</span>
+                    </label>
+                  </span>
+                  <input type="text" name="scheduleTitleSeed" id="schedule-title-seed" placeholder="Ex: Reels engracado de gato" disabled />
+                  <small class="muted">Quando ON, o "Campaign title" e desabilitado e cada disparo gera um titulo derivado do nome digitado, levando em conta o nome/duracao do video.</small>
+                  <div id="schedule-title-preview" class="schedule-title-preview" hidden></div>
+                </div>
+              </div>
+            </div>
+            <input type="hidden" name="schedulePattern" id="schedule-pattern-hidden" />
+          </fieldset>
+          ` : ''}
           <label>
             Target video title
             <input name="videoTitle" required placeholder="Video title for selected channels" />
@@ -5654,18 +6313,9 @@ async function renderCampaignComposerPage() {
             </select>
           </label>
           <label>
-            Playlist ID (optional)
-            <input name="playlistId" />
+            YouTube Playlist ID (opcional — ID da playlist do canal, nao da biblioteca)
+            <input name="youtubePlaylistId" placeholder="PL..." />
           </label>
-          <fieldset class="card">
-            <legend>Connected publishing destinations</legend>
-            <div class="inline-actions">
-              <button class="btn" type="button" data-action="select-all-campaign-channels">Turn all ON</button>
-              <button class="btn" type="button" data-action="clear-campaign-channels">Turn all OFF</button>
-            </div>
-            <div class="notice info">Use the toggle to decide exactly which connected channels or social accounts will receive this campaign.</div>
-            <div class="channel-toggle-grid">${channelToggleCards}</div>
-          </fieldset>
           <div class="inline-actions">
             <button class="btn-primary" type="submit" ${hasVideos ? '' : 'disabled'}>Save draft</button>
             <a class="btn" data-link href="/workspace/campanhas">Cancel</a>
@@ -5703,6 +6353,226 @@ async function renderCampaignComposerPage() {
   applyPublishFormatFilter();
   publishFormatSelect?.addEventListener('change', applyPublishFormatFilter);
 
+  // Auto-mode is implicit: any playlist selected → auto pick a random video. No toggle needed.
+  const autoToggle = form?.querySelector('#auto-mode-toggle');
+  const playlistSelect = form?.querySelector('select[name="playlistId"]');
+  if (playlistSelect) {
+    const videoAssetField = form?.querySelector('#video-asset-field');
+    const videoAssetSelect = form?.querySelector('select[name="videoAssetId"]');
+    const videoAssetHint = form?.querySelector('#video-asset-hint');
+    const tryPrefillPreset = async () => {
+      const selectedPlaylistId = playlistSelect.value;
+      if (!selectedPlaylistId) return;
+      const nextResult = await api.nextPlaylistVideo(selectedPlaylistId);
+      if (!nextResult.ok || !nextResult.body?.videoAssetId) return;
+      const presetResult = await api.getPreset(nextResult.body.videoAssetId);
+      if (!presetResult.ok || !presetResult.body?.preset) return;
+      const preset = presetResult.body.preset;
+      const titleInput = form.querySelector('input[name="videoTitle"]');
+      const descTextarea = form.querySelector('textarea[name="videoDescription"]');
+      const tagsInput = form.querySelector('input[name="tags"]');
+      const privacySelect = form.querySelector('select[name="privacy"]');
+      if (titleInput && !titleInput.value && preset.title) titleInput.value = preset.title;
+      if (descTextarea && !descTextarea.value && preset.description) descTextarea.value = preset.description;
+      if (tagsInput && !tagsInput.value && preset.tags?.length) tagsInput.value = preset.tags.join(', ');
+      if (privacySelect && preset.privacy) privacySelect.value = preset.privacy;
+    };
+    const refreshFromPlaylist = () => {
+      const hasPlaylist = !!playlistSelect.value;
+      if (autoToggle) autoToggle.value = hasPlaylist ? '1' : '';
+      if (videoAssetField) videoAssetField.setAttribute('data-disabled', hasPlaylist ? 'true' : 'false');
+      if (videoAssetSelect) {
+        videoAssetSelect.disabled = hasPlaylist;
+        if (hasPlaylist) videoAssetSelect.value = '';
+      }
+      if (videoAssetHint) {
+        videoAssetHint.textContent = hasPlaylist ? '— sera escolhido aleatoriamente da playlist' : '';
+      }
+      if (hasPlaylist) tryPrefillPreset();
+    };
+    playlistSelect.addEventListener('change', refreshFromPlaylist);
+    refreshFromPlaylist();
+  }
+
+  const scheduleMasterToggle = form?.querySelector('#schedule-pattern-toggle');
+  const schedulePanel = form?.querySelector('#schedule-pattern-panel');
+  const timesPerDayInput = form?.querySelector('#schedule-times-per-day');
+  const hoursContainer = form?.querySelector('#schedule-hours-container');
+  const datesList = form?.querySelector('#schedule-dates-list');
+  const dateInput = form?.querySelector('#schedule-date-input');
+  const dateAddBtn = form?.querySelector('#schedule-date-add');
+  const selectedDates = new Set();
+
+  function isHourAuto() {
+    return form?.querySelector('input[name="scheduleHourAuto"]')?.checked ?? true;
+  }
+  function isSourceAuto() {
+    return form?.querySelector('input[name="scheduleSourceAuto"]')?.checked ?? true;
+  }
+
+  function renderHourInputs() {
+    if (!hoursContainer) return;
+    const hourAuto = isHourAuto();
+    const masterOn = !!scheduleMasterToggle?.checked;
+    if (hourAuto || !masterOn) {
+      hoursContainer.innerHTML = `<small class="muted">${hourAuto ? 'Horarios serao sorteados aleatoriamente.' : 'Habilite o agendamento para configurar.'}</small>`;
+      hoursContainer.setAttribute('data-disabled', 'true');
+      return;
+    }
+    hoursContainer.setAttribute('data-disabled', 'false');
+    const n = Math.max(1, parseInt(String(timesPerDayInput?.value ?? '1'), 10) || 1);
+    const existingValues = Array.from(hoursContainer.querySelectorAll('input[type="time"]')).map((el) => el.value);
+    const inputs = [];
+    for (let i = 0; i < n; i++) {
+      const def = existingValues[i] ?? (i === 0 ? '18:00' : '');
+      inputs.push(`<label class="schedule-hour-row"><span class="schedule-hour-index">#${i + 1}</span><input type="time" name="scheduleHour" value="${escapeHtml(def)}" /></label>`);
+    }
+    hoursContainer.innerHTML = inputs.join('');
+  }
+
+  function renderDateChips() {
+    if (!datesList) return;
+    const arr = Array.from(selectedDates).sort();
+    if (arr.length === 0) {
+      datesList.innerHTML = '<small class="muted">Nenhum dia selecionado.</small>';
+      return;
+    }
+    datesList.innerHTML = arr.map((d) => `
+      <span class="schedule-date-chip">
+        ${escapeHtml(d)}
+        <button type="button" class="schedule-date-chip-remove" data-date="${escapeHtml(d)}" aria-label="Remover ${escapeHtml(d)}">×</button>
+      </span>
+    `).join('');
+    datesList.querySelectorAll('.schedule-date-chip-remove').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        selectedDates.delete(btn.getAttribute('data-date'));
+        renderDateChips();
+      });
+    });
+  }
+
+  dateAddBtn?.addEventListener('click', () => {
+    const v = String(dateInput?.value ?? '').trim();
+    if (!v) return;
+    selectedDates.add(v);
+    if (dateInput) dateInput.value = '';
+    renderDateChips();
+  });
+
+  timesPerDayInput?.addEventListener('input', renderHourInputs);
+
+  function refreshScheduleMaster() {
+    if (!scheduleMasterToggle || !schedulePanel) return;
+    const enabled = scheduleMasterToggle.checked;
+    schedulePanel.setAttribute('data-disabled', enabled ? 'false' : 'true');
+    const masterWrap = scheduleMasterToggle.closest('.schedule-toggle-switch');
+    masterWrap?.querySelector('.schedule-toggle-label')?.replaceChildren(document.createTextNode(enabled ? 'ON' : 'OFF'));
+    schedulePanel.querySelectorAll('input, select, button').forEach((el) => {
+      if (el === scheduleMasterToggle) return;
+      const isSubToggle = el.closest('.schedule-sub-toggle');
+      if (enabled) {
+        if (isSubToggle) {
+          el.disabled = false;
+        } else {
+          const subKey = el.closest('.schedule-field')?.querySelector('[data-schedule-sub]')?.getAttribute('data-schedule-sub');
+          if (subKey) {
+            const subInput = el.closest('.schedule-field')?.querySelector('[data-schedule-sub] input');
+            el.disabled = subInput?.checked ?? false;
+          } else {
+            el.disabled = false;
+          }
+        }
+      } else {
+        el.disabled = true;
+      }
+    });
+    renderHourInputs();
+    if (typeof syncTitleAutoState === 'function') syncTitleAutoState();
+  }
+  scheduleMasterToggle?.addEventListener('change', refreshScheduleMaster);
+
+  const campaignTitleInput = form?.querySelector('#campaign-title-input');
+  const campaignTitleField = form?.querySelector('#campaign-title-field');
+  const campaignTitleHint = form?.querySelector('#campaign-title-hint');
+  const titleSeedInput = form?.querySelector('#schedule-title-seed');
+  const titleToggle = form?.querySelector('#schedule-title-toggle');
+  const titlePreview = form?.querySelector('#schedule-title-preview');
+
+  function syncTitleAutoState() {
+    const masterOn = !!scheduleMasterToggle?.checked;
+    const titleOn = !!titleToggle?.checked && masterOn;
+    if (campaignTitleInput) {
+      campaignTitleInput.disabled = titleOn;
+      if (titleOn) campaignTitleInput.placeholder = 'Gerado automaticamente para cada disparo';
+      else campaignTitleInput.placeholder = 'My campaign';
+    }
+    if (campaignTitleField) campaignTitleField.setAttribute('data-disabled', titleOn ? 'true' : 'false');
+    if (campaignTitleHint) campaignTitleHint.textContent = titleOn ? '— gerado automaticamente por disparo' : '';
+    if (titleSeedInput) titleSeedInput.disabled = !titleOn;
+    if (titlePreview) updateTitlePreview();
+  }
+
+  function updateTitlePreview() {
+    if (!titlePreview || !titleSeedInput || !titleToggle?.checked) {
+      if (titlePreview) titlePreview.hidden = true;
+      return;
+    }
+    const seed = titleSeedInput.value.trim();
+    if (!seed) {
+      titlePreview.hidden = true;
+      return;
+    }
+    const sampleVideo = videos[0];
+    const samples = Array.from({ length: 3 }, () => generateRandomTitle(seed, sampleVideo));
+    titlePreview.hidden = false;
+    titlePreview.innerHTML = `
+      <small class="muted">Exemplos:</small>
+      <ul class="schedule-title-preview-list">
+        ${samples.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}
+      </ul>
+    `;
+  }
+  titleSeedInput?.addEventListener('input', updateTitlePreview);
+
+  form?.querySelectorAll('[data-schedule-sub]').forEach((wrap) => {
+    const subInput = wrap.querySelector('input[type="checkbox"]');
+    const label = wrap.querySelector('.schedule-toggle-label');
+    const subKey = wrap.getAttribute('data-schedule-sub');
+    const fieldEl = wrap.closest('.schedule-field');
+    const sync = () => {
+      if (!subInput) return;
+      const on = subInput.checked;
+      if (label) {
+        if (subKey === 'title') {
+          label.textContent = on ? 'ON' : 'OFF';
+        } else {
+          label.textContent = on ? 'AUTO' : 'OFF';
+        }
+      }
+      if (scheduleMasterToggle?.checked) {
+        if (subKey === 'hour') {
+          renderHourInputs();
+        } else if (subKey === 'title') {
+          syncTitleAutoState();
+        } else {
+          const valueInput = fieldEl?.querySelector('input:not([type="checkbox"]), select');
+          if (valueInput) valueInput.disabled = !on && subKey !== 'source' && subKey !== 'hour' ? false : on;
+          // For source: AUTO checked = disable select; OFF = enable
+          if (subKey === 'source') {
+            const valSel = fieldEl?.querySelector('select');
+            if (valSel) valSel.disabled = on;
+          }
+        }
+      }
+    };
+    sync();
+    subInput?.addEventListener('change', sync);
+  });
+
+  renderDateChips();
+  refreshScheduleMaster();
+  syncTitleAutoState();
+
   const channelToggleInputs = Array.from(form?.querySelectorAll('.channel-toggle-input') ?? []);
   const syncChannelToggleCards = () => {
     channelToggleInputs.forEach((input) => {
@@ -5738,81 +6608,251 @@ async function renderCampaignComposerPage() {
     event.preventDefault();
     const data = new FormData(form);
     const submitButton = form.querySelector('button[type="submit"]');
-    const selectedVideoAssetId = String(data.get('videoAssetId') ?? '');
     const selectedFormat = String(data.get('publishFormat') ?? 'standard');
-    const selectedAsset = videos.find((asset) => asset.id === selectedVideoAssetId);
+    const selectedPlaylistId = String(data.get('playlistId') ?? '').trim();
+    const isAutoMode = data.get('autoMode') === '1';
+
+    let resolvedVideoAssetId = String(data.get('videoAssetId') ?? '');
+
+    if (isAutoMode && selectedPlaylistId) {
+      const next = await api.nextPlaylistVideo(selectedPlaylistId);
+      if (!next.ok || !next.body?.videoAssetId) {
+        setUiNotice('warning', 'Playlist vazia', 'Nao foi possivel selecionar um video da playlist (vazia ou todos ja postados).');
+        return;
+      }
+      resolvedVideoAssetId = next.body.videoAssetId;
+    } else if (!resolvedVideoAssetId) {
+      setUiNotice('warning', 'Video required', 'Selecione um video asset ou ative o modo Auto com uma playlist.');
+      return;
+    }
+
+    const selectedAsset = videos.find((asset) => asset.id === resolvedVideoAssetId);
     if (!selectedAsset) {
-      setUiNotice('warning', 'Video required', 'Select a valid video asset before saving the campaign.');
-      await renderCampaignComposerPage();
+      setUiNotice('warning', 'Video required', 'Video asset invalido.');
       return;
     }
     const actualFormat = getVideoPublishFormat(selectedAsset);
-    if (actualFormat !== selectedFormat) {
+    if (!isAutoMode && actualFormat !== selectedFormat) {
       setUiNotice('warning', 'Format mismatch', `The selected media is classified as ${getVideoPublishFormatLabel(actualFormat)}. Choose a matching asset or switch the publish format.`);
-      await renderCampaignComposerPage();
       return;
     }
+
     setButtonBusy(submitButton, true, 'Saving...');
-    const campaignPayload = {
-      title: String(data.get('title') ?? ''),
-      videoAssetId: selectedVideoAssetId,
-      scheduledAt: data.get('scheduledAt') ? new Date(String(data.get('scheduledAt'))).toISOString() : undefined,
-    };
-    const created = await api.createCampaign(campaignPayload);
-    if (!created.ok) {
-      setButtonBusy(submitButton, false);
-      setUiNotice('error', 'Campaign creation failed', created.error);
-      await renderCampaignComposerPage();
-      return;
+
+    let schedulePattern = '';
+    let scheduledLaunches = [];
+    const baseScheduledAtRaw = data.get('scheduledAt') ? new Date(String(data.get('scheduledAt'))).toISOString() : undefined;
+    if (data.get('schedulePatternEnabled') === '1') {
+      const timesPerDay = Math.max(1, parseInt(String(data.get('scheduleTimesPerDay') ?? '1'), 10) || 1);
+      const sourceAuto = data.get('scheduleSourceAuto') === '1';
+      const hourAuto = data.get('scheduleHourAuto') === '1';
+      const hours = hourAuto ? 'auto' : data.getAll('scheduleHour').map((v) => String(v)).filter(Boolean);
+      const days = Array.from(selectedDates).sort();
+      const cfg = {
+        timesPerDay,
+        source: sourceAuto ? 'auto' : (String(data.get('scheduleSource') ?? 'playlist')),
+        hours,
+        days,
+      };
+      schedulePattern = `random:${JSON.stringify(cfg)}`;
+
+      // Build (day, hour) combinations into ISO datetimes
+      const todayKey = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD in local TZ
+      const daysList = days.length > 0 ? days : [todayKey];
+      for (const day of daysList) {
+        const hoursForDay = hourAuto
+          ? generateSpacedHoursForDay(day, timesPerDay)
+          : (Array.isArray(hours) && hours.length > 0 ? hours : ['18:00']);
+        for (const hour of hoursForDay) {
+          const iso = new Date(`${day}T${hour}:00`).toISOString();
+          scheduledLaunches.push(iso);
+        }
+      }
     }
 
     const selectedDestinationRefs = data.getAll('destinationRef').map((entry) => String(entry));
-    const newCampaignId = created.body?.campaign?.id;
-    if (!newCampaignId) {
-      setButtonBusy(submitButton, false);
-      setUiNotice('error', 'Campaign created with missing id', 'The API returned success but did not include the campaign id.');
-      await renderCampaignComposerPage();
-      return;
+    const tags = String(data.get('tags') ?? '').split(',').map((t) => t.trim()).filter(Boolean);
+    const targetTemplate = {
+      videoTitle: String(data.get('videoTitle') ?? ''),
+      videoDescription: String(data.get('videoDescription') ?? ''),
+      tags: tags.length > 0 ? tags : undefined,
+      publishAt: data.get('publishAt') ? new Date(String(data.get('publishAt'))).toISOString() : undefined,
+      playlistId: String(data.get('youtubePlaylistId') ?? '').trim() || undefined,
+      privacy: String(data.get('privacy') ?? '').trim() || undefined,
+    };
+
+    const titleAutoEnabled = data.get('schedulePatternEnabled') === '1' && data.get('scheduleTitleEnabled') === '1';
+    const titleSeed = String(data.get('scheduleTitleSeed') ?? '').trim();
+
+    async function createOneCampaign(titleSuffix, scheduledAtIso, videoAssetIdForCampaign) {
+      const baseTitle = String(data.get('title') ?? '');
+      let resolvedTitle;
+      if (titleAutoEnabled && titleSeed) {
+        const assetForTitle = videos.find((a) => a.id === videoAssetIdForCampaign) ?? null;
+        resolvedTitle = generateRandomTitle(titleSeed, assetForTitle);
+      } else {
+        resolvedTitle = `${baseTitle}${titleSuffix}`;
+      }
+      const campaignPayload = {
+        title: resolvedTitle || `Campanha ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`,
+        videoAssetId: videoAssetIdForCampaign,
+        scheduledAt: scheduledAtIso ?? baseScheduledAtRaw,
+        playlistId: selectedPlaylistId || undefined,
+        autoMode: isAutoMode,
+        schedulePattern: schedulePattern || undefined,
+      };
+      const created = await api.createCampaign(campaignPayload);
+      if (!created.ok) return { ok: false, error: created.error };
+      const newId = created.body?.campaign?.id;
+      if (!newId) return { ok: false, error: 'Missing campaign id' };
+
+      if (selectedDestinationRefs.length > 0) {
+        await api.addTargetsBulk(
+          newId,
+          selectedDestinationRefs.map((destinationRef) => {
+            const [platform, destinationId] = destinationRef.split(':');
+            const destination = connectedChannels.find((entry) => entry.platform === platform && entry.destinationId === destinationId);
+            return {
+              platform,
+              destinationId,
+              destinationLabel: destination?.destinationLabel ?? destination?.title ?? destinationId,
+              connectedAccountId: destination?.connectedAccountId ?? null,
+              channelId: platform === 'youtube' ? destinationId : undefined,
+              ...targetTemplate,
+            };
+          }),
+        );
+        const readyResponse = await api.markReady(newId);
+        if (!readyResponse.ok) return { ok: false, error: readyResponse.error || 'Failed to mark campaign ready' };
+      }
+      return { ok: true, id: newId };
     }
 
-    if (selectedDestinationRefs.length > 0) {
-      const tags = String(data.get('tags') ?? '')
-        .split(',')
-        .map((tag) => tag.trim())
-        .filter(Boolean);
-      const targetTemplate = {
-        videoTitle: String(data.get('videoTitle') ?? ''),
-        videoDescription: String(data.get('videoDescription') ?? ''),
-        tags: tags.length > 0 ? tags : undefined,
-        publishAt: data.get('publishAt') ? new Date(String(data.get('publishAt'))).toISOString() : undefined,
-        playlistId: String(data.get('playlistId') ?? '').trim() || undefined,
-        privacy: String(data.get('privacy') ?? '').trim() || undefined,
-      };
-
-      const addTargets = await api.addTargetsBulk(
-        newCampaignId,
-        selectedDestinationRefs.map((destinationRef) => {
-          const [platform, destinationId] = destinationRef.split(':');
-          const destination = connectedChannels.find((entry) => entry.platform === platform && entry.destinationId === destinationId);
-          return {
-            platform,
-            destinationId,
-            destinationLabel: destination?.destinationLabel ?? destination?.title ?? destinationId,
-            connectedAccountId: destination?.connectedAccountId ?? null,
-            channelId: platform === 'youtube' ? destinationId : undefined,
-            ...targetTemplate,
-          };
-        }),
-      );
-      if (!addTargets.ok) {
-        setUiNotice('warning', 'Campaign created with target issues', `Targets could not be added: ${addTargets.error}`);
+    let firstCampaignId = null;
+    if (scheduledLaunches.length <= 1) {
+      const r = await createOneCampaign('', scheduledLaunches[0], resolvedVideoAssetId);
+      if (!r.ok) {
+        setButtonBusy(submitButton, false);
+        setUiNotice('error', 'Campaign creation failed', r.error);
+        return;
+      }
+      firstCampaignId = r.id;
+    } else {
+      // Multiple scheduled launches → one campaign per launch, each with its own video pick when auto+playlist
+      let i = 0;
+      for (const iso of scheduledLaunches) {
+        i++;
+        let videoIdForThis = resolvedVideoAssetId;
+        if (isAutoMode && selectedPlaylistId && i > 1) {
+          const next = await api.nextPlaylistVideo(selectedPlaylistId);
+          if (next.ok && next.body?.videoAssetId) videoIdForThis = next.body.videoAssetId;
+        }
+        const suffix = ` #${i}/${scheduledLaunches.length} (${iso.slice(0, 16).replace('T', ' ')})`;
+        const r = await createOneCampaign(suffix, iso, videoIdForThis);
+        if (!r.ok) {
+          setButtonBusy(submitButton, false);
+          setUiNotice('warning', 'Algumas campanhas falharam', `Erro no disparo ${i}: ${r.error}`);
+          break;
+        }
+        if (!firstCampaignId) firstCampaignId = r.id;
       }
     }
 
     setButtonBusy(submitButton, false);
-    setUiNotice('success', 'Campaign created', 'The new campaign draft was created successfully.');
-    navigate(`/workspace/campanhas/${encodeURIComponent(newCampaignId)}`);
+    if (scheduledLaunches.length > 1) {
+      setUiNotice('success', 'Campanhas criadas', `${scheduledLaunches.length} disparos agendados.`);
+    } else {
+      setUiNotice('success', 'Campaign created', 'The new campaign draft was created successfully.');
+    }
+    if (firstCampaignId) {
+      navigate(`/workspace/campanhas/${encodeURIComponent(firstCampaignId)}`);
+    } else {
+      navigate('/workspace/campanhas');
+    }
   });
+}
+
+function randomTimeString() {
+  const h = Math.floor(Math.random() * 24);
+  const m = Math.floor(Math.random() * 60);
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+function minutesToHHMM(minutes) {
+  const m = Math.max(0, Math.min(1439, Math.round(minutes)));
+  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
+
+function generateSpacedHoursForDay(day, count) {
+  if (!count || count <= 0) return [];
+  const now = new Date();
+  const todayKey = now.toLocaleDateString('sv-SE');
+  const isToday = day === todayKey;
+  const startBuffer = 2; // minutes from now to give the worker time to schedule
+  const minStart = isToday
+    ? Math.min(now.getHours() * 60 + now.getMinutes() + startBuffer, 1438)
+    : 0;
+  const minEnd = 1439; // 23:59
+  const window = minEnd - minStart;
+  if (window <= 0) {
+    // No room left today: bunch them tightly at the very end
+    return Array.from({ length: count }, () => minutesToHHMM(minEnd));
+  }
+  const slot = window / count;
+  // For very tight slots, fall back to even distribution
+  if (slot < 4) {
+    return Array.from({ length: count }, (_, i) => minutesToHHMM(minStart + i * slot));
+  }
+  const result = [];
+  for (let i = 0; i < count; i++) {
+    const slotStart = minStart + i * slot;
+    // Restrict to the middle 60% of the slot to guarantee spacing between picks
+    const innerOffset = slot * 0.2 + Math.random() * slot * 0.6;
+    result.push(minutesToHHMM(slotStart + innerOffset));
+  }
+  return result;
+}
+
+function pickOne(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function extractVideoHints(asset) {
+  if (!asset) return { number: null, durationLabel: null, isShort: false };
+  const name = String(asset.original_name ?? '').toLowerCase();
+  const numberMatch = name.match(/\((\d+)\)|[_\-\s](\d+)\.|episodio?\s*(\d+)|ep\s*(\d+)|parte\s*(\d+)/);
+  const number = numberMatch ? numberMatch.slice(1).find((v) => v) : null;
+  const dur = Number(asset.duration_seconds ?? 0);
+  let durationLabel = null;
+  if (dur > 0 && dur <= 60) durationLabel = 'rapido';
+  else if (dur > 60 && dur <= 180) durationLabel = 'curto';
+  else if (dur > 180 && dur <= 600) durationLabel = 'completo';
+  else if (dur > 600) durationLabel = 'longo';
+  const isShort = dur > 0 && dur <= 180;
+  return { number, durationLabel, isShort };
+}
+
+function generateRandomTitle(seed, asset) {
+  const baseSeed = String(seed ?? '').trim();
+  if (!baseSeed) return '';
+  const hints = extractVideoHints(asset);
+  const prefixes = ['', '🔥 ', '✨ ', '🎬 ', '🚀 ', '💥 ', '👀 ', ''];
+  const suffixes = [
+    '', ' (assista ate o fim)', ' — voce nao vai acreditar', ' #shorts', ' [imperdivel]',
+    ' que viralizou', ' explicado', ' completo', ' em 60s', ' do dia',
+  ];
+  const intensifiers = ['INCRIVEL', 'EPICO', 'ABSURDO', 'GENIAL', 'INSANO', 'INESQUECIVEL', 'TOP'];
+  const variants = [
+    () => `${pickOne(prefixes)}${baseSeed}${pickOne(suffixes)}`,
+    () => `${baseSeed} ${pickOne(intensifiers)}`,
+    () => `${pickOne(intensifiers)} - ${baseSeed}${hints.number ? ` parte ${hints.number}` : ''}`,
+    () => `${baseSeed}${hints.number ? ` #${hints.number}` : ''}${hints.isShort ? ' #shorts' : ''}`,
+    () => `${pickOne(prefixes)}${baseSeed}${hints.durationLabel ? ` (${hints.durationLabel})` : ''}`,
+    () => `${baseSeed} | ${new Date().toLocaleDateString('pt-BR')}`,
+  ];
+  let title = pickOne(variants)().replace(/\s+/g, ' ').trim();
+  if (title.length > 100) title = title.slice(0, 97) + '...';
+  return title;
 }
 
 function mergeTimeline(jobsByTarget, auditEvents) {
@@ -6654,6 +7694,17 @@ async function renderRoute() {
 
       if (path === '/workspace/media') {
         await renderMediaPage();
+        return;
+      }
+
+      if (path === '/workspace/playlists') {
+        await renderPlaylistsPage();
+        return;
+      }
+
+      const playlistDetailMatch = path.match(/^\/workspace\/playlists\/([^/]+)$/);
+      if (playlistDetailMatch) {
+        await renderPlaylistDetailPage(decodeURIComponent(playlistDetailMatch[1]));
         return;
       }
 

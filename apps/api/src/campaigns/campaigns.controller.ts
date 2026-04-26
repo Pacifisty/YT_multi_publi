@@ -235,7 +235,7 @@ export class CampaignsController {
       return { status: guardResult.status, body: { error: guardResult.reason } };
     }
 
-    const body = request.body as { title?: string; videoAssetId?: string; scheduledAt?: string } | undefined;
+    const body = request.body as { title?: string; videoAssetId?: string; scheduledAt?: string; playlistId?: string; autoMode?: boolean; schedulePattern?: string } | undefined;
     const title = normalizeNonEmptyString(body?.title);
     if (!title) {
       return { status: 400, body: { error: 'Missing required field: title' } };
@@ -256,6 +256,9 @@ export class CampaignsController {
       title,
       videoAssetId,
       scheduledAt: scheduledAt ?? undefined,
+      playlistId: typeof body?.playlistId === 'string' ? body.playlistId : undefined,
+      autoMode: typeof body?.autoMode === 'boolean' ? body.autoMode : false,
+      schedulePattern: typeof body?.schedulePattern === 'string' ? body.schedulePattern : undefined,
     });
 
     return { status: 201, body: result };
@@ -746,8 +749,8 @@ export class CampaignsController {
       return { status: 400, body: { error: 'Missing campaign id' } };
     }
 
-    const body = request.body as { title?: string; scheduledAt?: string } | undefined;
-    const hasUpdates = body && (body.title !== undefined || body.scheduledAt !== undefined);
+    const body = request.body as { title?: string; scheduledAt?: string; playlistId?: string | null; autoMode?: boolean; schedulePattern?: string | null } | undefined;
+    const hasUpdates = body && (body.title !== undefined || body.scheduledAt !== undefined || body.playlistId !== undefined || body.autoMode !== undefined || body.schedulePattern !== undefined);
     if (!hasUpdates) {
       return { status: 400, body: { error: 'No updatable fields provided' } };
     }
@@ -767,6 +770,9 @@ export class CampaignsController {
     const result = await this.campaignService.updateCampaign(campaignId, {
       title: body?.title?.trim(),
       scheduledAt: scheduledAt ?? undefined,
+      playlistId: body?.playlistId !== undefined ? (body.playlistId ?? null) : undefined,
+      autoMode: typeof body?.autoMode === 'boolean' ? body.autoMode : undefined,
+      schedulePattern: body?.schedulePattern !== undefined ? (body.schedulePattern ?? null) : undefined,
     }, ownerEmail);
 
     if ('error' in result) {

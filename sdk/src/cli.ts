@@ -60,15 +60,25 @@ export function parseCliArgs(argv: string[]): ParsedCliArgs {
   // For 'run' command, it's the prompt. Both use positionals[1+].
   const initInput = command === 'init' ? prompt : undefined;
 
+  const wsPort = values['ws-port'] ? Number(values['ws-port']) : undefined;
+  if (wsPort !== undefined && Number.isNaN(wsPort)) {
+    throw new Error('Option --ws-port must be a valid number');
+  }
+
+  const maxBudget = values['max-budget'] ? Number(values['max-budget']) : undefined;
+  if (maxBudget !== undefined && Number.isNaN(maxBudget)) {
+    throw new Error('Option --max-budget must be a valid number');
+  }
+
   return {
     command,
-    prompt,
+    prompt: prompt?.trim() || undefined,
     initInput,
     init: values.init as string | undefined,
     projectDir: values['project-dir'] as string,
-    wsPort: values['ws-port'] ? Number(values['ws-port']) : undefined,
+    wsPort,
     model: values.model as string | undefined,
-    maxBudget: values['max-budget'] ? Number(values['max-budget']) : undefined,
+    maxBudget,
     help: values.help as boolean,
     version: values.version as boolean,
   };
@@ -128,8 +138,14 @@ export async function resolveInitInput(args: ParsedCliArgs): Promise<string> {
   const input = args.initInput;
 
   if (input && input.startsWith('@')) {
-    // File path: strip @ prefix, resolve relative to projectDir
+    // File path: strip @ prefix, resolve relative to projectDir.
+    // Guard against path traversal.
     const filePath = resolve(args.projectDir, input.slice(1));
+    const projectRoot = resolve(args.projectDir);
+    if (!filePath.startsWith(projectRoot)) {
+      throw new Error(`Access denied: path "${filePath}" is outside project directory`);
+    }
+
     try {
       return await readFile(filePath, 'utf-8');
     } catch (err) {

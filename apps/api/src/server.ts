@@ -5,7 +5,7 @@ import { loadEnvConfig, validateEnvConfig, type EnvConfig } from './config/env.c
 import type { AdminSession } from './auth/session.guard';
 import type { CampaignsModuleOptions } from './campaigns/campaigns.module';
 import type { AccountsServiceOptions } from './accounts/accounts.service';
-import type { MediaServiceOptions } from './media/media.service';
+import type { MediaModuleOptions } from './media/media.module';
 import type { AuthServiceOptions } from './auth/auth.service';
 import type { AccountPlanStore } from './account-plan/account-plan.service';
 
@@ -17,7 +17,7 @@ export interface ServerOptions {
   authModuleOptions?: AuthServiceOptions;
   campaignsModuleOptions?: CampaignsModuleOptions;
   accountsModuleOptions?: AccountsServiceOptions;
-  mediaModuleOptions?: MediaServiceOptions;
+  mediaModuleOptions?: MediaModuleOptions;
   accountPlanStore?: AccountPlanStore;
 }
 

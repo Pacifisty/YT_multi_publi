@@ -3,6 +3,7 @@ import type { CampaignsModuleInstance } from './campaigns/campaigns.module';
 import type { CampaignsRequest } from './campaigns/campaigns.controller';
 import type { AccountsController, AccountsRequest } from './accounts/accounts.controller';
 import type { MediaController, MediaRequest } from './media/media.controller';
+import type { PlaylistController } from './media/playlist.controller';
 import type { UploadProgressService } from './campaigns/upload-progress.service';
 import type { AuthController } from './auth/auth.controller';
 import type { BackgroundProcessor } from './app';
@@ -20,6 +21,7 @@ export interface ApiResponse {
   status: number;
   body: any;
   cookies?: any[];
+  redirect?: string;
 }
 
 interface Route {
@@ -37,6 +39,7 @@ export function createApiRouter(options: {
   campaignsModule: CampaignsModuleInstance;
   accountsController?: AccountsController;
   mediaController?: MediaController;
+  playlistController?: PlaylistController;
   uploadProgressService?: UploadProgressService;
   authController?: AuthController;
   backgroundProcessor?: BackgroundProcessor | null;
@@ -46,6 +49,7 @@ export function createApiRouter(options: {
     campaignsModule,
     accountsController,
     mediaController,
+    playlistController,
     uploadProgressService,
     authController,
     backgroundProcessor,
@@ -281,7 +285,14 @@ export function createApiRouter(options: {
         method: 'GET',
         pattern: /^\/api\/accounts\/oauth\/tiktok\/callback$/,
         paramNames: [],
-        handler: (req: AccountsRequest) => accountsController.handleTikTokOauthCallback(req),
+        handler: async (req: AccountsRequest) => {
+          const result = await accountsController.handleTikTokOauthCallback(req);
+          if (result.status === 200) {
+            return { ...result, redirect: '/workspace/accounts?oauth=success&provider=tiktok' };
+          }
+          const errorMsg = encodeURIComponent((result.body as any)?.error ?? 'TikTok OAuth failed.');
+          return { ...result, redirect: `/workspace/accounts?oauth=error&provider=tiktok&oauthMessage=${errorMsg}` };
+        },
       },
       {
         method: 'GET',
@@ -376,6 +387,23 @@ export function createApiRouter(options: {
     );
   }
 
+  // Playlist + preset routes
+  if (playlistController) {
+    routes.push(
+      { method: 'GET', pattern: /^\/api\/playlists$/, paramNames: [], handler: (req: any) => playlistController.listPlaylists(req) },
+      { method: 'POST', pattern: /^\/api\/playlists$/, paramNames: [], handler: (req: any) => playlistController.createPlaylist(req) },
+      { method: 'POST', pattern: /^\/api\/playlists\/scan$/, paramNames: [], handler: (req: any) => playlistController.scanFolder(req) },
+      { method: 'GET', pattern: /^\/api\/playlists\/([^/]+)$/, paramNames: ['id'], handler: (req: any) => playlistController.getPlaylist(req) },
+      { method: 'DELETE', pattern: /^\/api\/playlists\/([^/]+)$/, paramNames: ['id'], handler: (req: any) => playlistController.deletePlaylist(req) },
+      { method: 'POST', pattern: /^\/api\/playlists\/([^/]+)\/items$/, paramNames: ['id'], handler: (req: any) => playlistController.addItem(req) },
+      { method: 'DELETE', pattern: /^\/api\/playlists\/([^/]+)\/items\/([^/]+)$/, paramNames: ['id', 'videoAssetId'], handler: (req: any) => playlistController.removeItem(req) },
+      { method: 'GET', pattern: /^\/api\/playlists\/([^/]+)\/next$/, paramNames: ['id'], handler: (req: any) => playlistController.pickNextAutoVideo(req) },
+      { method: 'GET', pattern: /^\/api\/media\/([^/]+)\/preset$/, paramNames: ['videoAssetId'], handler: (req: any) => playlistController.getPreset(req) },
+      { method: 'PUT', pattern: /^\/api\/media\/([^/]+)\/preset$/, paramNames: ['videoAssetId'], handler: (req: any) => playlistController.upsertPreset(req) },
+      { method: 'DELETE', pattern: /^\/api\/media\/([^/]+)\/preset$/, paramNames: ['videoAssetId'], handler: (req: any) => playlistController.deletePreset(req) },
+    );
+  }
+
   // Upload progress routes
   if (uploadProgressService) {
     routes.push(
@@ -434,7 +462,7 @@ export function createApiRouter(options: {
         };
 
         const result = await route.handler(controllerRequest);
-        return { status: result.status, body: result.body, cookies: result.cookies };
+        return { status: result.status, body: result.body, cookies: result.cookies, redirect: (result as any).redirect };
       }
 
       return { status: 404, body: { error: 'Not found' } };

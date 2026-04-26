@@ -273,7 +273,7 @@ export function buildDashboardView(data: DashboardData): DashboardView {
   const summaryCards: SummaryCard[] = [
     { label: 'Total Campaigns', value: data.campaigns.total },
     { label: 'Published Videos', value: data.targets.byStatus.publicado ?? 0 },
-    { label: 'Success Rate', value: `${data.targets.successRate}%` },
+    { label: 'Success Rate', value: `${data.targets.successRate.toFixed(1)}%` },
     { label: 'Failed Uploads', value: data.targets.byStatus.erro ?? 0 },
   ];
 

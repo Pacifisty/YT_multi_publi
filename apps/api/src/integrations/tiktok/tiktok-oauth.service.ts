@@ -1,9 +1,11 @@
-import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 
-export const TIKTOK_BASIC_SCOPES = ['user.info.basic', 'video.publish'] as const;
+export const TIKTOK_BASIC_SCOPES = ['user.info.basic', 'video.publish', 'video.upload'] as const;
+export const TIKTOK_SANDBOX_SCOPES = ['user.info.basic'] as const;
 
 export interface TikTokOauthSession {
   oauthStateNonce?: string;
+  tiktokCodeVerifier?: string;
 }
 
 export interface TikTokTokenResult {
@@ -43,16 +45,24 @@ export class TikTokOauthService {
     }
 
     const state = randomUUID();
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = generateCodeChallenge(codeVerifier);
+
     if (session) {
       session.oauthStateNonce = state;
+      session.tiktokCodeVerifier = codeVerifier;
     }
 
     const url = new URL('https://www.tiktok.com/v2/auth/authorize/');
     url.searchParams.set('client_key', clientKey);
     url.searchParams.set('redirect_uri', redirectUri);
     url.searchParams.set('response_type', 'code');
-    url.searchParams.set('scope', TIKTOK_BASIC_SCOPES.join(','));
+    const scopes = this.env.TIKTOK_SANDBOX === 'true' ? TIKTOK_SANDBOX_SCOPES : TIKTOK_BASIC_SCOPES;
+    url.searchParams.set('scope', scopes.join(','));
     url.searchParams.set('state', state);
+    url.searchParams.set('code_challenge', codeChallenge);
+    url.searchParams.set('code_challenge_method', 'S256');
+    url.searchParams.set('disable_auto_auth', '1');
 
     return url.toString();
   }
@@ -72,7 +82,7 @@ export class TikTokOauthService {
     return timingSafeEqual(expectedBuffer, callbackBuffer);
   }
 
-  async exchangeCodeForTokens(code: string): Promise<TikTokTokenResult> {
+  async exchangeCodeForTokens(code: string, codeVerifier?: string): Promise<TikTokTokenResult> {
     const clientKey = this.env.TIKTOK_CLIENT_KEY;
     const clientSecret = this.env.TIKTOK_CLIENT_SECRET;
     const redirectUri = this.env.TIKTOK_REDIRECT_URI;
@@ -89,6 +99,9 @@ export class TikTokOauthService {
     tokenBody.set('code', code);
     tokenBody.set('grant_type', 'authorization_code');
     tokenBody.set('redirect_uri', redirectUri);
+    if (codeVerifier) {
+      tokenBody.set('code_verifier', codeVerifier);
+    }
 
     const tokenResponse = await this.fetchImpl('https://open.tiktokapis.com/v2/oauth/token/', {
       method: 'POST',
@@ -216,4 +229,12 @@ function readStringField(value: Record<string, unknown> | null, key: string): st
 function readNumberField(value: Record<string, unknown> | null, key: string): number | null {
   const raw = value?.[key];
   return typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
+}
+
+function generateCodeVerifier(): string {
+  return randomBytes(48).toString('base64url');
+}
+
+function generateCodeChallenge(verifier: string): string {
+  return createHash('sha256').update(verifier).digest('base64url');
 }

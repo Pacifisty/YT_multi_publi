@@ -2,7 +2,7 @@ import type { PublishJobRecord } from './publish-job.service';
 
 export interface ResilientJobRunnerOptions {
   processNext: () => Promise<PublishJobRecord | null>;
-  retryJob: (jobId: string) => PublishJobRecord | { error: string };
+  retryJob: (jobId: string) => Promise<PublishJobRecord | { error: string }> | PublishJobRecord | { error: string };
   maxRetries?: number;
   baseDelayMs?: number;
   backoffMultiplier?: number;
@@ -20,7 +20,7 @@ export interface RunSummary {
 
 export class ResilientJobRunner {
   private readonly processNext: () => Promise<PublishJobRecord | null>;
-  private readonly retryJob: (jobId: string) => PublishJobRecord | { error: string };
+  private readonly retryJob: (jobId: string) => Promise<PublishJobRecord | { error: string }> | PublishJobRecord | { error: string };
   private readonly maxRetries: number;
   private readonly baseDelayMs: number;
   private readonly backoffMultiplier: number;
@@ -84,7 +84,7 @@ export class ResilientJobRunner {
     let retries = 0;
 
     for (let attempt = 0; attempt < this.maxRetries; attempt++) {
-      const retryResult = this.retryJob(currentJob.id);
+      const retryResult = await this.retryJob(currentJob.id);
       if ('error' in retryResult) {
         break;
       }

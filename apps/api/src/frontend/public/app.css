@@ -1660,14 +1660,14 @@ textarea {
 
 .plan-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
 }
 
 .plan-card {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  align-content: start;
   padding: 22px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
@@ -1697,10 +1697,76 @@ textarea {
 }
 
 .plan-price {
-  font-size: 1.65rem;
-  font-weight: 800;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--primary);
   letter-spacing: -0.03em;
   line-height: 1.15;
+}
+
+.plan-description {
+  font-size: 0.875rem;
+}
+
+.plan-benefits {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  flex: 1;
+}
+
+.plan-benefits--compact {
+  gap: 0.35rem;
+  font-size: 0.82rem;
+}
+
+.plan-benefit {
+  display: flex;
+  gap: 0.4rem;
+  align-items: flex-start;
+}
+
+.plan-benefit__check {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.plan-platforms {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.8rem;
+  color: var(--text-subtle);
+}
+
+.plan-account-info {
+  background: var(--surface-muted);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.plan-account-info__balance {
+  font-size: 0.85em;
+}
+
+.plan-account-info .pill {
+  font-size: 0.8em;
+}
+
+.plan-rules {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+
+.plan-section {
+  margin-top: 1.5rem;
 }
 
 .plan-points {

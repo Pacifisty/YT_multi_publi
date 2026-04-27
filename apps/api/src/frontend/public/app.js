@@ -2895,20 +2895,20 @@ function renderPlanCard(option, selectedPlan) {
   const isSelected = option.id === selectedPlan;
   const isPremium = option.id === 'PREMIUM';
   const benefitsHtml = (option.benefits ?? []).map(
-    (b) => `<li style="display:flex;gap:0.4rem;align-items:flex-start;font-size:0.82rem;"><span style="color:var(--cc-accent);flex-shrink:0;">✓</span><span>${escapeHtml(b)}</span></li>`
+    (b) => `<li class="plan-benefit"><span class="plan-benefit__check">✓</span><span>${escapeHtml(b)}</span></li>`
   ).join('');
   return `
-    <article class="plan-card ${option.featured ? 'featured' : ''} ${isPremium ? 'plan-card-premium' : ''} ${isSelected ? 'selected' : ''}" style="display:flex;flex-direction:column;gap:1rem;">
+    <article class="plan-card ${option.featured ? 'featured' : ''} ${isPremium ? 'plan-card-premium' : ''} ${isSelected ? 'selected' : ''}">
       <div class="stack">
         <div class="platform-dashboard-chip-row">
           <span class="pill ${isPremium ? 'warning' : option.featured ? 'success' : 'info'}">${escapeHtml(option.label)}</span>
           ${option.featured && !isPremium ? '<span class="pill success">Mais popular</span>' : ''}
           ${isPremium ? '<span class="pill warning">Máximo poder</span>' : ''}
         </div>
-        <div class="plan-price" style="font-size:1.5rem;font-weight:700;color:var(--cc-accent);">${escapeHtml(option.priceLabel)}</div>
-        <p class="muted" style="font-size:0.875rem;">${escapeHtml(option.description)}</p>
+        <div class="plan-price">${escapeHtml(option.priceLabel)}</div>
+        <p class="muted plan-description">${escapeHtml(option.description)}</p>
       </div>
-      <ul class="stack" style="list-style:none;padding:0;margin:0;gap:0.35rem;flex:1;">
+      <ul class="plan-benefits plan-benefits--compact">
         ${benefitsHtml}
       </ul>
       <button class="${option.featured || isPremium ? 'btn-primary' : 'btn'}" type="button" data-action="select-onboarding-plan" data-plan-id="${escapeHtml(option.id)}">
@@ -2930,11 +2930,11 @@ function renderWorkspacePlanCard(option, account) {
     : renderPlatformGlyph('youtube');
 
   const benefitsHtml = (option.benefits ?? []).map(
-    (b) => `<li style="display:flex;gap:0.4rem;align-items:flex-start;"><span style="color:var(--cc-accent);flex-shrink:0;">✓</span><span>${escapeHtml(b)}</span></li>`
+    (b) => `<li class="plan-benefit"><span class="plan-benefit__check">✓</span><span>${escapeHtml(b)}</span></li>`
   ).join('');
 
   return `
-    <article class="plan-card ${isFeatured ? 'featured' : ''} ${isPremium ? 'plan-card-premium' : ''} ${isCurrentPlan ? 'selected' : ''}" style="display:flex;flex-direction:column;gap:1rem;">
+    <article class="plan-card ${isFeatured ? 'featured' : ''} ${isPremium ? 'plan-card-premium' : ''} ${isCurrentPlan ? 'selected' : ''}">
       <div class="stack">
         <div class="platform-dashboard-chip-row">
           <span class="pill ${isPremium ? 'warning' : isFeatured ? 'success' : 'info'}">${escapeHtml(option.label)}</span>
@@ -2942,26 +2942,24 @@ function renderWorkspacePlanCard(option, account) {
           ${isFeatured && !isCurrentPlan ? '<span class="pill success">Mais popular</span>' : ''}
           ${isPremium && !isCurrentPlan ? '<span class="pill warning">Máximo poder</span>' : ''}
         </div>
-        <div class="plan-price" style="font-size:1.6rem;font-weight:700;color:var(--cc-accent);">${escapeHtml(option.priceLabel)}</div>
-        <p class="muted" style="font-size:0.875rem;">${escapeHtml(option.description)}</p>
+        <div class="plan-price">${escapeHtml(option.priceLabel)}</div>
+        <p class="muted plan-description">${escapeHtml(option.description)}</p>
       </div>
-      <div style="flex:1;">
-        <ul class="stack" style="list-style:none;padding:0;margin:0;gap:0.4rem;font-size:0.85rem;">
-          ${benefitsHtml}
-        </ul>
-      </div>
-      <div style="display:flex;gap:0.5rem;align-items:center;font-size:0.8rem;color:var(--text-muted);">
+      <ul class="plan-benefits">
+        ${benefitsHtml}
+      </ul>
+      <div class="plan-platforms">
         Plataformas: ${platformIcons}
       </div>
       ${isCurrentPlan && account ? `
-        <div class="stack" style="background:var(--surface-muted,rgba(255,255,255,0.05));border-radius:0.5rem;padding:0.75rem;gap:0.4rem;">
-          <span style="font-size:0.85em;">Saldo atual: <strong>${account.tokens}</strong> tokens</span>
+        <div class="plan-account-info">
+          <span class="plan-account-info__balance">Saldo atual: <strong>${account.tokens}</strong> tokens</span>
           ${account.dailyVisitClaimedToday
-            ? '<span class="pill info" style="font-size:0.8em;">Bônus diário já coletado hoje</span>'
-            : '<span class="pill success" style="font-size:0.8em;">+' + account.dailyVisitTokens + ' tokens disponíveis hoje</span>'}
+            ? '<span class="pill info">Bônus diário já coletado hoje</span>'
+            : '<span class="pill success">+' + account.dailyVisitTokens + ' tokens disponíveis hoje</span>'}
           ${account.monthlyGrantClaimedThisMonth
-            ? '<span class="pill info" style="font-size:0.8em;">Grant mensal já recebido este mês</span>'
-            : '<span class="pill success" style="font-size:0.8em;">Grant mensal pendente este mês</span>'}
+            ? '<span class="pill info">Grant mensal já recebido este mês</span>'
+            : '<span class="pill success">Grant mensal pendente este mês</span>'}
         </div>
       ` : ''}
       ${canUpgrade
@@ -3024,12 +3022,12 @@ async function renderPlanosPage(options = {}) {
     subtitle: `Plano atual: ${account?.planLabel ?? '—'} | Saldo: ${account?.tokens ?? 0} tokens`,
     noticeHtml: `${errorHtml}${successHtml}${billingHtml}`,
     contentHtml: `
-      <section class="plan-grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1.25rem;">
+      <section class="plan-grid">
         ${planCardsHtml}
       </section>
-      <section class="card stack" style="margin-top:1.5rem;">
+      <section class="card stack plan-section">
         <h2>Como funcionam os planos</h2>
-        <ul class="stack" style="list-style:disc;padding-left:1.25rem;">
+        <ul class="stack plan-rules">
           <li>Cada conta conectada para publicar custa tokens por campanha (1–2 tokens dependendo do plano).</li>
           <li>Thumbnail custa <strong>1 token</strong> no plano Free. <strong>Grátis</strong> nos planos pagos.</li>
           <li>Ao mudar de plano, você recebe os tokens mensais do novo plano imediatamente.</li>

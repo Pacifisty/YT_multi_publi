@@ -209,30 +209,75 @@ const ACCOUNT_PLAN_OPTIONS = [
   {
     id: 'FREE',
     label: 'Free',
-    priceLabel: 'Gratis',
+    priceLabel: 'R$ 0,00',
     description: 'Ideal para conhecer a plataforma e publicar no YouTube sem custo mensal.',
     tokenSummary: 'ganho de 150 tokens todo mes na escolha deste plano',
     visitSummary: '+15 tokens por visita diaria',
     platformSummary: 'YouTube',
+    benefits: [
+      'Publicação no YouTube',
+      '150 tokens mensais',
+      '+15 tokens por visita diária',
+      'Custo de 2 tokens por publicação',
+      'Suporte da comunidade',
+    ],
   },
   {
     id: 'BASIC',
-    label: 'Basic',
-    priceLabel: 'R$ 9,99 / mes',
-    description: 'Mais folego para operacao recorrente com limite maior de campanhas.',
+    label: 'Básico',
+    priceLabel: 'R$ 19,90 / mês',
+    description: 'Mais fôlego para operação recorrente com limite maior de tokens.',
     tokenSummary: 'ganho de 400 tokens todo mes na escolha deste plano',
     visitSummary: '+40 tokens por visita diaria',
     platformSummary: 'YouTube',
+    benefits: [
+      'Publicação no YouTube',
+      '400 tokens mensais',
+      '+40 tokens por visita diária',
+      'Thumbnails incluídas (sem custo extra)',
+      'Custo de 2 tokens por publicação',
+      'Suporte por email',
+    ],
   },
   {
     id: 'PRO',
     label: 'Pro',
-    priceLabel: 'R$ 19,99 / mes',
+    priceLabel: 'R$ 49,90 / mês',
     description: 'Plano completo para publicar em YouTube e TikTok.',
     tokenSummary: 'ganho de 800 tokens todo mes na escolha deste plano',
     visitSummary: '+80 tokens por visita diaria',
     platformSummary: 'YouTube + TikTok',
     featured: true,
+    benefits: [
+      'Publicação no YouTube + TikTok',
+      '800 tokens mensais',
+      '+80 tokens por visita diária',
+      'Thumbnails incluídas (sem custo extra)',
+      'Playlists com auto-rotação',
+      'Agendamento aleatório avançado',
+      'Suporte prioritário',
+    ],
+  },
+  {
+    id: 'PREMIUM',
+    label: 'Premium',
+    priceLabel: 'R$ 99,90 / mês',
+    description: 'Potência máxima com tokens ilimitados e suporte dedicado 24/7.',
+    tokenSummary: 'ganho de 2000 tokens todo mes na escolha deste plano',
+    visitSummary: '+200 tokens por visita diaria',
+    platformSummary: 'YouTube + TikTok',
+    benefits: [
+      'Publicação no YouTube + TikTok',
+      '2000 tokens mensais',
+      '+200 tokens por visita diária',
+      'Custo reduzido de 1 token por publicação',
+      'Thumbnails incluídas (sem custo extra)',
+      'Playlists ilimitadas com auto-rotação',
+      'Agendamento aleatório avançado',
+      'Geração de títulos por IA',
+      'Suporte dedicado 24/7',
+      'Acesso antecipado a novos recursos',
+    ],
   },
 ];
 const BACKGROUND_THEME_OPTIONS = [
@@ -1106,6 +1151,7 @@ const api = {
   authGoogleCallback: (code, stateParam) => apiRequest('GET', buildUrl('/auth/google/callback', { code, state: stateParam })),
   logout: () => apiRequest('POST', '/auth/logout'),
   accountPlanSummary: () => apiRequest('GET', '/api/account/plan'),
+  listPlans: () => apiRequest('GET', '/api/account/plans'),
   selectAccountPlan: (plan) => apiRequest('POST', '/api/account/plan/select', { plan }),
   claimDailyVisit: () => apiRequest('POST', '/api/account/plan/visit'),
   claimMonthlyGrant: () => apiRequest('POST', '/api/account/plan/monthly'),
@@ -2847,23 +2893,26 @@ async function renderGoogleAuthCallbackPage() {
 
 function renderPlanCard(option, selectedPlan) {
   const isSelected = option.id === selectedPlan;
+  const isPremium = option.id === 'PREMIUM';
+  const benefitsHtml = (option.benefits ?? []).map(
+    (b) => `<li style="display:flex;gap:0.4rem;align-items:flex-start;font-size:0.82rem;"><span style="color:var(--cc-accent);flex-shrink:0;">✓</span><span>${escapeHtml(b)}</span></li>`
+  ).join('');
   return `
-    <article class="plan-card ${option.featured ? 'featured' : ''} ${isSelected ? 'selected' : ''}">
+    <article class="plan-card ${option.featured ? 'featured' : ''} ${isPremium ? 'plan-card-premium' : ''} ${isSelected ? 'selected' : ''}" style="display:flex;flex-direction:column;gap:1rem;">
       <div class="stack">
         <div class="platform-dashboard-chip-row">
-          <span class="pill ${option.featured ? 'success' : 'info'}">${escapeHtml(option.label)}</span>
-          ${option.featured ? '<span class="pill warning">Most complete</span>' : ''}
+          <span class="pill ${isPremium ? 'warning' : option.featured ? 'success' : 'info'}">${escapeHtml(option.label)}</span>
+          ${option.featured && !isPremium ? '<span class="pill success">Mais popular</span>' : ''}
+          ${isPremium ? '<span class="pill warning">Máximo poder</span>' : ''}
         </div>
-        <div class="plan-price">${escapeHtml(option.priceLabel)}</div>
-        <p class="muted">${escapeHtml(option.description)}</p>
+        <div class="plan-price" style="font-size:1.5rem;font-weight:700;color:var(--cc-accent);">${escapeHtml(option.priceLabel)}</div>
+        <p class="muted" style="font-size:0.875rem;">${escapeHtml(option.description)}</p>
       </div>
-      <div class="stack plan-points">
-        <span>${escapeHtml(option.tokenSummary)}</span>
-        <span>${escapeHtml(option.visitSummary)}</span>
-        <span>${escapeHtml(option.platformSummary)}</span>
-      </div>
-      <button class="${option.featured ? 'btn-primary' : 'btn'}" type="button" data-action="select-onboarding-plan" data-plan-id="${escapeHtml(option.id)}">
-        ${isSelected ? 'Selected now' : `Choose ${escapeHtml(option.label)}`}
+      <ul class="stack" style="list-style:none;padding:0;margin:0;gap:0.35rem;flex:1;">
+        ${benefitsHtml}
+      </ul>
+      <button class="${option.featured || isPremium ? 'btn-primary' : 'btn'}" type="button" data-action="select-onboarding-plan" data-plan-id="${escapeHtml(option.id)}">
+        ${isSelected ? 'Plano selecionado' : `Escolher ${escapeHtml(option.label)}`}
       </button>
     </article>
   `;
@@ -2873,40 +2922,50 @@ function renderWorkspacePlanCard(option, account) {
   const isCurrentPlan = option.id === account?.plan;
   const canUpgrade = !isCurrentPlan;
   const isFeatured = option.id === 'PRO';
+  const isPremium = option.id === 'PREMIUM';
+  const hasTikTok = option.id === 'PRO' || option.id === 'PREMIUM';
 
-  const platformIcons = option.id === 'PRO'
+  const platformIcons = hasTikTok
     ? `${renderPlatformGlyph('youtube')}${renderPlatformGlyph('tiktok')}`
     : renderPlatformGlyph('youtube');
 
+  const benefitsHtml = (option.benefits ?? []).map(
+    (b) => `<li style="display:flex;gap:0.4rem;align-items:flex-start;"><span style="color:var(--cc-accent);flex-shrink:0;">✓</span><span>${escapeHtml(b)}</span></li>`
+  ).join('');
+
   return `
-    <article class="plan-card ${isFeatured ? 'featured' : ''} ${isCurrentPlan ? 'selected' : ''}">
+    <article class="plan-card ${isFeatured ? 'featured' : ''} ${isPremium ? 'plan-card-premium' : ''} ${isCurrentPlan ? 'selected' : ''}" style="display:flex;flex-direction:column;gap:1rem;">
       <div class="stack">
         <div class="platform-dashboard-chip-row">
-          <span class="pill ${isFeatured ? 'success' : 'info'}">${escapeHtml(option.label)}</span>
+          <span class="pill ${isPremium ? 'warning' : isFeatured ? 'success' : 'info'}">${escapeHtml(option.label)}</span>
           ${isCurrentPlan ? '<span class="pill warning">Seu plano atual</span>' : ''}
-          ${isFeatured && !isCurrentPlan ? '<span class="pill warning">Mais completo</span>' : ''}
+          ${isFeatured && !isCurrentPlan ? '<span class="pill success">Mais popular</span>' : ''}
+          ${isPremium && !isCurrentPlan ? '<span class="pill warning">Máximo poder</span>' : ''}
         </div>
-        <div class="plan-price">${escapeHtml(option.priceLabel)}</div>
-        <p class="muted">${escapeHtml(option.description)}</p>
+        <div class="plan-price" style="font-size:1.6rem;font-weight:700;color:var(--cc-accent);">${escapeHtml(option.priceLabel)}</div>
+        <p class="muted" style="font-size:0.875rem;">${escapeHtml(option.description)}</p>
       </div>
-      <div class="stack plan-points">
-        <span>${escapeHtml(option.tokenSummary)}</span>
-        <span>${escapeHtml(option.visitSummary)}</span>
-        <span>Plataformas: ${platformIcons}</span>
+      <div style="flex:1;">
+        <ul class="stack" style="list-style:none;padding:0;margin:0;gap:0.4rem;font-size:0.85rem;">
+          ${benefitsHtml}
+        </ul>
+      </div>
+      <div style="display:flex;gap:0.5rem;align-items:center;font-size:0.8rem;color:var(--text-muted);">
+        Plataformas: ${platformIcons}
       </div>
       ${isCurrentPlan && account ? `
-        <div class="stack">
+        <div class="stack" style="background:var(--surface-muted,rgba(255,255,255,0.05));border-radius:0.5rem;padding:0.75rem;gap:0.4rem;">
           <span style="font-size:0.85em;">Saldo atual: <strong>${account.tokens}</strong> tokens</span>
           ${account.dailyVisitClaimedToday
-            ? '<span class="pill info" style="font-size:0.8em;">Bonus diario ja coletado hoje</span>'
-            : '<span class="pill success" style="font-size:0.8em;">+' + account.dailyVisitTokens + ' tokens disponiveis hoje</span>'}
+            ? '<span class="pill info" style="font-size:0.8em;">Bônus diário já coletado hoje</span>'
+            : '<span class="pill success" style="font-size:0.8em;">+' + account.dailyVisitTokens + ' tokens disponíveis hoje</span>'}
           ${account.monthlyGrantClaimedThisMonth
-            ? '<span class="pill info" style="font-size:0.8em;">Grant mensal ja recebido este mes</span>'
-            : '<span class="pill success" style="font-size:0.8em;">Grant mensal pendente este mes</span>'}
+            ? '<span class="pill info" style="font-size:0.8em;">Grant mensal já recebido este mês</span>'
+            : '<span class="pill success" style="font-size:0.8em;">Grant mensal pendente este mês</span>'}
         </div>
       ` : ''}
       ${canUpgrade
-        ? `<button class="${isFeatured ? 'btn-primary' : 'btn'}" type="button" data-action="upgrade-plan" data-plan-id="${escapeHtml(option.id)}">Mudar para ${escapeHtml(option.label)}</button>`
+        ? `<button class="${isFeatured || isPremium ? 'btn-primary' : 'btn'}" type="button" data-action="upgrade-plan" data-plan-id="${escapeHtml(option.id)}">Assinar ${escapeHtml(option.label)}</button>`
         : '<button class="btn" type="button" disabled>Plano ativo</button>'}
     </article>
   `;
@@ -2940,26 +2999,43 @@ async function renderPlanosPage(options = {}) {
     </div>
   ` : '';
 
-  const planCardsHtml = ACCOUNT_PLAN_OPTIONS.map((option) => renderWorkspacePlanCard(option, account)).join('');
+  // Merge API plan data (benefits, active, id) into static options for display
+  const plansResult = await api.listPlans();
+  const apiPlans = plansResult.ok ? (plansResult.body?.plans ?? []) : [];
+  const mergedOptions = ACCOUNT_PLAN_OPTIONS.map((opt) => {
+    const apiPlan = apiPlans.find((p) => p.code === opt.id);
+    if (!apiPlan) return opt;
+    return {
+      ...opt,
+      id: apiPlan.code,
+      label: apiPlan.name ?? opt.label,
+      benefits: apiPlan.benefits?.length ? apiPlan.benefits : (opt.benefits ?? []),
+      active: apiPlan.active ?? true,
+      tokens: apiPlan.tokens,
+      dailyVisitTokens: apiPlan.dailyVisitTokens,
+      priceBrl: apiPlan.priceBrl,
+    };
+  }).filter((opt) => opt.active !== false);
+
+  const planCardsHtml = mergedOptions.map((option) => renderWorkspacePlanCard(option, account)).join('');
 
   renderWorkspaceShell({
     title: 'Planos',
-    subtitle: `Plano do usuario: ${account?.planLabel ?? '—'} | Saldo: ${account?.tokens ?? 0} tokens`,
+    subtitle: `Plano atual: ${account?.planLabel ?? '—'} | Saldo: ${account?.tokens ?? 0} tokens`,
     noticeHtml: `${errorHtml}${successHtml}${billingHtml}`,
     contentHtml: `
-      <section class="plan-grid">
+      <section class="plan-grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1.25rem;">
         ${planCardsHtml}
       </section>
       <section class="card stack" style="margin-top:1.5rem;">
-        <h2>Regras dos planos</h2>
+        <h2>Como funcionam os planos</h2>
         <ul class="stack" style="list-style:disc;padding-left:1.25rem;">
-          <li>Cada conta conectada para publicar custa <strong>2 tokens</strong> por campanha.</li>
-          <li>Thumbnail custa <strong>1 token</strong> no plano Free. <strong>Gratis</strong> nos planos pagos.</li>
-          <li>Ao mudar de plano, voce recebe os tokens mensais do novo plano.</li>
-          <li>A publicacao so acontece se voce tiver tokens suficientes para todas as contas selecionadas.</li>
-          <li>Se nao houver tokens suficientes, a campanha nao sera publicada e voce vera um aviso de <strong>out of Tokens</strong>.</li>
-          <li>O limite de tokens nunca e ultrapassado — o bônus diario e aplicado apenas ate o maximo do plano.</li>
-          <li>TikTok esta disponivel somente no plano <strong>PRO</strong>.</li>
+          <li>Cada conta conectada para publicar custa tokens por campanha (1–2 tokens dependendo do plano).</li>
+          <li>Thumbnail custa <strong>1 token</strong> no plano Free. <strong>Grátis</strong> nos planos pagos.</li>
+          <li>Ao mudar de plano, você recebe os tokens mensais do novo plano imediatamente.</li>
+          <li>A publicação só acontece se você tiver tokens suficientes para todas as contas selecionadas.</li>
+          <li>TikTok está disponível somente nos planos <strong>PRO</strong> e <strong>Premium</strong>.</li>
+          <li>Planos pagos têm duração de 30 dias e expiram automaticamente para Free.</li>
         </ul>
       </section>
     `,

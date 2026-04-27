@@ -71,10 +71,15 @@ export function createApp(config: AppConfig = {}): AppInstance {
   const accountPlanService = new AccountPlanService({
     store: config.accountPlanStore,
   });
+  const paymentService = new PaymentService({
+    defaultSuccessUrl: config.env?.PAYMENT_SUCCESS_URL,
+    defaultCancelUrl: config.env?.PAYMENT_CANCEL_URL,
+  });
   const accountPlanController = new AccountPlanController(
     accountPlanService,
     new SessionGuard({ allowPendingPlanSelection: true }),
     authModule.authController,
+    paymentService,
   );
   const accountsModule = createAccountsModule(config.accountsModuleOptions);
   const campaignsModule = createCampaignsModule({

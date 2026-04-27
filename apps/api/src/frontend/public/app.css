@@ -1660,7 +1660,7 @@ textarea {
 
 .plan-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -1688,6 +1688,12 @@ textarea {
 
 .plan-card.selected {
   box-shadow: 0 0 0 2px var(--success), var(--shadow);
+}
+
+.plan-card.plan-card-premium {
+  border-color: color-mix(in srgb, var(--warning) 50%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--warning) 22%, transparent), var(--shadow);
+  background: color-mix(in srgb, color-mix(in srgb, var(--warning) 12%, transparent) 40%, var(--surface));
 }
 
 .plan-price {

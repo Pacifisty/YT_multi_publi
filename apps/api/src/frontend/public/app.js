@@ -2037,8 +2037,11 @@ function renderLoginPage(options = {}) {
 }
 
 function renderRichLoginPage(options = {}) {
+  return renderModernLoginPage(options);
+}
+
+function renderModernLoginPage(options = {}) {
   const mode = options.mode === 'register' ? 'register' : 'login';
-  const step = options.step === 2 ? 2 : 1;
   const verifying = options.verifying === true;
   const draft = {
     fullName: String(options.draft?.fullName ?? ''),
@@ -2049,6 +2052,272 @@ function renderRichLoginPage(options = {}) {
   if (state.backgroundTheme !== neonNightTheme.id) {
     applyBackgroundTheme(neonNightTheme.id);
   }
+  const errorHtml = options.error ? `<div class="login-modern-alert" role="alert">⚠ ${escapeHtml(options.error)}</div>` : '';
+  const noticeHtml = renderUiNotice();
+
+  root.innerHTML = `
+    <div class="login-modern" data-mode="${mode}">
+      <div class="login-modern-bg" aria-hidden="true">
+        <div class="login-modern-orb login-modern-orb-1"></div>
+        <div class="login-modern-orb login-modern-orb-2"></div>
+        <div class="login-modern-orb login-modern-orb-3"></div>
+        <div class="login-modern-grid"></div>
+      </div>
+
+      <aside class="login-modern-hero">
+        <div class="login-modern-hero-inner">
+          <div class="login-modern-brand">
+            <svg class="login-modern-logo" viewBox="0 0 100 100" aria-hidden="true">
+              <defs>
+                <linearGradient id="loginRing" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#3b82f6" />
+                  <stop offset="55%" stop-color="#6366f1" />
+                  <stop offset="100%" stop-color="#a855f7" />
+                </linearGradient>
+                <linearGradient id="loginLetters" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#22d3ee" />
+                  <stop offset="50%" stop-color="#6366f1" />
+                  <stop offset="100%" stop-color="#c084fc" />
+                </linearGradient>
+                <radialGradient id="loginInnerGlow" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stop-color="rgba(99,102,241,0.4)" />
+                  <stop offset="100%" stop-color="transparent" />
+                </radialGradient>
+                <filter id="loginGlow" x="-30%" y="-30%" width="160%" height="160%">
+                  <feGaussianBlur stdDeviation="1.6" result="b" />
+                  <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+                </filter>
+              </defs>
+              <circle cx="50" cy="50" r="46" fill="url(#loginInnerGlow)" />
+              <circle cx="50" cy="50" r="44" fill="none" stroke="url(#loginRing)" stroke-width="2.5" />
+              <g stroke="url(#loginLetters)" stroke-width="1.8" fill="none" stroke-linecap="round">
+                <circle cx="42" cy="26" r="2.4" fill="url(#loginLetters)" />
+                <circle cx="58" cy="26" r="2.4" fill="url(#loginLetters)" />
+                <circle cx="50" cy="34" r="2.4" fill="url(#loginLetters)" />
+                <line x1="42" y1="26" x2="50" y2="34" />
+                <line x1="58" y1="26" x2="50" y2="34" />
+              </g>
+              <text x="50" y="68" text-anchor="middle"
+                font-family="'Inter', system-ui, sans-serif"
+                font-size="22" font-weight="900"
+                fill="url(#loginLetters)" filter="url(#loginGlow)"
+                letter-spacing="-0.5">PMP</text>
+              <g stroke="url(#loginLetters)" stroke-width="1.6" stroke-linecap="round" opacity="0.85">
+                <line x1="44" y1="80" x2="44" y2="76" />
+                <line x1="48" y1="80" x2="48" y2="74" />
+                <line x1="52" y1="80" x2="52" y2="71" />
+                <line x1="56" y1="80" x2="56" y2="73" />
+              </g>
+            </svg>
+            <div class="login-modern-brand-text">
+              <span class="login-modern-kicker">PLATFORM</span>
+              <span class="login-modern-name">Multi Publisher</span>
+            </div>
+          </div>
+
+          <h1 class="login-modern-headline">
+            One control room.<br/>
+            <span class="login-modern-headline-accent">Every platform.</span>
+          </h1>
+          <p class="login-modern-tagline">
+            Schedule, automate and publish to YouTube and TikTok from a single dashboard built for creators who scale.
+          </p>
+
+          <div class="login-pmp-stack" id="login-pmp-stack" aria-hidden="false">
+            <div class="login-pmp-card" data-pmp-card="0">
+              <div class="login-pmp-letter">
+                <span class="login-pmp-char">P</span>
+                <span class="login-pmp-rest">latform</span>
+              </div>
+              <div class="login-pmp-body">
+                <strong>Publish anywhere</strong>
+                <small>YouTube and TikTok from one cockpit</small>
+              </div>
+              <div class="login-pmp-glow" aria-hidden="true"></div>
+            </div>
+            <div class="login-pmp-card" data-pmp-card="1">
+              <div class="login-pmp-letter">
+                <span class="login-pmp-char">M</span>
+                <span class="login-pmp-rest">ulti</span>
+              </div>
+              <div class="login-pmp-body">
+                <strong>Multi-channel power</strong>
+                <small>Schedule patterns, playlists, smart auto-pick</small>
+              </div>
+              <div class="login-pmp-glow" aria-hidden="true"></div>
+            </div>
+            <div class="login-pmp-card" data-pmp-card="2">
+              <div class="login-pmp-letter">
+                <span class="login-pmp-char">P</span>
+                <span class="login-pmp-rest">ublisher</span>
+              </div>
+              <div class="login-pmp-body">
+                <strong>Pro-grade security</strong>
+                <small>OAuth tokens encrypted, HMAC sessions</small>
+              </div>
+              <div class="login-pmp-glow" aria-hidden="true"></div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="login-modern-form-wrap">
+        <div class="login-modern-form-card">
+          ${noticeHtml}
+
+          <header class="login-modern-form-header">
+            <h2>${mode === 'register' ? 'Create your account' : 'Welcome back'}</h2>
+            <p>${mode === 'register' ? 'Start publishing in minutes — free forever for personal use.' : 'Sign in to manage your campaigns and connected accounts.'}</p>
+          </header>
+
+          <div class="login-modern-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected="${mode === 'login'}" data-auth-mode="login" class="login-modern-tab ${mode === 'login' ? 'active' : ''}">Sign in</button>
+            <button type="button" role="tab" aria-selected="${mode === 'register'}" data-auth-mode="register" class="login-modern-tab ${mode === 'register' ? 'active' : ''}">Sign up</button>
+            <span class="login-modern-tab-indicator" data-side="${mode}"></span>
+          </div>
+
+          ${errorHtml}
+
+          <button id="google-auth-btn" type="button" class="login-modern-google">
+            <svg viewBox="0 0 18 18" width="18" height="18" aria-hidden="true">
+              <path fill="#EA4335" d="M9 3.48c1.69 0 2.85.73 3.5 1.34l2.56-2.5C13.46.89 11.43 0 9 0 5.48 0 2.44 2.02 1.96 4.96l2.95 2.3C5.6 5.04 7.13 3.48 9 3.48z"/>
+              <path fill="#34A853" d="M17.64 9.2c0-.74-.06-1.28-.19-1.84H9v3.34h4.96c-.1.83-.64 2.08-1.84 2.92l2.86 2.22c1.71-1.58 2.66-3.92 2.66-6.64z"/>
+              <path fill="#4A90E2" d="M4.91 10.74A5.43 5.43 0 0 1 4.61 9c0-.6.1-1.18.27-1.74L1.93 4.96A8.87 8.87 0 0 0 0 9c0 1.45.34 2.82.96 4.04l2.95-2.3z"/>
+              <path fill="#FBBC05" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.86-2.22c-.79.55-1.83.93-3.1.93-1.86 0-3.4-1.56-3.94-3.78L1.95 13.04C2.41 15.99 5.49 18 9 18z"/>
+            </svg>
+            <span>Continue with Google</span>
+          </button>
+
+          <div class="login-modern-divider">
+            <span>or with email</span>
+          </div>
+
+          <form id="login-modern-form" class="login-modern-form" novalidate>
+            ${mode === 'register' ? `
+              <label class="login-modern-field">
+                <span class="login-modern-label">Full name</span>
+                <input name="fullName" type="text" autocomplete="name" value="${escapeHtml(draft.fullName)}" placeholder="Your name" />
+              </label>
+            ` : ''}
+            <label class="login-modern-field">
+              <span class="login-modern-label">Email address</span>
+              <input name="email" type="email" required autocomplete="username" value="${escapeHtml(draft.email)}" placeholder="you@workspace.com" />
+            </label>
+            <label class="login-modern-field">
+              <span class="login-modern-label">
+                Password
+                ${mode === 'login' ? '<a href="#" class="login-modern-forgot" tabindex="-1">Forgot?</a>' : ''}
+              </span>
+              <div class="login-modern-password-wrap">
+                <input name="password" type="password" required autocomplete="${mode === 'register' ? 'new-password' : 'current-password'}" value="${escapeHtml(draft.password)}" placeholder="${mode === 'register' ? 'Min. 6 characters' : 'Your password'}" minlength="6" />
+                <button type="button" class="login-modern-password-toggle" data-action="toggle-password" aria-label="Toggle password visibility">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                </button>
+              </div>
+            </label>
+
+            <button type="submit" class="login-modern-submit">
+              <span>${mode === 'register' ? 'Create account' : 'Sign in to workspace'}</span>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="5" y1="12" x2="19" y2="12"/>
+                <polyline points="12 5 19 12 12 19"/>
+              </svg>
+            </button>
+          </form>
+
+          <p class="login-modern-footnote">
+            ${mode === 'register'
+              ? 'By creating an account you agree to our terms of service and privacy policy.'
+              : 'Use Google sign-in if you started with Google to restore your workspace correctly.'}
+          </p>
+        </div>
+
+        <footer class="login-modern-trust">
+          <span><span class="login-modern-trust-dot"></span> Secure session · HMAC encrypted</span>
+        </footer>
+      </main>
+
+      ${verifying ? `
+        <div class="login-modern-loading" role="status" aria-live="polite">
+          <div class="login-modern-loading-card">
+            <div class="login-modern-loading-spinner"></div>
+            <strong>Authenticating</strong>
+            <span>Hydrating your operator session…</span>
+          </div>
+        </div>
+      ` : ''}
+    </div>
+  `;
+
+  const form = document.getElementById('login-modern-form');
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const data = new FormData(form);
+    const fullName = String(data.get('fullName') ?? '').trim();
+    const email = String(data.get('email') ?? '').trim();
+    const password = String(data.get('password') ?? '');
+
+    if (!email || !email.includes('@')) {
+      renderModernLoginPage({ error: 'Email must be valid.', mode, draft: { fullName, email, password } });
+      return;
+    }
+    if (!password) {
+      renderModernLoginPage({ error: 'Password is required.', mode, draft: { fullName, email, password } });
+      return;
+    }
+    if (mode === 'register' && password.length < 6) {
+      renderModernLoginPage({ error: 'Password must be at least 6 characters.', mode, draft: { fullName, email, password } });
+      return;
+    }
+
+    renderModernLoginPage({ mode, draft: { fullName, email, password }, verifying: true });
+    await new Promise((resolve) => window.requestAnimationFrame(() => window.setTimeout(resolve, 90)));
+
+    const result = mode === 'register'
+      ? await api.register({ email, password, fullName: fullName || undefined })
+      : await api.login({ email, password });
+
+    if (!result.ok) {
+      renderModernLoginPage({ error: result.error, mode, draft: { fullName, email, password } });
+      return;
+    }
+    handleAuthenticatedNavigation(result.body?.user);
+  });
+
+  document.querySelectorAll('[data-auth-mode]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const nextMode = button.getAttribute('data-auth-mode') === 'register' ? 'register' : 'login';
+      navigate(buildUrl('/login', nextMode === 'register' ? { mode: 'register' } : {}), true);
+    });
+  });
+
+  document.getElementById('google-auth-btn')?.addEventListener('click', async () => {
+    const result = await api.startAuthGoogleOauth();
+    if (!result.ok || !result.body?.redirectUrl) {
+      renderModernLoginPage({ error: result.error || 'Unable to start Google sign-in.', mode, draft });
+      return;
+    }
+    window.location.assign(result.body.redirectUrl);
+  });
+
+  document.querySelector('[data-action="toggle-password"]')?.addEventListener('click', (event) => {
+    const wrapper = event.currentTarget.closest('.login-modern-password-wrap');
+    const input = wrapper?.querySelector('input');
+    if (!input) return;
+    input.type = input.type === 'password' ? 'text' : 'password';
+    event.currentTarget.classList.toggle('active', input.type === 'text');
+  });
+
+  bindUiNoticeDismiss();
+  startLoginPmpRotation();
+  return;
+
+  // ===== Legacy code below kept for compatibility but unreachable =====
+  const oldStep = options.step === 2 ? 2 : 1;
+  const oldVerifying = options.verifying === true;
   const selectedBackgroundTheme = neonNightTheme;
   const title = verifying
     ? 'Sync your secure workspace access'
@@ -2425,6 +2694,118 @@ function startPmpAutoRotation() {
 
   advance();
   pmpRotationTimer = setInterval(advance, 5000);
+}
+
+function animatePlaylistCockpit() {
+  const cockpit = document.getElementById('playlist-cockpit');
+  if (!cockpit) return;
+
+  const arc = cockpit.querySelector('.playlist-cockpit-ring-arc');
+  if (arc) {
+    const targetOffset = Number(arc.getAttribute('data-target-offset') ?? 0);
+    requestAnimationFrame(() => {
+      arc.setAttribute('stroke-dashoffset', String(targetOffset));
+    });
+  }
+
+  const rateEl = cockpit.querySelector('[data-target-rate]');
+  if (rateEl) {
+    const target = Number(rateEl.getAttribute('data-target-rate') ?? 0);
+    const duration = 1300;
+    const start = performance.now();
+    const tick = (now) => {
+      const progress = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      rateEl.textContent = `${Math.round(target * eased)}%`;
+      if (progress < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
+  cockpit.querySelectorAll('[data-counter]').forEach((el) => {
+    const target = Number(el.getAttribute('data-counter') ?? 0);
+    const duration = 1100;
+    const start = performance.now();
+    const tick = (now) => {
+      const progress = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      el.textContent = String(Math.round(target * eased));
+      if (progress < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+
+  const fillBar = cockpit.querySelector('.playlist-cockpit-footer-bar-fill');
+  if (fillBar) {
+    const target = fillBar.style.getPropertyValue('--width');
+    fillBar.style.width = '0%';
+    requestAnimationFrame(() => {
+      fillBar.style.transition = 'width 1.4s cubic-bezier(0.22, 0.61, 0.36, 1)';
+      fillBar.style.width = target;
+    });
+  }
+
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    cockpit.addEventListener('mousemove', (event) => {
+      const rect = cockpit.getBoundingClientRect();
+      const px = ((event.clientX - rect.left) / rect.width - 0.5) * 2;
+      const py = ((event.clientY - rect.top) / rect.height - 0.5) * 2;
+      const orbA = cockpit.querySelector('.playlist-cockpit-orb-a');
+      const orbB = cockpit.querySelector('.playlist-cockpit-orb-b');
+      if (orbA) orbA.style.transform = `translate(${px * 14}px, ${py * 14}px)`;
+      if (orbB) orbB.style.transform = `translate(${px * -10}px, ${py * -10}px)`;
+    });
+    cockpit.addEventListener('mouseleave', () => {
+      const orbA = cockpit.querySelector('.playlist-cockpit-orb-a');
+      const orbB = cockpit.querySelector('.playlist-cockpit-orb-b');
+      if (orbA) orbA.style.transform = '';
+      if (orbB) orbB.style.transform = '';
+    });
+  }
+}
+
+let loginPmpRotationTimer = null;
+
+function startLoginPmpRotation() {
+  if (loginPmpRotationTimer) {
+    clearInterval(loginPmpRotationTimer);
+    loginPmpRotationTimer = null;
+  }
+  const stack = document.getElementById('login-pmp-stack');
+  if (!stack) return;
+  const cards = Array.from(stack.querySelectorAll('.login-pmp-card'));
+  if (cards.length === 0) return;
+
+  let currentIndex = -1;
+  const setActive = (index) => {
+    cards.forEach((card, i) => {
+      card.classList.toggle('login-pmp-open', i === index);
+    });
+  };
+
+  const advance = () => {
+    currentIndex = (currentIndex + 1) % cards.length;
+    setActive(currentIndex);
+  };
+
+  advance();
+  loginPmpRotationTimer = setInterval(advance, 3000);
+
+  cards.forEach((card, i) => {
+    card.addEventListener('mouseenter', () => {
+      if (loginPmpRotationTimer) {
+        clearInterval(loginPmpRotationTimer);
+        loginPmpRotationTimer = null;
+      }
+      currentIndex = i;
+      setActive(i);
+    });
+    card.addEventListener('mouseleave', () => {
+      if (!loginPmpRotationTimer) {
+        loginPmpRotationTimer = setInterval(advance, 3000);
+      }
+    });
+  });
 }
 
 function handleAuthenticatedNavigation(user) {
@@ -3920,44 +4301,124 @@ async function renderAccountsPage() {
     `,
     noticeHtml: notices.join(''),
     contentHtml: `
-      <section class="platform-dashboard-hero">
-        <article class="platform-surface platform-dashboard-hero-copy">
-          <div class="platform-dashboard-kicker-row">
-            <span class="platform-dashboard-kicker">Accounts command</span>
-            <span class="platform-dashboard-live"><span class="platform-login-live-dot"></span> Synced ${escapeHtml(liveClock)}</span>
-          </div>
-          <h2>Control every connected publishing identity from one place.</h2>
-          <p>Review account health, reconnect providers and manage the channels that feed your campaigns without leaving the workspace.</p>
-          <div class="platform-dashboard-chip-row">
-            <span class="platform-chip">${renderPlatformGlyph('youtube', 'small')} YouTube channels</span>
-            <span class="platform-chip">${renderPlatformGlyph('tiktok', 'small')} TikTok creators</span>
-          </div>
-          <div class="platform-dashboard-chip-row">
-            <span class="platform-dashboard-inline-stat">${formatNumber(accounts.length)} accounts</span>
-            <span class="platform-dashboard-inline-stat">${formatNumber(totalChannels)} discovered channels</span>
-            <span class="platform-dashboard-inline-stat">${formatNumber(activeChannels)} active routes</span>
-          </div>
-        </article>
+      <section class="accounts-cockpit" id="accounts-cockpit">
+        <div class="accounts-cockpit-bg" aria-hidden="true">
+          <div class="accounts-cockpit-orb-a"></div>
+          <div class="accounts-cockpit-orb-b"></div>
+          <div class="accounts-cockpit-grid"></div>
+          <div class="accounts-cockpit-scan"></div>
+        </div>
 
-        <article class="platform-surface platform-dashboard-hero-visual">
-          <div class="platform-page-provider-grid">
-            ${providerBreakdownHtml}
+        <header class="accounts-cockpit-header">
+          <div class="accounts-cockpit-title-block">
+            <span class="accounts-cockpit-kicker">
+              <span class="accounts-cockpit-pulse-dot"></span>
+              ACCOUNTS COMMAND
+            </span>
+            <h2 class="accounts-cockpit-title">Every publishing identity, <span class="accounts-cockpit-title-accent">one cockpit.</span></h2>
+            <p class="accounts-cockpit-subtitle">Review health, reconnect providers and route campaigns without leaving the workspace.</p>
           </div>
-          <div class="platform-dashboard-orbit-footer">
-            <div>
-              <span>Selected account</span>
-              <strong>${escapeHtml(selectedAccountLabel)}</strong>
+          <div class="accounts-cockpit-sync">
+            <span class="accounts-cockpit-sync-status"><span class="accounts-cockpit-sync-dot"></span>LIVE SYNC</span>
+            <strong class="accounts-cockpit-sync-time">${escapeHtml(liveClock)}</strong>
+            <span class="accounts-cockpit-sync-label">${formatNumber(activeChannels)} active routes</span>
+          </div>
+        </header>
+
+        <div class="accounts-cockpit-grid-cards">
+          <article class="accounts-cockpit-card accounts-cockpit-card-platform" data-platform="youtube" tabindex="0" role="button" aria-label="YouTube — ${formatNumber(providerBreakdown[0].count)} accounts">
+            <div class="accounts-cockpit-card-glow"></div>
+            <div class="accounts-cockpit-card-icon-wrap">
+              <span class="accounts-cockpit-card-icon">${renderPlatformGlyph('youtube', 'small')}</span>
+              <span class="accounts-cockpit-card-icon-ring"></span>
             </div>
-            <div>
-              <span>Needs reauth</span>
-              <strong>${formatNumber(reauthCount)}</strong>
+            <div class="accounts-cockpit-card-info">
+              <span class="accounts-cockpit-card-label">YouTube</span>
+              <strong class="accounts-cockpit-card-value" data-counter="${providerBreakdown[0].count}">0</strong>
+              <span class="accounts-cockpit-card-detail">Channel sync + publishing</span>
             </div>
-            <div>
-              <span>Workspace reach</span>
-              <strong>${formatNumber(filteredAccounts.length)}</strong>
+            <div class="accounts-cockpit-card-arrow" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <line x1="5" y1="12" x2="19" y2="12"/>
+                <polyline points="12 5 19 12 12 19"/>
+              </svg>
+            </div>
+          </article>
+
+          <article class="accounts-cockpit-card accounts-cockpit-card-platform" data-platform="tiktok" tabindex="0" role="button" aria-label="TikTok — ${formatNumber(providerBreakdown[1].count)} accounts">
+            <div class="accounts-cockpit-card-glow"></div>
+            <div class="accounts-cockpit-card-icon-wrap">
+              <span class="accounts-cockpit-card-icon">${renderPlatformGlyph('tiktok', 'small')}</span>
+              <span class="accounts-cockpit-card-icon-ring"></span>
+            </div>
+            <div class="accounts-cockpit-card-info">
+              <span class="accounts-cockpit-card-label">TikTok</span>
+              <strong class="accounts-cockpit-card-value" data-counter="${providerBreakdown[1].count}">0</strong>
+              <span class="accounts-cockpit-card-detail">Short-form relay</span>
+            </div>
+            <div class="accounts-cockpit-card-arrow" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <line x1="5" y1="12" x2="19" y2="12"/>
+                <polyline points="12 5 19 12 12 19"/>
+              </svg>
+            </div>
+          </article>
+
+          <article class="accounts-cockpit-stat" data-tone="info">
+            <div class="accounts-cockpit-stat-icon">👤</div>
+            <div class="accounts-cockpit-stat-info">
+              <span class="accounts-cockpit-stat-label">Selected</span>
+              <strong class="accounts-cockpit-stat-value">${escapeHtml(selectedAccountLabel.length > 14 ? selectedAccountLabel.slice(0, 13) + '…' : selectedAccountLabel)}</strong>
+              <span class="accounts-cockpit-stat-detail">Active focus</span>
+            </div>
+          </article>
+
+          <article class="accounts-cockpit-stat" data-tone="${reauthCount > 0 ? 'warning' : 'success'}">
+            <div class="accounts-cockpit-stat-icon">${reauthCount > 0 ? '⚠️' : '✅'}</div>
+            <div class="accounts-cockpit-stat-info">
+              <span class="accounts-cockpit-stat-label">Reauth</span>
+              <strong class="accounts-cockpit-stat-value" data-counter="${reauthCount}">0</strong>
+              <span class="accounts-cockpit-stat-detail">${reauthCount > 0 ? 'Needs attention' : 'All healthy'}</span>
+            </div>
+          </article>
+
+          <article class="accounts-cockpit-stat" data-tone="info">
+            <div class="accounts-cockpit-stat-icon">🌐</div>
+            <div class="accounts-cockpit-stat-info">
+              <span class="accounts-cockpit-stat-label">Reach</span>
+              <strong class="accounts-cockpit-stat-value" data-counter="${filteredAccounts.length}">0</strong>
+              <span class="accounts-cockpit-stat-detail">Visible accounts</span>
+            </div>
+          </article>
+
+          <article class="accounts-cockpit-stat" data-tone="primary">
+            <div class="accounts-cockpit-stat-icon">📡</div>
+            <div class="accounts-cockpit-stat-info">
+              <span class="accounts-cockpit-stat-label">Channels</span>
+              <strong class="accounts-cockpit-stat-value" data-counter="${totalChannels}">0</strong>
+              <span class="accounts-cockpit-stat-detail">Discovered</span>
+            </div>
+          </article>
+        </div>
+
+        <div class="accounts-cockpit-footer">
+          <div class="accounts-cockpit-footer-bar">
+            <div class="accounts-cockpit-footer-bar-label">
+              <span>Workspace health</span>
+              <strong>${accounts.length === 0 ? 0 : Math.round(((accounts.length - reauthCount) / accounts.length) * 100)}%</strong>
+            </div>
+            <div class="accounts-cockpit-footer-bar-track">
+              <div class="accounts-cockpit-footer-bar-fill" style="--width:${accounts.length === 0 ? 0 : Math.round(((accounts.length - reauthCount) / accounts.length) * 100)}%"></div>
             </div>
           </div>
-        </article>
+          <div class="accounts-cockpit-footer-meta">
+            <span>${formatNumber(accounts.length)} accounts</span>
+            <span aria-hidden="true">·</span>
+            <span>${formatNumber(totalChannels)} discovered</span>
+            <span aria-hidden="true">·</span>
+            <span>${formatNumber(activeChannels)} active</span>
+          </div>
+        </div>
       </section>
 
       <section class="platform-dashboard-stat-grid">
@@ -4105,6 +4566,66 @@ async function renderAccountsPage() {
     });
     navigate(href);
   });
+
+  const cockpit = document.getElementById('accounts-cockpit');
+  if (cockpit) {
+    cockpit.querySelectorAll('[data-counter]').forEach((el) => {
+      const target = Number(el.getAttribute('data-counter') ?? 0);
+      const duration = 1100;
+      const start = performance.now();
+      const tick = (now) => {
+        const progress = Math.min(1, (now - start) / duration);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        el.textContent = String(Math.round(target * eased));
+        if (progress < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+
+    const fillBar = cockpit.querySelector('.accounts-cockpit-footer-bar-fill');
+    if (fillBar) {
+      const target = fillBar.style.getPropertyValue('--width');
+      fillBar.style.width = '0%';
+      requestAnimationFrame(() => {
+        fillBar.style.transition = 'width 1.4s cubic-bezier(0.22, 0.61, 0.36, 1)';
+        fillBar.style.width = target;
+      });
+    }
+
+    cockpit.querySelectorAll('.accounts-cockpit-card-platform').forEach((card) => {
+      card.addEventListener('click', () => {
+        const platform = card.getAttribute('data-platform');
+        if (!platform) return;
+        navigate(buildUrl('/workspace/accounts', {
+          search: platform === 'youtube' ? 'youtube' : 'tiktok',
+        }));
+      });
+      card.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          card.click();
+        }
+      });
+    });
+
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      cockpit.addEventListener('mousemove', (event) => {
+        const rect = cockpit.getBoundingClientRect();
+        const px = ((event.clientX - rect.left) / rect.width - 0.5) * 2;
+        const py = ((event.clientY - rect.top) / rect.height - 0.5) * 2;
+        const orbA = cockpit.querySelector('.accounts-cockpit-orb-a');
+        const orbB = cockpit.querySelector('.accounts-cockpit-orb-b');
+        if (orbA) orbA.style.transform = `translate(${px * 14}px, ${py * 14}px)`;
+        if (orbB) orbB.style.transform = `translate(${px * -10}px, ${py * -10}px)`;
+      });
+      cockpit.addEventListener('mouseleave', () => {
+        const orbA = cockpit.querySelector('.accounts-cockpit-orb-a');
+        const orbB = cockpit.querySelector('.accounts-cockpit-orb-b');
+        if (orbA) orbA.style.transform = '';
+        if (orbB) orbB.style.transform = '';
+      });
+    }
+  }
 
   document.querySelectorAll('[data-action="start-youtube-oauth"]').forEach((button) => {
     button.addEventListener('click', async () => {
@@ -4992,6 +5513,20 @@ async function renderPlaylistsPage() {
   const totalVideos = playlists.reduce((sum, pl) => sum + (pl.items?.length ?? 0), 0);
   const totalUsed = playlists.reduce((sum, pl) => sum + (pl.items?.filter((i) => i.usedAt).length ?? 0), 0);
   const liveClock = formatClockLabel();
+  const totalAvailable = totalVideos - totalUsed;
+  const usagePct = totalVideos === 0 ? 0 : Math.round((totalUsed / totalVideos) * 100);
+  const avgPerPlaylist = playlists.length === 0 ? 0 : Math.round((totalVideos / playlists.length) * 10) / 10;
+  const libraryAssets = allAssets.filter((a) => a.asset_type === 'video').length;
+  const playlistsWithAvailable = playlists.filter((pl) => (pl.items?.length ?? 0) - (pl.items?.filter((i) => i.usedAt).length ?? 0) > 0).length;
+  const playlistsExhausted = playlists.length - playlistsWithAvailable;
+  const largestPlaylist = playlists.slice().sort((a, b) => (b.items?.length ?? 0) - (a.items?.length ?? 0))[0] ?? null;
+  const mostDepleted = playlists.slice().sort((a, b) => {
+    const usedA = (a.items?.filter((i) => i.usedAt).length ?? 0) / Math.max(1, (a.items?.length ?? 0));
+    const usedB = (b.items?.filter((i) => i.usedAt).length ?? 0) / Math.max(1, (b.items?.length ?? 0));
+    return usedB - usedA;
+  })[0] ?? null;
+  const ringCircumference = 2 * Math.PI * 50;
+  const ringOffset = ringCircumference * (1 - usagePct / 100);
 
   const metricsHtml = [
     { label: 'Playlists', value: formatNumber(playlists.length), hint: 'Total de playlists criadas', tone: 'info' },
@@ -5065,49 +5600,136 @@ async function renderPlaylistsPage() {
       </div>
     `,
     contentHtml: `
-      <section class="platform-dashboard-hero">
-        <article class="platform-surface platform-dashboard-hero-copy">
-          <div class="platform-dashboard-kicker-row">
-            <span class="platform-dashboard-kicker">Playlist vault</span>
-            <span class="platform-dashboard-live"><span class="platform-login-live-dot"></span> Synced ${escapeHtml(liveClock)}</span>
-          </div>
-          <h2>Organize videos em playlists e publique aleatoriamente sem repetir.</h2>
-          <p>Aponte uma pasta local no servidor. Cada subpasta vira uma playlist e seus videos sao importados como assets para uso em campanhas automaticas.</p>
-          <div class="platform-dashboard-chip-row">
-            <span class="platform-chip">📁 Pastas locais</span>
-            <span class="platform-chip">🔀 Auto aleatorio</span>
-          </div>
-          <div class="platform-dashboard-chip-row">
-            <span class="platform-dashboard-inline-stat">${formatNumber(playlists.length)} playlists</span>
-            <span class="platform-dashboard-inline-stat">${formatNumber(totalVideos)} videos</span>
-            <span class="platform-dashboard-inline-stat">${formatNumber(totalVideos - totalUsed)} disponiveis</span>
-          </div>
-        </article>
-        <article class="platform-surface platform-dashboard-hero-visual">
-          <div class="platform-page-summary-grid">
-            <article class="platform-page-summary-card">
-              <span>Playlists</span>
-              <strong>${formatNumber(playlists.length)}</strong>
-            </article>
-            <article class="platform-page-summary-card">
-              <span>Videos</span>
-              <strong>${formatNumber(totalVideos)}</strong>
-            </article>
-            <article class="platform-page-summary-card">
-              <span>Disponiveis</span>
-              <strong>${formatNumber(totalVideos - totalUsed)}</strong>
-            </article>
-          </div>
-          <div class="platform-dashboard-orbit-footer">
-            <div><span>Usados</span><strong>${formatNumber(totalUsed)}</strong></div>
-            <div><span>Assets</span><strong>${formatNumber(allAssets.filter((a) => a.asset_type === 'video').length)}</strong></div>
-            <div><span>Status</span><strong>${playlists.length > 0 ? 'Ativo' : 'Vazio'}</strong></div>
-          </div>
-        </article>
-      </section>
+      <section class="playlist-cockpit" id="playlist-cockpit">
+        <div class="playlist-cockpit-bg" aria-hidden="true">
+          <div class="playlist-cockpit-orb-a"></div>
+          <div class="playlist-cockpit-orb-b"></div>
+          <div class="playlist-cockpit-grid"></div>
+          <div class="playlist-cockpit-scan"></div>
+        </div>
 
-      <section class="platform-dashboard-stat-grid">
-        ${metricsHtml}
+        <header class="playlist-cockpit-header">
+          <div class="playlist-cockpit-title-block">
+            <span class="playlist-cockpit-kicker">
+              <span class="playlist-cockpit-pulse-dot"></span>
+              PLAYLIST VAULT
+            </span>
+            <h2 class="playlist-cockpit-title">Organize, automatize, <span class="playlist-cockpit-title-accent">não repita.</span></h2>
+            <p class="playlist-cockpit-subtitle">Pastas locais viram playlists. Cada vídeo é publicado uma vez e o sistema escolhe o próximo automaticamente.</p>
+          </div>
+          <div class="playlist-cockpit-sync">
+            <span class="playlist-cockpit-sync-status"><span class="playlist-cockpit-sync-dot"></span>LIVE SYNC</span>
+            <strong class="playlist-cockpit-sync-time">${escapeHtml(liveClock)}</strong>
+            <span class="playlist-cockpit-sync-label">${formatNumber(playlists.length)} playlists ativas</span>
+          </div>
+        </header>
+
+        <div class="playlist-cockpit-hero-row">
+          <article class="playlist-cockpit-ring-card">
+            <svg class="playlist-cockpit-ring" viewBox="0 0 120 120" aria-hidden="true">
+              <circle cx="60" cy="60" r="50" fill="none" stroke="currentColor" stroke-opacity="0.12" stroke-width="9" />
+              <circle class="playlist-cockpit-ring-arc" cx="60" cy="60" r="50" fill="none"
+                stroke="url(#playlistRingGrad)" stroke-width="9" stroke-linecap="round"
+                stroke-dasharray="${ringCircumference}"
+                stroke-dashoffset="${ringCircumference}"
+                data-target-offset="${ringOffset}"
+                transform="rotate(-90 60 60)" />
+              <defs>
+                <linearGradient id="playlistRingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="var(--cc-accent)" />
+                  <stop offset="100%" stop-color="var(--cc-accent2)" />
+                </linearGradient>
+              </defs>
+            </svg>
+            <div class="playlist-cockpit-ring-info">
+              <span class="playlist-cockpit-ring-label">UTILIZAÇÃO</span>
+              <strong class="playlist-cockpit-ring-value" data-target-rate="${usagePct}">0%</strong>
+              <span class="playlist-cockpit-ring-detail">${formatNumber(totalUsed)} de ${formatNumber(totalVideos)} usados</span>
+            </div>
+          </article>
+
+          <article class="playlist-cockpit-stat-big" data-tone="primary">
+            <div class="playlist-cockpit-stat-big-icon">📁</div>
+            <div class="playlist-cockpit-stat-big-info">
+              <span class="playlist-cockpit-stat-big-label">Playlists</span>
+              <strong class="playlist-cockpit-stat-big-value" data-counter="${playlists.length}">0</strong>
+              <span class="playlist-cockpit-stat-big-detail">${formatNumber(playlistsWithAvailable)} com vídeos · ${formatNumber(playlistsExhausted)} esgotadas</span>
+            </div>
+          </article>
+
+          <article class="playlist-cockpit-stat-big" data-tone="success">
+            <div class="playlist-cockpit-stat-big-icon">🎬</div>
+            <div class="playlist-cockpit-stat-big-info">
+              <span class="playlist-cockpit-stat-big-label">Vídeos</span>
+              <strong class="playlist-cockpit-stat-big-value" data-counter="${totalVideos}">0</strong>
+              <span class="playlist-cockpit-stat-big-detail">${avgPerPlaylist} média por playlist</span>
+            </div>
+          </article>
+        </div>
+
+        <div class="playlist-cockpit-mini-row">
+          <article class="playlist-cockpit-mini" data-tone="info">
+            <div class="playlist-cockpit-mini-icon">✅</div>
+            <div class="playlist-cockpit-mini-info">
+              <span class="playlist-cockpit-mini-label">Disponíveis</span>
+              <strong class="playlist-cockpit-mini-value" data-counter="${totalAvailable}">0</strong>
+              <span class="playlist-cockpit-mini-detail">prontos para publicar</span>
+            </div>
+          </article>
+          <article class="playlist-cockpit-mini" data-tone="warning">
+            <div class="playlist-cockpit-mini-icon">📤</div>
+            <div class="playlist-cockpit-mini-info">
+              <span class="playlist-cockpit-mini-label">Já publicados</span>
+              <strong class="playlist-cockpit-mini-value" data-counter="${totalUsed}">0</strong>
+              <span class="playlist-cockpit-mini-detail">via Auto-mode</span>
+            </div>
+          </article>
+          <article class="playlist-cockpit-mini" data-tone="info">
+            <div class="playlist-cockpit-mini-icon">📚</div>
+            <div class="playlist-cockpit-mini-info">
+              <span class="playlist-cockpit-mini-label">Library</span>
+              <strong class="playlist-cockpit-mini-value" data-counter="${libraryAssets}">0</strong>
+              <span class="playlist-cockpit-mini-detail">assets de vídeo</span>
+            </div>
+          </article>
+          <article class="playlist-cockpit-mini" data-tone="success">
+            <div class="playlist-cockpit-mini-icon">⭐</div>
+            <div class="playlist-cockpit-mini-info">
+              <span class="playlist-cockpit-mini-label">Maior playlist</span>
+              <strong class="playlist-cockpit-mini-value playlist-cockpit-mini-text">${escapeHtml((largestPlaylist?.name ?? '—').slice(0, 14) + ((largestPlaylist?.name ?? '').length > 14 ? '…' : ''))}</strong>
+              <span class="playlist-cockpit-mini-detail">${largestPlaylist ? `${formatNumber(largestPlaylist.items?.length ?? 0)} vídeos` : 'sem dados'}</span>
+            </div>
+          </article>
+          <article class="playlist-cockpit-mini" data-tone="warning">
+            <div class="playlist-cockpit-mini-icon">🔥</div>
+            <div class="playlist-cockpit-mini-info">
+              <span class="playlist-cockpit-mini-label">Mais usada</span>
+              <strong class="playlist-cockpit-mini-value playlist-cockpit-mini-text">${escapeHtml((mostDepleted?.name ?? '—').slice(0, 14) + ((mostDepleted?.name ?? '').length > 14 ? '…' : ''))}</strong>
+              <span class="playlist-cockpit-mini-detail">${mostDepleted && (mostDepleted.items?.length ?? 0) > 0 ? Math.round(((mostDepleted.items?.filter((i) => i.usedAt).length ?? 0) / (mostDepleted.items?.length ?? 1)) * 100) + '% consumida' : 'sem dados'}</span>
+            </div>
+          </article>
+        </div>
+
+        <div class="playlist-cockpit-footer">
+          <div class="playlist-cockpit-footer-bar">
+            <div class="playlist-cockpit-footer-bar-label">
+              <span>Distribuição global</span>
+              <strong>${100 - usagePct}% disponível</strong>
+            </div>
+            <div class="playlist-cockpit-footer-bar-track">
+              <div class="playlist-cockpit-footer-bar-fill" style="--width:${100 - usagePct}%"></div>
+            </div>
+          </div>
+          <div class="playlist-cockpit-footer-meta">
+            <span>${formatNumber(playlists.length)} playlists</span>
+            <span aria-hidden="true">·</span>
+            <span>${formatNumber(totalVideos)} vídeos</span>
+            <span aria-hidden="true">·</span>
+            <span>${formatNumber(libraryAssets)} library assets</span>
+            <span aria-hidden="true">·</span>
+            <span class="playlist-cockpit-status-badge ${playlists.length > 0 ? 'active' : 'inactive'}">${playlists.length > 0 ? '● ATIVO' : '○ VAZIO'}</span>
+          </div>
+        </div>
       </section>
 
       <section class="platform-dashboard-main-grid">
@@ -5180,6 +5802,8 @@ async function renderPlaylistsPage() {
       </section>
     `,
   });
+
+  animatePlaylistCockpit();
 
   document.getElementById('scan-folder-submit')?.addEventListener('click', async () => {
     const form = document.getElementById('scan-folder-form');

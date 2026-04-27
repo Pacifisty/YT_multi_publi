@@ -127,6 +127,36 @@ export function createApiRouter(options: {
         paramNames: [],
         handler: (req: AccountPlanRequest) => accountPlanController.claimMonthlyGrant(req),
       },
+      {
+        method: 'GET',
+        pattern: /^\/api\/account\/plans$/,
+        paramNames: [],
+        handler: (req: AccountPlanRequest) => accountPlanController.listPlans(req),
+      },
+      {
+        method: 'POST',
+        pattern: /^\/api\/account\/plan\/checkout$/,
+        paramNames: [],
+        handler: (req: AccountPlanRequest) => accountPlanController.createCheckout(req),
+      },
+      {
+        method: 'GET',
+        pattern: /^\/api\/account\/payments$/,
+        paramNames: [],
+        handler: (req: AccountPlanRequest) => accountPlanController.listMyPayments(req),
+      },
+      {
+        method: 'GET',
+        pattern: /^\/api\/account\/payments\/([^/]+)$/,
+        paramNames: ['intentId'],
+        handler: (req: AccountPlanRequest) => accountPlanController.getPaymentIntent(req),
+      },
+      {
+        method: 'POST',
+        pattern: /^\/api\/account\/payments\/webhook$/,
+        paramNames: [],
+        handler: (req: AccountPlanRequest) => accountPlanController.paymentWebhook(req),
+      },
     );
   }
 

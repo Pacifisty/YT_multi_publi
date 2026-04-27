@@ -71,6 +71,31 @@ export function resolveFrontendAsset(path: string): FrontendAsset | null {
     };
   }
 
+  if (path === '/tiktokNVSgdCAUsAxDS5TEw8yXUi7A1FSf6jKc.txt') {
+    return {
+      contentType: 'text/plain; charset=utf-8',
+      body: 'tiktok-developers-site-verification=NVSgdCAUsAxDS5TEw8yXUi7A1FSf6jKc',
+    };
+  }
+
+  if (path === '/privacy/tiktokXNH7PCMgnzRsFGVTsZ1YT3rs9gEuFJgv.txt') {
+    return {
+      contentType: 'text/plain; charset=utf-8',
+      body: 'tiktok-developers-site-verification=XNH7PCMgnzRsFGVTsZ1YT3rs9gEuFJgv',
+    };
+  }
+
+  if (
+    path === '/tiktokzsdDYJcFSlyxl0sCmWarxBHG2i9LXTCl.txt' ||
+    path === '/terms/tiktokzsdDYJcFSlyxl0sCmWarxBHG2i9LXTCl.txt' ||
+    path === '/privacy/tiktokzsdDYJcFSlyxl0sCmWarxBHG2i9LXTCl.txt'
+  ) {
+    return {
+      contentType: 'text/plain; charset=utf-8',
+      body: 'tiktok-developers-site-verification=zsdDYJcFSlyxl0sCmWarxBHG2i9LXTCl',
+    };
+  }
+
   return null;
 }
 

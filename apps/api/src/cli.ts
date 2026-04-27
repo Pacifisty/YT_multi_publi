@@ -41,6 +41,9 @@ async function main(): Promise<void> {
   const host = process.env.HOST ?? '127.0.0.1';
   // Keep logs explicit so local startup status is easy to spot.
   console.log(`[api] running on http://${host}:${server.port}`);
+  if (process.env.PUBLIC_APP_URL) {
+    console.log(`[api] public URL: ${process.env.PUBLIC_APP_URL}`);
+  }
 }
 
 main().catch((error: unknown) => {

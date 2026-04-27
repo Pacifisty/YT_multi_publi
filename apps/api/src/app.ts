@@ -18,6 +18,7 @@ import { ScheduledLaunchChecker } from './campaigns/scheduled-launch-checker';
 import { PublicMediaUrlService } from './media/public-media-url.service';
 import { AccountPlanService, type AccountPlanStore } from './account-plan/account-plan.service';
 import { AccountPlanController } from './account-plan/account-plan.controller';
+import { PaymentService } from './account-plan/payment.service';
 import { SessionGuard } from './auth/session.guard';
 
 export interface BackgroundProcessor {

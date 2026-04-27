@@ -1,9 +1,10 @@
 import type { CampaignRecord } from '../campaigns/campaign.service';
 
-export type AccountPlanType = 'FREE' | 'BASIC' | 'PRO';
-export type AccountDepthProfile = 'light' | 'balanced' | 'deep';
+export type AccountPlanType = 'FREE' | 'BASIC' | 'PRO' | 'PREMIUM';
+export type AccountDepthProfile = 'light' | 'balanced' | 'deep' | 'enterprise';
 
 export interface AccountPlanDefinition {
+  id: string;
   code: AccountPlanType;
   label: string;
   priceBrl: number | null;
@@ -14,6 +15,8 @@ export interface AccountPlanDefinition {
   thumbnailCostTokens: number;
   allowedPlatforms: string[];
   depthProfile: AccountDepthProfile;
+  benefits: string[];
+  active: boolean;
 }
 
 export interface AccountPlanRecord {
@@ -30,6 +33,7 @@ export interface AccountPlanRecord {
 }
 
 export interface AccountPlanSummary {
+  id: string;
   email: string;
   plan: AccountPlanType;
   planLabel: string;
@@ -47,6 +51,8 @@ export interface AccountPlanSummary {
   monthlyGrantClaimedThisMonth: boolean;
   allowedPlatforms: string[];
   depthProfile: AccountDepthProfile;
+  benefits: string[];
+  active: boolean;
 }
 
 export interface MonthlyGrantResult {
@@ -67,9 +73,10 @@ export interface AccountPlanServiceOptions {
 
 export const ACCOUNT_PLAN_DEFINITIONS: Record<AccountPlanType, AccountPlanDefinition> = {
   FREE: {
+    id: 'plan_free',
     code: 'FREE',
     label: 'Free',
-    priceBrl: null,
+    priceBrl: 0,
     durationDays: null,
     maxTokens: 150,
     dailyVisitTokens: 15,
@@ -77,11 +84,20 @@ export const ACCOUNT_PLAN_DEFINITIONS: Record<AccountPlanType, AccountPlanDefini
     thumbnailCostTokens: 1,
     allowedPlatforms: ['youtube'],
     depthProfile: 'light',
+    benefits: [
+      'Publicação no YouTube',
+      '150 tokens mensais',
+      '+15 tokens por visita diária',
+      'Custo de 2 tokens por publicação',
+      'Suporte da comunidade',
+    ],
+    active: true,
   },
   BASIC: {
+    id: 'plan_basic',
     code: 'BASIC',
-    label: 'Basic',
-    priceBrl: 9.99,
+    label: 'Básico',
+    priceBrl: 19.90,
     durationDays: 30,
     maxTokens: 400,
     dailyVisitTokens: 40,
@@ -89,11 +105,21 @@ export const ACCOUNT_PLAN_DEFINITIONS: Record<AccountPlanType, AccountPlanDefini
     thumbnailCostTokens: 0,
     allowedPlatforms: ['youtube'],
     depthProfile: 'balanced',
+    benefits: [
+      'Publicação no YouTube',
+      '400 tokens mensais',
+      '+40 tokens por visita diária',
+      'Thumbnails incluídas (sem custo extra)',
+      'Custo de 2 tokens por publicação',
+      'Suporte por email',
+    ],
+    active: true,
   },
   PRO: {
+    id: 'plan_pro',
     code: 'PRO',
     label: 'Pro',
-    priceBrl: 19.99,
+    priceBrl: 49.90,
     durationDays: 30,
     maxTokens: 800,
     dailyVisitTokens: 80,
@@ -101,6 +127,42 @@ export const ACCOUNT_PLAN_DEFINITIONS: Record<AccountPlanType, AccountPlanDefini
     thumbnailCostTokens: 0,
     allowedPlatforms: ['youtube', 'tiktok'],
     depthProfile: 'deep',
+    benefits: [
+      'Publicação no YouTube + TikTok',
+      '800 tokens mensais',
+      '+80 tokens por visita diária',
+      'Thumbnails incluídas (sem custo extra)',
+      'Playlists com auto-rotação',
+      'Agendamento aleatório avançado',
+      'Suporte prioritário',
+    ],
+    active: true,
+  },
+  PREMIUM: {
+    id: 'plan_premium',
+    code: 'PREMIUM',
+    label: 'Premium',
+    priceBrl: 99.90,
+    durationDays: 30,
+    maxTokens: 2000,
+    dailyVisitTokens: 200,
+    campaignPublishCostTokens: 1,
+    thumbnailCostTokens: 0,
+    allowedPlatforms: ['youtube', 'tiktok'],
+    depthProfile: 'enterprise',
+    benefits: [
+      'Publicação no YouTube + TikTok',
+      '2000 tokens mensais',
+      '+200 tokens por visita diária',
+      'Custo reduzido de 1 token por publicação',
+      'Thumbnails incluídas (sem custo extra)',
+      'Playlists ilimitadas com auto-rotação',
+      'Agendamento aleatório avançado',
+      'Geração de títulos por IA',
+      'Suporte dedicado 24/7',
+      'Acesso antecipado a novos recursos',
+    ],
+    active: true,
   },
 };
 
@@ -338,7 +400,7 @@ export class AccountPlanService {
   }
 
   private isExpired(record: AccountPlanRecord): boolean {
-    if ((record.plan === 'BASIC' || record.plan === 'PRO') && record.billingExpiresAt) {
+    if (record.plan !== 'FREE' && record.billingExpiresAt) {
       return new Date(record.billingExpiresAt).getTime() <= this.now().getTime();
     }
 
@@ -350,6 +412,7 @@ export class AccountPlanService {
     const expiryMs = record.billingExpiresAt ? new Date(record.billingExpiresAt).getTime() : null;
 
     return {
+      id: definition.id,
       email: record.email,
       plan: record.plan,
       planLabel: definition.label,
@@ -367,7 +430,13 @@ export class AccountPlanService {
       monthlyGrantClaimedThisMonth: this.toBusinessMonth(record.lastMonthlyGrantAt) === this.getBusinessMonth(),
       allowedPlatforms: [...definition.allowedPlatforms],
       depthProfile: definition.depthProfile,
+      benefits: [...definition.benefits],
+      active: definition.active,
     };
+  }
+
+  listAvailablePlans(): AccountPlanDefinition[] {
+    return Object.values(ACCOUNT_PLAN_DEFINITIONS).filter((p) => p.active);
   }
 
   private getBusinessDate(): string {

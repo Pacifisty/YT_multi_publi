@@ -19,6 +19,7 @@ import { PublicMediaUrlService } from './media/public-media-url.service';
 import { AccountPlanService, type AccountPlanStore } from './account-plan/account-plan.service';
 import { AccountPlanController } from './account-plan/account-plan.controller';
 import { PaymentService } from './account-plan/payment.service';
+import { MercadoPagoPaymentProviderAdapter } from './account-plan/mercadopago-payment.adapter';
 import { SessionGuard } from './auth/session.guard';
 
 export interface BackgroundProcessor {
@@ -71,9 +72,20 @@ export function createApp(config: AppConfig = {}): AppInstance {
   const accountPlanService = new AccountPlanService({
     store: config.accountPlanStore,
   });
+  const mercadopagoAccessToken = config.env?.MERCADOPAGO_ACCESS_TOKEN;
+  const paymentProvider = mercadopagoAccessToken
+    ? new MercadoPagoPaymentProviderAdapter({
+        accessToken: mercadopagoAccessToken,
+        webhookSecret: config.env?.MERCADOPAGO_WEBHOOK_SECRET,
+      })
+    : undefined;
+  const paymentProviderName = paymentProvider?.name ?? 'mock';
+  console.log(`[api] payment provider: ${paymentProviderName}`);
   const paymentService = new PaymentService({
+    provider: paymentProvider,
     defaultSuccessUrl: config.env?.PAYMENT_SUCCESS_URL,
     defaultCancelUrl: config.env?.PAYMENT_CANCEL_URL,
+    defaultNotificationUrl: config.env?.PAYMENT_WEBHOOK_URL,
   });
   const accountPlanController = new AccountPlanController(
     accountPlanService,

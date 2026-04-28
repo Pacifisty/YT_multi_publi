@@ -237,6 +237,7 @@ model PublishJob {
   progressPercent    Int              @default(0) @map("progress_percent")
   youtubeVideoId     String?          @map("youtube_video_id")
   errorMessage       String?          @map("error_message")
+  errorClass         String?          @map("error_class")
   startedAt          DateTime?        @map("started_at")
   completedAt        DateTime?        @map("completed_at")
   createdAt          DateTime         @default(now()) @map("created_at")

@@ -19,6 +19,14 @@ export interface AccountPlanDefinition {
   active: boolean;
 }
 
+export interface TokenPackDefinition {
+  id: string;
+  label: string;
+  tokens: number;
+  priceBrl: number;
+  active: boolean;
+}
+
 export interface AccountPlanRecord {
   email: string;
   plan: AccountPlanType;
@@ -70,6 +78,30 @@ export interface AccountPlanServiceOptions {
   now?: () => Date;
   store?: AccountPlanStore;
 }
+
+export const TOKEN_PACK_DEFINITIONS: Record<string, TokenPackDefinition> = {
+  pack_small: {
+    id: 'pack_small',
+    label: 'Pacote 100 tokens',
+    tokens: 100,
+    priceBrl: 9.90,
+    active: true,
+  },
+  pack_medium: {
+    id: 'pack_medium',
+    label: 'Pacote 300 tokens',
+    tokens: 300,
+    priceBrl: 24.90,
+    active: true,
+  },
+  pack_large: {
+    id: 'pack_large',
+    label: 'Pacote 1000 tokens',
+    tokens: 1000,
+    priceBrl: 69.90,
+    active: true,
+  },
+};
 
 export const ACCOUNT_PLAN_DEFINITIONS: Record<AccountPlanType, AccountPlanDefinition> = {
   FREE: {
@@ -202,13 +234,49 @@ export class AccountPlanTokenError extends Error {
   }
 }
 
+export interface CreditTokensResult {
+  credited: boolean;
+  grantedTokens: number;
+  account: AccountPlanSummary;
+}
+
 export class AccountPlanService {
   private readonly now: () => Date;
   private readonly store: AccountPlanStore;
+  private readonly creditedKeys = new Set<string>();
 
   constructor(options: AccountPlanServiceOptions = {}) {
     this.now = options.now ?? (() => new Date());
     this.store = options.store ?? new InMemoryAccountPlanStore();
+  }
+
+  async creditTokens(email: string, amount: number, idempotencyKey: string): Promise<CreditTokensResult> {
+    if (amount <= 0) {
+      throw new Error('Token credit amount must be positive.');
+    }
+    if (!idempotencyKey) {
+      throw new Error('Idempotency key is required for token credit.');
+    }
+
+    const record = await this.getOrCreateRecord(email);
+
+    if (this.creditedKeys.has(idempotencyKey)) {
+      return { credited: false, grantedTokens: 0, account: this.toSummary(record) };
+    }
+
+    const updated = await this.store.save({
+      ...record,
+      tokens: record.tokens + amount,
+      updatedAt: this.now().toISOString(),
+    });
+
+    this.creditedKeys.add(idempotencyKey);
+
+    return { credited: true, grantedTokens: amount, account: this.toSummary(updated) };
+  }
+
+  listAvailableTokenPacks(): TokenPackDefinition[] {
+    return Object.values(TOKEN_PACK_DEFINITIONS).filter((p) => p.active);
   }
 
   async getAccount(email: string): Promise<AccountPlanSummary> {

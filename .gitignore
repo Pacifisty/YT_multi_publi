@@ -65,3 +65,4 @@ vendor/
 *.log
 .cache/
 tmp/
+# GSD planning docs are version-controlled

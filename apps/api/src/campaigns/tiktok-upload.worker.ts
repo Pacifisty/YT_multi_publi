@@ -1,6 +1,7 @@
 import type { AuditEventService } from './audit-event.service';
 import type { CampaignService, CampaignTargetRecord } from './campaign.service';
 import type { PublishJobRecord, PublishJobService } from './publish-job.service';
+import { classifyPublishError } from './error-classifier';
 
 const SYSTEM_AUDIT_ACTOR_EMAIL = 'system@internal';
 
@@ -83,7 +84,9 @@ export class TikTokUploadWorker {
     campaignVideoAssetId: string,
   ): Promise<PublishJobRecord | null> {
     if (!target.connectedAccountId) {
-      const failedJob = await this.jobService.markFailed(job.id, 'TikTok target is missing connectedAccountId');
+      const failedJob = await this.jobService.markFailed(job.id, 'TikTok target is missing connectedAccountId', {
+        errorClass: 'permanent',
+      });
       await this.campaignService.updateTargetStatus(target.campaignId, target.id, 'erro', {
         errorMessage: 'TikTok target is missing connectedAccountId',
       });
@@ -119,7 +122,9 @@ export class TikTokUploadWorker {
       return completedJob;
     } catch (error) {
       const errorMessage = normalizePublishErrorMessage(error);
-      const failedJob = await this.jobService.markFailed(job.id, errorMessage);
+      const failedJob = await this.jobService.markFailed(job.id, errorMessage, {
+        errorClass: classifyPublishError(error),
+      });
       await this.campaignService.updateTargetStatus(target.campaignId, target.id, 'erro', {
         errorMessage,
       });

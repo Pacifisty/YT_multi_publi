@@ -1153,8 +1153,12 @@ const api = {
   accountPlanSummary: () => apiRequest('GET', '/api/account/plan'),
   listPlans: () => apiRequest('GET', '/api/account/plans'),
   selectAccountPlan: (plan) => apiRequest('POST', '/api/account/plan/select', { plan }),
+  checkoutPlan: (plan) => apiRequest('POST', '/api/account/plan/checkout', { plan }),
   claimDailyVisit: () => apiRequest('POST', '/api/account/plan/visit'),
   claimMonthlyGrant: () => apiRequest('POST', '/api/account/plan/monthly'),
+  listTokenPacks: () => apiRequest('GET', '/api/account/tokens/packs'),
+  buyTokenPack: (packId) => apiRequest('POST', '/api/account/tokens/checkout', { packId }),
+  markPaymentPaid: (intentId) => apiRequest('POST', `/api/account/payments/${encodeURIComponent(intentId)}/mark-paid`),
   dashboard: () => apiRequest('GET', '/api/dashboard'),
   campaigns: (filters = {}) => apiRequest('GET', buildUrl('/api/campaigns', filters)),
   campaignById: (id) => apiRequest('GET', `/api/campaigns/${encodeURIComponent(id)}`),
@@ -3017,6 +3021,27 @@ async function renderPlanosPage(options = {}) {
 
   const planCardsHtml = mergedOptions.map((option) => renderWorkspacePlanCard(option, account)).join('');
 
+  const packsResult = await api.listTokenPacks();
+  const packs = packsResult.ok ? (packsResult.body?.packs ?? []) : [];
+  const tokenPacksHtml = packs.length === 0 ? '' : `
+    <section class="card stack plan-section">
+      <h2>Comprar tokens avulsos</h2>
+      <p>Pacotes únicos que somam ao seu saldo. Não substituem a assinatura mensal.</p>
+      <div class="plan-grid">
+        ${packs.map((pack) => `
+          <article class="plan-card">
+            <header>
+              <h3>${escapeHtml(pack.label)}</h3>
+              <strong>R$ ${pack.priceBrl.toFixed(2).replace('.', ',')}</strong>
+            </header>
+            <p><strong>${pack.tokens}</strong> tokens</p>
+            <button class="btn primary" data-action="buy-token-pack" data-pack-id="${escapeHtml(pack.id)}">Comprar</button>
+          </article>
+        `).join('')}
+      </div>
+    </section>
+  `;
+
   renderWorkspaceShell({
     title: 'Planos',
     subtitle: `Plano atual: ${account?.planLabel ?? '—'} | Saldo: ${account?.tokens ?? 0} tokens`,
@@ -3025,6 +3050,7 @@ async function renderPlanosPage(options = {}) {
       <section class="plan-grid">
         ${planCardsHtml}
       </section>
+      ${tokenPacksHtml}
       <section class="card stack plan-section">
         <h2>Como funcionam os planos</h2>
         <ul class="stack plan-rules">
@@ -3044,18 +3070,99 @@ async function renderPlanosPage(options = {}) {
       const planId = button.getAttribute('data-plan-id');
       if (!planId) return;
 
-      setButtonBusy(button, true, 'Salvando...');
-      const selectResult = await api.selectAccountPlan(planId);
-      setButtonBusy(button, false);
+      // FREE: troca direta sem pagamento. Pagos: passa pelo checkout do provider.
+      if (planId === 'FREE') {
+        setButtonBusy(button, true, 'Salvando...');
+        const selectResult = await api.selectAccountPlan(planId);
+        setButtonBusy(button, false);
 
-      if (!selectResult.ok) {
-        await renderPlanosPage({ error: selectResult.error });
+        if (!selectResult.ok) {
+          await renderPlanosPage({ error: selectResult.error });
+          return;
+        }
+
+        state.account = selectResult.body?.account ?? state.account;
+        await ensureAccountPlan(true);
+        await renderPlanosPage({ success: `Plano ${planId} ativado com sucesso!` });
         return;
       }
 
-      state.account = selectResult.body?.account ?? state.account;
+      setButtonBusy(button, true, 'Iniciando checkout...');
+      const checkoutResult = await api.checkoutPlan(planId);
+
+      if (!checkoutResult.ok) {
+        setButtonBusy(button, false);
+        await renderPlanosPage({ error: checkoutResult.error });
+        return;
+      }
+
+      const redirectUrl = checkoutResult.body?.redirectUrl;
+      if (redirectUrl) {
+        window.location.assign(redirectUrl);
+        return;
+      }
+
+      // Provider mock (sem URL): marca como pago direto (somente em dev)
+      const intentId = checkoutResult.body?.intent?.id;
+      if (!intentId) {
+        setButtonBusy(button, false);
+        await renderPlanosPage({ error: 'Checkout iniciado mas sem URL de redirect.' });
+        return;
+      }
+
+      setButtonBusy(button, true, 'Confirmando pagamento (mock)...');
+      const paidResult = await api.markPaymentPaid(intentId);
+      setButtonBusy(button, false);
+
+      if (!paidResult.ok) {
+        await renderPlanosPage({ error: paidResult.error });
+        return;
+      }
+
       await ensureAccountPlan(true);
       await renderPlanosPage({ success: `Plano ${planId} ativado com sucesso!` });
+    });
+  });
+
+  document.querySelectorAll('[data-action="buy-token-pack"]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const packId = button.getAttribute('data-pack-id');
+      if (!packId) return;
+
+      setButtonBusy(button, true, 'Iniciando checkout...');
+      const checkoutResult = await api.buyTokenPack(packId);
+
+      if (!checkoutResult.ok) {
+        setButtonBusy(button, false);
+        await renderPlanosPage({ error: checkoutResult.error });
+        return;
+      }
+
+      const redirectUrl = checkoutResult.body?.redirectUrl;
+      if (redirectUrl) {
+        window.location.assign(redirectUrl);
+        return;
+      }
+
+      // Mock provider sem redirectUrl: marca como pago direto (somente em dev)
+      const intentId = checkoutResult.body?.intent?.id;
+      if (!intentId) {
+        setButtonBusy(button, false);
+        await renderPlanosPage({ error: 'Nao foi possivel iniciar checkout (sem intent).' });
+        return;
+      }
+
+      setButtonBusy(button, true, 'Confirmando pagamento (mock)...');
+      const paidResult = await api.markPaymentPaid(intentId);
+      setButtonBusy(button, false);
+
+      if (!paidResult.ok) {
+        await renderPlanosPage({ error: paidResult.error });
+        return;
+      }
+
+      await ensureAccountPlan(true);
+      await renderPlanosPage({ success: 'Tokens creditados com sucesso!' });
     });
   });
 }

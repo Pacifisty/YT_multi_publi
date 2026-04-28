@@ -122,8 +122,9 @@ describe('E2E: full publish flow', () => {
     let callCount = 0;
     const { campaignService, jobService, launchService, runner } = createE2EStack(async (ctx) => {
       callCount++;
-      // Fail on the first attempt for the second target
-      if (callCount === 2) throw new Error('quotaExceeded');
+      // Fail on the first attempt for the second target with a TRANSIENT error
+      // (permanent classifier patterns short-circuit retry — see error-classifier.ts).
+      if (callCount === 2) throw new Error('connection reset');
       return { videoId: `yt-${callCount}` };
     });
 
@@ -142,7 +143,7 @@ describe('E2E: full publish flow', () => {
     expect(afterFirst.campaign.status).toBe('completed');
     const failedTarget = afterFirst.campaign.targets.find((t) => t.status === 'erro')!;
     expect(failedTarget).toBeDefined();
-    expect(failedTarget.errorMessage).toBe('quotaExceeded');
+    expect(failedTarget.errorMessage).toBe('connection reset');
 
     // Retry the failed target's job
     const failedJobs = await jobService.getJobsForTarget(failedTarget.id);

@@ -1,6 +1,7 @@
 import type { PublishJobRecord, PublishJobService } from './publish-job.service';
 import type { CampaignService, CampaignTargetRecord } from './campaign.service';
 import type { AuditEventService } from './audit-event.service';
+import { classifyPublishError } from './error-classifier';
 import { isChannelTokenResolverError } from '../integrations/youtube/channel-token-resolver';
 
 export interface UploadContext {
@@ -88,13 +89,13 @@ export class YouTubeUploadWorker {
     // Find the target for this job
     const target = await this.findTargetForJob(job);
     if (!target) {
-      return await this.jobService.markFailed(job.id, 'Target not found');
+      return await this.jobService.markFailed(job.id, 'Target not found', { errorClass: 'permanent' });
     }
 
     // Find the campaign to get videoAssetId
     const campaignResult = await this.campaignService.getCampaign(target.campaignId);
     if (!campaignResult) {
-      return this.jobService.markFailed(job.id, 'Campaign not found');
+      return this.jobService.markFailed(job.id, 'Campaign not found', { errorClass: 'permanent' });
     }
 
     return this.processPickedJob(job, target, campaignResult.campaign.videoAssetId);
@@ -106,7 +107,9 @@ export class YouTubeUploadWorker {
     campaignVideoAssetId: string,
   ): Promise<PublishJobRecord | null> {
     if (!target.channelId) {
-      const failedJob = await this.jobService.markFailed(job.id, 'YouTube target is missing channelId');
+      const failedJob = await this.jobService.markFailed(job.id, 'YouTube target is missing channelId', {
+        errorClass: 'permanent',
+      });
       await this.campaignService.updateTargetStatus(target.campaignId, target.id, 'erro', {
         errorMessage: 'YouTube target is missing channelId',
       });
@@ -154,8 +157,14 @@ export class YouTubeUploadWorker {
       const uploadedVideoId = error instanceof YouTubeUploadPartialFailureError
         ? error.videoId
         : undefined;
+      const errorClass = error instanceof YouTubeUploadPartialFailureError
+        ? 'permanent'
+        : classifyPublishError(error);
 
-      const failedJob = await this.jobService.markFailed(job.id, errorMessage, uploadedVideoId);
+      const failedJob = await this.jobService.markFailed(job.id, errorMessage, {
+        errorClass,
+        youtubeVideoId: uploadedVideoId,
+      });
       await this.campaignService.updateTargetStatus(target.campaignId, target.id, 'erro', {
         errorMessage,
         externalPublishId: uploadedVideoId,

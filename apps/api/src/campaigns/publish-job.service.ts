@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { PublishErrorClass } from './error-classifier';
 
 export interface PublishJobRecord {
   id: string;
@@ -8,9 +9,15 @@ export interface PublishJobRecord {
   progressPercent: number;
   youtubeVideoId: string | null;
   errorMessage: string | null;
+  errorClass: PublishErrorClass | null;
   startedAt: string | null;
   completedAt: string | null;
   createdAt: string;
+}
+
+export interface MarkFailedOptions {
+  errorClass?: PublishErrorClass;
+  youtubeVideoId?: string;
 }
 
 export interface PublishJobRepository {
@@ -98,6 +105,7 @@ export class PublishJobService {
           progressPercent: 0,
           youtubeVideoId: null,
           errorMessage: null,
+          errorClass: null,
           startedAt: null,
           completedAt: null,
           createdAt: nowIso,
@@ -132,18 +140,41 @@ export class PublishJobService {
     });
   }
 
-  async markFailed(jobId: string, errorMessage: string, youtubeVideoId?: string): Promise<PublishJobRecord | null> {
+  async markFailed(
+    jobId: string,
+    errorMessage: string,
+    youtubeVideoIdOrOptions?: string | MarkFailedOptions,
+  ): Promise<PublishJobRecord | null> {
+    const options: MarkFailedOptions =
+      typeof youtubeVideoIdOrOptions === 'string'
+        ? { youtubeVideoId: youtubeVideoIdOrOptions }
+        : (youtubeVideoIdOrOptions ?? {});
+
+    const youtubeVideoId =
+      typeof options.youtubeVideoId === 'string' && options.youtubeVideoId.trim()
+        ? options.youtubeVideoId.trim()
+        : null;
+
     return await this.repository.update(jobId, {
       status: 'failed',
       errorMessage,
-      youtubeVideoId: typeof youtubeVideoId === 'string' && youtubeVideoId.trim() ? youtubeVideoId.trim() : null,
+      errorClass: options.errorClass ?? null,
+      youtubeVideoId,
     });
   }
 
-  async retry(jobId: string): Promise<PublishJobRecord | { error: 'MAX_ATTEMPTS_REACHED' | 'NOT_FOUND' | 'INVALID_STATUS' }> {
+  async retry(
+    jobId: string,
+  ): Promise<
+    PublishJobRecord | { error: 'MAX_ATTEMPTS_REACHED' | 'NOT_FOUND' | 'INVALID_STATUS' | 'NON_RETRIABLE' }
+  > {
     const job = await this.repository.findById(jobId);
     if (!job) return { error: 'NOT_FOUND' };
     if (job.status !== 'failed') return { error: 'INVALID_STATUS' };
+
+    if (job.errorClass === 'permanent') {
+      return { error: 'NON_RETRIABLE' };
+    }
 
     if (job.attempt >= this.maxAttempts) {
       return { error: 'MAX_ATTEMPTS_REACHED' };
@@ -153,6 +184,7 @@ export class PublishJobService {
       status: 'queued',
       attempt: job.attempt + 1,
       errorMessage: null,
+      errorClass: null,
       youtubeVideoId: null,
       startedAt: null,
       completedAt: null,

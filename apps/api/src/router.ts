@@ -157,6 +157,24 @@ export function createApiRouter(options: {
         paramNames: [],
         handler: (req: AccountPlanRequest) => accountPlanController.paymentWebhook(req),
       },
+      {
+        method: 'POST',
+        pattern: /^\/api\/account\/payments\/([^/]+)\/mark-paid$/,
+        paramNames: ['intentId'],
+        handler: (req: AccountPlanRequest) => accountPlanController.markIntentPaid(req),
+      },
+      {
+        method: 'GET',
+        pattern: /^\/api\/account\/tokens\/packs$/,
+        paramNames: [],
+        handler: (req: AccountPlanRequest) => accountPlanController.listTokenPacks(req),
+      },
+      {
+        method: 'POST',
+        pattern: /^\/api\/account\/tokens\/checkout$/,
+        paramNames: [],
+        handler: (req: AccountPlanRequest) => accountPlanController.createTokenPackCheckout(req),
+      },
     );
   }
 

@@ -1,11 +1,22 @@
 import type { AuthController } from '../auth/auth.controller';
 import { SessionGuard, type SessionRequestLike } from '../auth/session.guard';
-import { ACCOUNT_PLAN_DEFINITIONS, AccountPlanAccessError, AccountPlanService, type AccountPlanType } from './account-plan.service';
+import {
+  ACCOUNT_PLAN_DEFINITIONS,
+  AccountPlanAccessError,
+  AccountPlanService,
+  TOKEN_PACK_DEFINITIONS,
+  type AccountPlanType,
+} from './account-plan.service';
 import type { PaymentService } from './payment.service';
+import { paymentLogger } from '../common/payment-logger';
 
 export interface AccountPlanRequest extends SessionRequestLike {
   body?: unknown;
   params?: Record<string, string>;
+}
+
+export interface AccountPlanControllerOptions {
+  allowDevMarkPaid?: boolean;
 }
 
 const VALID_PLAN_CODES: AccountPlanType[] = ['FREE', 'BASIC', 'PRO', 'PREMIUM'];
@@ -13,15 +24,18 @@ const VALID_PLAN_CODES: AccountPlanType[] = ['FREE', 'BASIC', 'PRO', 'PREMIUM'];
 export class AccountPlanController {
   private readonly authController?: AuthController;
   private readonly paymentService?: PaymentService;
+  private readonly allowDevMarkPaid: boolean;
 
   constructor(
     private readonly accountPlanService: AccountPlanService,
     private readonly sessionGuard: SessionGuard,
     authController?: AuthController,
     paymentService?: PaymentService,
+    options: AccountPlanControllerOptions = {},
   ) {
     this.authController = authController;
     this.paymentService = paymentService;
+    this.allowDevMarkPaid = options.allowDevMarkPaid ?? process.env.NODE_ENV !== 'production';
   }
 
   listPlans(_request: SessionRequestLike) {
@@ -40,6 +54,21 @@ export class AccountPlanController {
           allowedPlatforms: p.allowedPlatforms,
           durationDays: p.durationDays,
           benefits: p.benefits,
+          active: p.active,
+        })),
+      },
+    };
+  }
+
+  listTokenPacks(_request: SessionRequestLike) {
+    return {
+      status: 200,
+      body: {
+        packs: this.accountPlanService.listAvailableTokenPacks().map((p) => ({
+          id: p.id,
+          label: p.label,
+          tokens: p.tokens,
+          priceBrl: p.priceBrl,
           active: p.active,
         })),
       },
@@ -71,12 +100,60 @@ export class AccountPlanController {
     }
 
     try {
+      // Use provided URLs or construct from public app URL
+      const publicUrl = process.env.PUBLIC_APP_URL || `http://${process.env.HOST || '127.0.0.1'}:${process.env.PORT || '3000'}`;
       const result = await this.paymentService.createCheckout({
+        kind: 'plan',
         email,
-        planCode: definition.code,
         planDefinition: definition,
-        successUrl: body?.successUrl,
-        cancelUrl: body?.cancelUrl,
+        successUrl: body?.successUrl || `${publicUrl}/account/billing?payment_status=success`,
+        cancelUrl: body?.cancelUrl || `${publicUrl}/account/billing?payment_status=cancel`,
+      });
+      return {
+        status: 200,
+        body: {
+          intent: result.intent,
+          redirectUrl: result.redirectUrl,
+        },
+      };
+    } catch (error) {
+      return {
+        status: 500,
+        body: { error: error instanceof Error ? error.message : 'Nao foi possivel criar checkout.' },
+      };
+    }
+  }
+
+  async createTokenPackCheckout(request: AccountPlanRequest) {
+    const guardResult = this.sessionGuard.check(request);
+    if (!guardResult.allowed) {
+      return { status: guardResult.status, body: { error: guardResult.reason } };
+    }
+    const email = request.session?.adminUser?.email;
+    if (!email) {
+      return { status: 401, body: { error: 'Authentication required.' } };
+    }
+    if (!this.paymentService) {
+      return { status: 503, body: { error: 'Payment service not configured.' } };
+    }
+
+    const body = request.body as { packId?: string; successUrl?: string; cancelUrl?: string } | undefined;
+    const packId = typeof body?.packId === 'string' ? body.packId.trim() : '';
+    const pack = TOKEN_PACK_DEFINITIONS[packId];
+    if (!pack || !pack.active) {
+      const valid = Object.keys(TOKEN_PACK_DEFINITIONS).join(', ');
+      return { status: 400, body: { error: `Pacote invalido. Use ${valid}.` } };
+    }
+
+    try {
+      // Use provided URLs or construct from public app URL
+      const publicUrl = process.env.PUBLIC_APP_URL || `http://${process.env.HOST || '127.0.0.1'}:${process.env.PORT || '3000'}`;
+      const result = await this.paymentService.createCheckout({
+        kind: 'token_pack',
+        email,
+        pack,
+        successUrl: body?.successUrl || `${publicUrl}/account/tokens?payment_status=success`,
+        cancelUrl: body?.cancelUrl || `${publicUrl}/account/tokens?payment_status=cancel`,
       });
       return {
         status: 200,
@@ -139,17 +216,48 @@ export class AccountPlanController {
     const headers = (request as any).headers ?? {};
     const rawBody = typeof request.body === 'string' ? request.body : JSON.stringify(request.body ?? {});
     try {
+      paymentLogger.logWebhookReceived('webhook-in-progress', 'unknown', rawBody.length);
       const updated = await this.paymentService.handleWebhook(headers, rawBody);
-      if (updated?.status === 'paid') {
-        await this.accountPlanService.selectPlan(updated.email, updated.planCode);
+      if (updated) {
+        paymentLogger.logStatusUpdated(updated.id, 'unknown', updated.status, updated.provider);
+        if (updated?.status === 'paid') {
+          await this.applyPaidIntent(updated);
+        }
       }
       return { status: 200, body: { received: true, intent: updated } };
     } catch (error) {
+      paymentLogger.logError('unknown-webhook', 'webhook_handler', error instanceof Error ? error.message : 'Webhook processing failed.');
       return {
         status: 400,
         body: { error: error instanceof Error ? error.message : 'Webhook processing failed.' },
       };
     }
+  }
+
+  async markIntentPaid(request: AccountPlanRequest) {
+    if (!this.allowDevMarkPaid) {
+      return { status: 404, body: { error: 'Not found.' } };
+    }
+    const guardResult = this.sessionGuard.check(request);
+    if (!guardResult.allowed) {
+      return { status: guardResult.status, body: { error: guardResult.reason } };
+    }
+    if (!this.paymentService) {
+      return { status: 503, body: { error: 'Payment service not configured.' } };
+    }
+
+    const intentId = request.params?.intentId;
+    if (!intentId) {
+      return { status: 400, body: { error: 'Missing intent id.' } };
+    }
+
+    const updated = await this.paymentService.markStatus(intentId, 'paid');
+    if (!updated) {
+      return { status: 404, body: { error: 'Payment intent not found.' } };
+    }
+
+    await this.applyPaidIntent(updated);
+    return { status: 200, body: { intent: updated } };
   }
 
   async getCurrentPlan(request: SessionRequestLike) {
@@ -251,6 +359,24 @@ export class AccountPlanController {
           error: error instanceof Error ? error.message : 'Nao foi possivel atualizar o plano.',
         },
       };
+    }
+  }
+
+  private async applyPaidIntent(
+    intent: import('./payment.service').PaymentIntent,
+  ): Promise<void> {
+    try {
+      if (intent.purchase.kind === 'plan') {
+        await this.accountPlanService.selectPlan(intent.email, intent.purchase.planCode);
+        return;
+      }
+      if (intent.purchase.kind === 'token_pack') {
+        await this.accountPlanService.creditTokens(intent.email, intent.purchase.tokens, intent.id);
+        paymentLogger.logTokensCredited(intent.email, intent.purchase.tokens, intent.id);
+      }
+    } catch (error) {
+      paymentLogger.logError(intent.id, 'apply_paid_intent', error instanceof Error ? error.message : 'Failed to apply paid intent', { email: intent.email, purchaseKind: intent.purchase.kind });
+      throw error;
     }
   }
 }

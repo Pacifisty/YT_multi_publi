@@ -22,6 +22,11 @@ export interface CampaignTargetRecord {
   youtubeVideoId: string | null;
   errorMessage: string | null;
   retryCount: number;
+  // TikTok-specific fields
+  tiktokPrivacyLevel?: string | null;
+  tiktokDisableComment?: boolean | null;
+  tiktokDisableDuet?: boolean | null;
+  tiktokDisableStitch?: boolean | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -64,6 +69,29 @@ export interface AddTargetInput {
   playlistId?: string;
   privacy?: string;
   thumbnailAssetId?: string;
+}
+
+export interface CreateTikTokTargetInput {
+  connectedAccountId: string;
+  videoTitle: string;
+  privacy: 'PUBLIC_TO_EVERYONE' | 'FOLLOWER_OF_CREATOR' | 'SELF_ONLY';
+  disableComment?: boolean;
+  disableDuet?: boolean;
+  disableStitch?: boolean;
+}
+
+export interface ConnectedAccountRecord {
+  id: string;
+  provider: string;
+  displayName?: string | null;
+  email?: string | null;
+  status?: string;
+  ownerEmail?: string | null;
+}
+
+export interface AccountServiceProvider {
+  getConnectedAccount(id: string): Promise<ConnectedAccountRecord | null>;
+  listConnectedAccounts(ownerEmail: string, provider: string): Promise<ConnectedAccountRecord[]>;
 }
 
 export interface CampaignRepository {
@@ -135,6 +163,7 @@ export class InMemoryCampaignRepository implements CampaignRepository {
 
 export interface CampaignServiceOptions {
   repository?: CampaignRepository;
+  accountService?: AccountServiceProvider;
   now?: () => Date;
 }
 
@@ -143,10 +172,12 @@ export const DUPLICATE_CAMPAIGN_TARGET_DESTINATION_ERROR = DUPLICATE_CAMPAIGN_TA
 
 export class CampaignService {
   private readonly repository: CampaignRepository;
+  private readonly accountService?: AccountServiceProvider;
   private readonly now: () => Date;
 
   constructor(options: CampaignServiceOptions = {}) {
     this.repository = options.repository ?? new InMemoryCampaignRepository();
+    this.accountService = options.accountService;
     this.now = options.now ?? (() => new Date());
   }
 
@@ -260,6 +291,11 @@ export class CampaignService {
       youtubeVideoId: null,
       errorMessage: null,
       retryCount: 0,
+      // TikTok fields default to null for YouTube targets
+      tiktokPrivacyLevel: null,
+      tiktokDisableComment: null,
+      tiktokDisableDuet: null,
+      tiktokDisableStitch: null,
       createdAt: nowIso,
       updatedAt: nowIso,
     };
@@ -374,6 +410,11 @@ export class CampaignService {
       youtubeVideoId: null,
       errorMessage: null,
       retryCount: 0,
+      // TikTok-specific fields
+      tiktokPrivacyLevel: t.tiktokPrivacyLevel ?? null,
+      tiktokDisableComment: t.tiktokDisableComment ?? null,
+      tiktokDisableDuet: t.tiktokDisableDuet ?? null,
+      tiktokDisableStitch: t.tiktokDisableStitch ?? null,
       createdAt: nowIso,
       updatedAt: nowIso,
     }));
@@ -551,5 +592,141 @@ export class CampaignService {
 
     const updated = await this.repository.update(campaignId, patch);
     return { campaign: updated! };
+  }
+
+  /**
+   * Validate a TikTok account belongs to user and is connected
+   */
+  async validateTikTokAccount(
+    connectedAccountId: string,
+    ownerEmail: string,
+  ): Promise<{ valid: boolean; displayName?: string }> {
+    if (!this.accountService) {
+      throw new Error('Account service not configured');
+    }
+
+    const account = await this.accountService.getConnectedAccount(connectedAccountId);
+    if (!account) {
+      return { valid: false };
+    }
+
+    if (account.provider !== 'tiktok') {
+      throw new Error('Account is not a TikTok account');
+    }
+
+    if (account.ownerEmail && account.ownerEmail.toLowerCase() !== ownerEmail.toLowerCase()) {
+      return { valid: false };
+    }
+
+    return { valid: true, displayName: account.displayName ?? undefined };
+  }
+
+  /**
+   * List all connected TikTok accounts for a user
+   */
+  async listConnectedTikTokAccounts(ownerEmail: string): Promise<ConnectedAccountRecord[]> {
+    if (!this.accountService) {
+      throw new Error('Account service not configured');
+    }
+
+    return this.accountService.listConnectedAccounts(ownerEmail, 'tiktok');
+  }
+
+  /**
+   * Get all TikTok targets in a campaign
+   */
+  async getTikTokTargetsForCampaign(
+    campaignId: string,
+    ownerEmail?: string,
+  ): Promise<CampaignTargetRecord[]> {
+    const campaign = await this.resolveCampaign(campaignId, ownerEmail);
+    if (!campaign) {
+      return [];
+    }
+
+    return campaign.targets.filter((target) => target.platform === 'tiktok');
+  }
+
+  /**
+   * Create a TikTok campaign target
+   * Validates account ownership, TikTok provider, and title length
+   */
+  async createTikTokTarget(
+    campaignId: string,
+    input: CreateTikTokTargetInput,
+    ownerEmail?: string,
+  ): Promise<{ target: CampaignTargetRecord }> {
+    // Validate campaign exists and belongs to user
+    const campaign = await this.resolveCampaign(campaignId, ownerEmail);
+    if (!campaign) {
+      throw new Error(`Campaign ${campaignId} not found`);
+    }
+
+    if (!this.canMutateTargets(campaign.status)) {
+      throw new Error('Cannot add targets to an active campaign');
+    }
+
+    // Validate connected account
+    const validationResult = await this.validateTikTokAccount(
+      input.connectedAccountId,
+      ownerEmail || '',
+    );
+    if (!validationResult.valid) {
+      throw new Error('Account not found or not accessible');
+    }
+
+    // Validate title length (TikTok limit: 2,200 characters)
+    const MAX_TITLE_LENGTH = 2200;
+    let videoTitle = input.videoTitle;
+    if (videoTitle.length > MAX_TITLE_LENGTH) {
+      videoTitle = videoTitle.substring(0, MAX_TITLE_LENGTH);
+    }
+
+    // Check for duplicate TikTok target for same account
+    if (
+      campaign.targets.some(
+        (target) =>
+          target.platform === 'tiktok' && target.connectedAccountId === input.connectedAccountId,
+      )
+    ) {
+      throw new Error('Target for this TikTok account already exists in the campaign');
+    }
+
+    const nowIso = this.now().toISOString();
+    const target: CampaignTargetRecord = {
+      id: randomUUID(),
+      campaignId,
+      platform: 'tiktok',
+      destinationId: input.connectedAccountId,
+      destinationLabel: validationResult.displayName ?? null,
+      connectedAccountId: input.connectedAccountId,
+      channelId: null,
+      videoTitle,
+      videoDescription: '', // TikTok only uses title, no description field
+      tags: [],
+      publishAt: null,
+      playlistId: null,
+      privacy: 'SELF_ONLY', // Default privacy will be queried from creator info at publish time
+      thumbnailAssetId: null,
+      status: 'aguardando',
+      externalPublishId: null,
+      youtubeVideoId: null,
+      errorMessage: null,
+      retryCount: 0,
+      // TikTok-specific fields
+      tiktokPrivacyLevel: input.privacy,
+      tiktokDisableComment: input.disableComment ?? false,
+      tiktokDisableDuet: input.disableDuet ?? false,
+      tiktokDisableStitch: input.disableStitch ?? false,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    const result = await this.repository.addTarget(campaignId, target);
+    if (!result) {
+      throw new Error(`Campaign ${campaignId} not found`);
+    }
+
+    return { target: result };
   }
 }

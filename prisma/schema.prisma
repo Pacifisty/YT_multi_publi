@@ -188,6 +188,9 @@ enum TargetStatus {
   erro
 }
 
+/// Platform-specific campaign target
+/// - YouTube: channelId + playlistId
+/// - TikTok: connectedAccountId + privacyLevel + moderation settings
 model CampaignTarget {
   id                   String       @id @default(cuid())
   campaignId           String       @map("campaign_id")
@@ -211,6 +214,13 @@ model CampaignTarget {
   youtubeVideoId       String?      @map("youtube_video_id")
   errorMessage         String?      @map("error_message")
   retryCount           Int          @default(0) @map("retry_count")
+
+  // TikTok-specific fields (optional, null for YouTube targets)
+  tiktokPrivacyLevel      String?      @map("tiktok_privacy_level")     // PUBLIC_TO_EVERYONE, FOLLOWER_OF_CREATOR, SELF_ONLY
+  tiktokDisableComment    Boolean?     @map("tiktok_disable_comment")   // Disable comments
+  tiktokDisableDuet       Boolean?     @map("tiktok_disable_duet")      // Disable duets
+  tiktokDisableStitch     Boolean?     @map("tiktok_disable_stitch")    // Disable stitches
+
   createdAt            DateTime     @default(now()) @map("created_at")
   updatedAt            DateTime     @updatedAt @map("updated_at")
 
@@ -218,6 +228,7 @@ model CampaignTarget {
 
   @@index([campaignId])
   @@index([channelId])
+  @@index([connectedAccountId])
   @@map("campaign_targets")
 }
 

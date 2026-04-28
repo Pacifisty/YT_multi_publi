@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node';
 import type { AdminSession } from './auth/session.guard';
 import type { AuthModuleInstance } from './auth/auth.module';
 import { createAuthModule } from './auth/auth.module';
@@ -68,10 +69,28 @@ export interface AppInstance {
 /**
  * Creates the application instance.
  * May throw Error if payment config is invalid in production.
+ * Initializes Sentry error tracking if SENTRY_DSN is configured.
  */
 export function createApp(config: AppConfig = {}): AppInstance {
   const env = config.env ?? process.env;
   const nodeEnv = (env.NODE_ENV ?? 'development') as string;
+
+  // Initialize Sentry error tracking (only if DSN is configured)
+  if (env.SENTRY_DSN && nodeEnv === 'production') {
+    Sentry.init({
+      dsn: env.SENTRY_DSN,
+      environment: nodeEnv,
+      tracesSampleRate: 1.0,
+      integrations: [
+        new Sentry.Integrations.Http({ tracing: true }),
+        new Sentry.Integrations.OnUncaughtException(),
+        new Sentry.Integrations.OnUnhandledRejection(),
+      ],
+    });
+    console.log('[api] Sentry error tracking initialized');
+  } else if (nodeEnv === 'production') {
+    console.warn('[api] WARNING: SENTRY_DSN not configured. Error tracking is disabled.');
+  }
 
   // Validate payment config early; abort startup if critical vars missing
   validatePaymentConfig(env as Record<string, string | undefined>, nodeEnv);
@@ -207,16 +226,37 @@ export function createApp(config: AppConfig = {}): AppInstance {
   });
 
   async function handleRequest(request: HttpRequest): Promise<HttpResponse> {
-    // Delegate all routes to the unified API router
-    const apiResult = await router.handle({
-      method: request.method,
-      path: request.path,
-      session: request.session,
-      body: request.body,
-      query: request.query,
-    });
+    try {
+      // Delegate all routes to the unified API router
+      const apiResult = await router.handle({
+        method: request.method,
+        path: request.path,
+        session: request.session,
+        body: request.body,
+        query: request.query,
+      });
 
-    return { status: apiResult.status, body: apiResult.body, cookies: apiResult.cookies, redirect: (apiResult as any).redirect };
+      return { status: apiResult.status, body: apiResult.body, cookies: apiResult.cookies, redirect: (apiResult as any).redirect };
+    } catch (error) {
+      // Capture errors in Sentry with context
+      if (env.SENTRY_DSN && nodeEnv === 'production') {
+        Sentry.captureException(error, {
+          contexts: {
+            http: {
+              method: request.method,
+              url: request.path,
+              status_code: 500,
+            },
+          },
+          tags: {
+            component: 'handleRequest',
+          },
+        });
+      }
+
+      // Re-throw to maintain existing error handling behavior
+      throw error;
+    }
   }
 
   return {

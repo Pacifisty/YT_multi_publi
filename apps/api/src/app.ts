@@ -85,14 +85,17 @@ export function createApp(config: AppConfig = {}): AppInstance {
     store: config.accountPlanStore,
   });
   const mercadopagoAccessToken = config.env?.MERCADOPAGO_ACCESS_TOKEN;
+  const MERCADOPAGO_TIMEOUT_MS = 10000;
   const paymentProvider = mercadopagoAccessToken
     ? new MercadoPagoPaymentProviderAdapter({
         accessToken: mercadopagoAccessToken,
         webhookSecret: config.env?.MERCADOPAGO_WEBHOOK_SECRET,
+        timeoutMs: MERCADOPAGO_TIMEOUT_MS,
       })
     : undefined;
   const paymentProviderName = paymentProvider?.name ?? 'mock';
   console.log(`[api] payment provider: ${paymentProviderName}`);
+  console.log(`[api] mercadopago api timeout: ${MERCADOPAGO_TIMEOUT_MS}ms`);
   console.log('[api] webhook deduplication: disabled (prisma not initialized)');
   const paymentService = new PaymentService({
     provider: paymentProvider,

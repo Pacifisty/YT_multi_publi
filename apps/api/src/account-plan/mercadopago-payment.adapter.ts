@@ -12,12 +12,14 @@ import { paymentLogger } from '../common/payment-logger';
 export interface MercadoPagoPaymentAdapterOptions {
   accessToken: string;
   webhookSecret?: string;
+  timeoutMs?: number;
 }
 
 export class MercadoPagoPaymentProviderAdapter implements PaymentProviderAdapter {
   readonly name: PaymentProvider = 'mercadopago';
   private readonly config: MercadoPagoConfig;
   private readonly webhookSecret: string | undefined;
+  private readonly timeoutMs: number;
 
   constructor(options: MercadoPagoPaymentAdapterOptions) {
     if (!options.accessToken) {
@@ -25,12 +27,22 @@ export class MercadoPagoPaymentProviderAdapter implements PaymentProviderAdapter
     }
     this.config = new MercadoPagoConfig({ accessToken: options.accessToken });
     this.webhookSecret = options.webhookSecret;
+    this.timeoutMs = options.timeoutMs ?? 10000;
+  }
+
+  private async withTimeout<T>(promise: Promise<T>): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error(`Request timeout after ${this.timeoutMs}ms`)), this.timeoutMs),
+      ),
+    ]);
   }
 
   async createCheckout(input: ProviderCheckoutInput): Promise<{ providerIntentId: string; checkoutUrl: string | null }> {
     const preference = new Preference(this.config);
     const item = describeItem(input);
-    const result = await preference.create({
+    const result = await this.withTimeout(preference.create({
       body: {
         items: [
           {
@@ -52,7 +64,7 @@ export class MercadoPagoPaymentProviderAdapter implements PaymentProviderAdapter
         external_reference: input.externalReference,
         statement_descriptor: 'YTMULTIPUBLI',
       },
-    });
+    }));
 
     const id = result.id;
     if (!id) {
@@ -90,7 +102,7 @@ export class MercadoPagoPaymentProviderAdapter implements PaymentProviderAdapter
     }
 
     const payment = new Payment(this.config);
-    const result = await payment.get({ id: dataIdString });
+    const result = await this.withTimeout(payment.get({ id: dataIdString }));
     if (!result) {
       paymentLogger.logError(dataIdString, 'payment_fetch', 'MercadoPago API returned null');
       return null;

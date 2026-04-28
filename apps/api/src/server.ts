@@ -36,14 +36,21 @@ export function createServer(options: ServerOptions): ServerInstance {
     throw new Error(`Invalid environment configuration:\n${messages}`);
   }
 
-  const app = createApp({
-    env: options.env,
-    authModuleOptions: options.authModuleOptions,
-    campaignsModuleOptions: options.campaignsModuleOptions,
-    accountsModuleOptions: options.accountsModuleOptions,
-    mediaModuleOptions: options.mediaModuleOptions,
-    accountPlanStore: options.accountPlanStore,
-  });
+  let app: AppInstance;
+  try {
+    // Payment config validation errors cause startup abort with exit code 1
+    app = createApp({
+      env: options.env,
+      authModuleOptions: options.authModuleOptions,
+      campaignsModuleOptions: options.campaignsModuleOptions,
+      accountsModuleOptions: options.accountsModuleOptions,
+      mediaModuleOptions: options.mediaModuleOptions,
+      accountPlanStore: options.accountPlanStore,
+    });
+  } catch (error) {
+    console.error('[startup] Fatal error:', error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 
   const requestHandler = createRequestHandler({
     app,

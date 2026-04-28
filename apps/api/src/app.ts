@@ -21,6 +21,7 @@ import { AccountPlanController } from './account-plan/account-plan.controller';
 import { PaymentService } from './account-plan/payment.service';
 import { MercadoPagoPaymentProviderAdapter } from './account-plan/mercadopago-payment.adapter';
 import { PrismaWebhookDeduplicator } from './account-plan/webhook-deduplication';
+import { validatePaymentConfig } from './startup/payment-startup-validator';
 import { SessionGuard } from './auth/session.guard';
 
 export interface BackgroundProcessor {
@@ -64,7 +65,17 @@ export interface AppInstance {
   accountPlanController: AccountPlanController;
 }
 
+/**
+ * Creates the application instance.
+ * May throw Error if payment config is invalid in production.
+ */
 export function createApp(config: AppConfig = {}): AppInstance {
+  const env = config.env ?? process.env;
+  const nodeEnv = (env.NODE_ENV ?? 'development') as string;
+
+  // Validate payment config early; abort startup if critical vars missing
+  validatePaymentConfig(env as Record<string, string | undefined>, nodeEnv);
+
   const publicMediaUrlService = createPublicMediaUrlService(config.env);
   const authModule = createAuthModule({
     env: config.env,

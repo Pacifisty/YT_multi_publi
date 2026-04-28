@@ -58,6 +58,7 @@ export interface ProviderCheckoutInput {
 
 export interface VerifiedWebhook {
   providerIntentId?: string;
+  providerEventId?: string;
   externalReference?: string;
   status: PaymentStatus;
 }
@@ -79,6 +80,7 @@ export interface PaymentRepository {
 export interface PaymentServiceOptions {
   provider?: PaymentProviderAdapter;
   repository?: PaymentRepository;
+  webhookDeduplicator?: any;
   now?: () => Date;
   defaultSuccessUrl?: string;
   defaultCancelUrl?: string;
@@ -88,6 +90,7 @@ export interface PaymentServiceOptions {
 export class PaymentService {
   private readonly provider: PaymentProviderAdapter;
   private readonly repository: PaymentRepository;
+  private readonly webhookDeduplicator: any;
   private readonly now: () => Date;
   private readonly defaultSuccessUrl: string | undefined;
   private readonly defaultCancelUrl: string | undefined;
@@ -96,6 +99,7 @@ export class PaymentService {
   constructor(options: PaymentServiceOptions = {}) {
     this.provider = options.provider ?? new MockPaymentProviderAdapter();
     this.repository = options.repository ?? new InMemoryPaymentRepository();
+    this.webhookDeduplicator = options.webhookDeduplicator ?? null;
     this.now = options.now ?? (() => new Date());
     this.defaultSuccessUrl = options.defaultSuccessUrl;
     this.defaultCancelUrl = options.defaultCancelUrl;
@@ -179,6 +183,19 @@ export class PaymentService {
     const verified = await this.provider.verifyWebhook(headers, rawBody);
     if (!verified) return null;
 
+    // Webhook idempotency: check if already processed
+    if (this.webhookDeduplicator && verified.providerEventId) {
+      const alreadyProcessed = await this.webhookDeduplicator.hasProcessedEvent(this.provider.name, verified.providerEventId);
+      if (alreadyProcessed) {
+        paymentLogger.logWebhookReceived(verified.externalReference || 'unknown', this.provider.name, rawBody.length);
+        let intent: PaymentIntent | null = null;
+        if (verified.externalReference) {
+          intent = await this.repository.findById(verified.externalReference);
+        }
+        return intent;
+      }
+    }
+
     let intent: PaymentIntent | null = null;
     if (verified.externalReference) {
       intent = await this.repository.findById(verified.externalReference);
@@ -196,7 +213,8 @@ export class PaymentService {
       updatedAt: this.now().toISOString(),
     });
 
-    if (updated) {
+    if (updated && this.webhookDeduplicator && verified.providerEventId) {
+      await this.webhookDeduplicator.recordWebhookEvent(this.provider.name, verified.providerEventId, intent.id, 'payment', rawBody);
       paymentLogger.logStatusUpdated(updated.id, oldStatus, updated.status, this.provider.name);
     }
 

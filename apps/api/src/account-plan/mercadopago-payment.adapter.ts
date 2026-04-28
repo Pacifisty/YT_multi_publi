@@ -80,8 +80,8 @@ export class MercadoPagoPaymentProviderAdapter implements PaymentProviderAdapter
       return null;
     }
 
+    const requestId = normalized['x-request-id'] ?? '';
     if (this.webhookSecret) {
-      const requestId = normalized['x-request-id'] ?? '';
       const signatureHeader = normalized['x-signature'] ?? '';
       if (!verifyMercadoPagoSignature(signatureHeader, this.webhookSecret, dataIdString, requestId)) {
         paymentLogger.logError(dataIdString || 'unknown', 'webhook_signature', 'Invalid or missing signature');
@@ -98,7 +98,9 @@ export class MercadoPagoPaymentProviderAdapter implements PaymentProviderAdapter
 
     // Note: PaymentResponse doesn't expose preference_id in the SDK types,
     // so we rely on external_reference (set by us at preference creation).
+    // Webhook event is identified by x-request-id header for deduplication
     return {
+      providerEventId: requestId,
       externalReference: result.external_reference ?? undefined,
       status: mapMercadoPagoStatus(result.status ?? 'pending'),
     };

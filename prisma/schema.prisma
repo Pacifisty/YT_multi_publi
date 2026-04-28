@@ -257,3 +257,21 @@ model AuditEvent {
   @@index([createdAt])
   @@map("audit_events")
 }
+
+model WebhookEvent {
+  id                String    @id @default(cuid())
+  provider          String
+  providerEventId   String    @map("provider_event_id")
+  externalReference String?   @map("external_reference")
+  eventType         String    @map("event_type")
+  status            String
+  rawPayload        String?   @map("raw_payload")
+  processedAt       DateTime? @map("processed_at")
+  errorMessage      String?   @map("error_message")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  @@unique([provider, providerEventId])
+  @@index([externalReference])
+  @@index([createdAt])
+  @@map("webhook_events")
+}

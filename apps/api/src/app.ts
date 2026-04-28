@@ -20,6 +20,7 @@ import { AccountPlanService, type AccountPlanStore } from './account-plan/accoun
 import { AccountPlanController } from './account-plan/account-plan.controller';
 import { PaymentService } from './account-plan/payment.service';
 import { MercadoPagoPaymentProviderAdapter } from './account-plan/mercadopago-payment.adapter';
+import { PrismaWebhookDeduplicator } from './account-plan/webhook-deduplication';
 import { SessionGuard } from './auth/session.guard';
 
 export interface BackgroundProcessor {
@@ -81,8 +82,10 @@ export function createApp(config: AppConfig = {}): AppInstance {
     : undefined;
   const paymentProviderName = paymentProvider?.name ?? 'mock';
   console.log(`[api] payment provider: ${paymentProviderName}`);
+  console.log('[api] webhook deduplication: disabled (prisma not initialized)');
   const paymentService = new PaymentService({
     provider: paymentProvider,
+    webhookDeduplicator: null,
     defaultSuccessUrl: config.env?.PAYMENT_SUCCESS_URL,
     defaultCancelUrl: config.env?.PAYMENT_CANCEL_URL,
     defaultNotificationUrl: config.env?.PAYMENT_WEBHOOK_URL,

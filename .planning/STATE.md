@@ -2,29 +2,29 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 02
-status: ready
-last_updated: "2026-04-28T08:45:00.000Z"
+current_phase: 04
+status: in_progress
+last_updated: "2026-04-28T21:08:00-03:00"
 progress:
   total_phases: 5
-  completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
-  percent: 60
+  completed_phases: 4
+  total_plans: 16
+  completed_plans: 15
+  percent: 94
 ---
 
 # State: YT Multi-Publisher
 
-**Current Phase:** 02 (Ready)
-**Project Status:** Phase 1 Complete → Ready for Phase 2 (TikTok Integration)  
-**Last Updated:** 2026-04-28 after Phase 1 execution
+**Current Phase:** 04 (In Progress)
+**Project Status:** Phase 4 in progress - analytics dashboard slice complete (15/16 plans done)  
+**Last Updated:** 2026-04-28 after analytics dashboard implementation (platform and destination stats)
 
 ## Project Reference
 
 See: `.planning/PROJECT.md` (updated 2026-04-27)
 
 **Core Value:** Users can publish to multiple platforms at once  
-**Current Focus:** Phase 02 — TikTok integration (infrastructure ready)
+**Current Focus:** Phase 04 - Quality of Life (email notifications, analytics, failed-job visibility)
 
 ## Phase Progress
 
@@ -32,9 +32,9 @@ See: `.planning/PROJECT.md` (updated 2026-04-27)
 |-------|------|--------|--------------|-------|
 | 0 | Payment Reliability | ✓ Complete | 8 | 4/4 |
 | 1 | Infrastructure Setup | ✓ Complete | 2 | 2/2 |
-| 2 | TikTok Integration | 🟡 Ready | 4 | 0/3 |
-| 3 | Instagram Integration | ○ Future | 3 | 0/3 |
-| 4 | Quality of Life | ○ Future | 3 | 0/3 |
+| 2 | TikTok Integration | ✓ Complete | 4 | 4/4 |
+| 3 | Instagram Integration | ✓ Complete | 3 | 3/3 |
+| 4 | Quality of Life | In Progress | 3 | 2/3 |
 
 ## Requirements Status
 
@@ -87,11 +87,11 @@ See: `.planning/PROJECT.md` (updated 2026-04-27)
 - ✓ Cost estimates provided ($36-51/month at 1k MAU)
 - ✓ Deployment documentation comprehensive
 
-**Phase 2 Blockers (next):**
+**Phase 4 Blockers (next):**
 
-- TikTok API integration (OAuth flow, upload authorization)
-- TikTok media upload handling (video files, metadata)
-- Campaign scheduling for TikTok platform
+- Email provider decision and credentials (SendGrid, Mailgun, Resend, or equivalent)
+- Analytics dashboard scope (user-facing metrics vs operator-only metrics)
+- Dedicated failed-job dashboard rendering remains optional; data/view-model slice is complete
 - User must manually create Railway/R2/Sentry accounts and configure credentials
 
 **Technical context:**
@@ -100,15 +100,19 @@ See: `.planning/PROJECT.md` (updated 2026-04-27)
 - Mock adapter enables testing without MercadoPago credentials
 - All payment state transitions logged and queryable
 - Timeout prevents hanging on slow API responses
+- TikTok and Instagram integrations have local/mock coverage, docs, smoke scripts, and manual sandbox harnesses
+- Campaign composer now treats YouTube channels plus TikTok/Instagram accounts as selectable destinations
+- Dashboard stats now expose an actionable failed-job queue with retry, reconnect, and review actions
+- Dashboard stats now include platform-level and destination-level analytics (published count, success rate, retry pressure)
 
 ## Next Steps
 
-1. **User Action:** Create Railway, R2, Sentry accounts and configure `.env.production` with credentials
-2. **User Action:** Test GitHub Actions workflow (push to main, verify auto-deploy)
-3. **Plan Phase 2** (TikTok Integration) — Design TikTok API integration, campaign scheduling, upload workflow
-4. **Execute Phase 2** — Implement TikTok integration (3 plans, concurrent execution ready)
-5. **Execute Phases 3-4** in parallel — Instagram, QoL features
-6. **Phase v1 Launch** — YouTube + TikTok + Instagram, with payment reliability + infrastructure
+1. **Continue Phase 4:** 04-03 Email Notifications (last plan in phase)
+2. **Phase Completion:** After 04-03, Phase 04 will be complete (3/3 plans)
+3. **Phase v1 Launch** - YouTube + TikTok + Instagram, with payment reliability + infrastructure
+4. **User Action:** Create Railway, R2, Sentry accounts and configure `.env.production` with credentials
+5. **User Action:** Test GitHub Actions workflow (push to main, verify auto-deploy)
+6. **Manual Verification:** Run TikTok and Instagram sandbox E2E once provider credentials are available
 
 ## Context for Downstream Phases
 
@@ -133,4 +137,4 @@ See: `.planning/PROJECT.md` (updated 2026-04-27)
 ---
 
 *State initialized: 2026-04-27*  
-*Next update: after Phase 0 planning or Phase 0 completion*
+*Next update: after Phase 4 planning or manual provider smoke verification*

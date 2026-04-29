@@ -512,6 +512,126 @@ export class DashboardService {
       });
     }
 
+    // Platform stats aggregation
+    const platformMap = new Map<string, { total: number; published: number; failed: number; retriedCount: number; destCounts: Map<string, number> }>();
+    for (const target of allTargets) {
+      const platform = (target.platform ?? 'youtube') as 'youtube' | 'tiktok' | 'instagram';
+      if (!platformMap.has(platform)) {
+        platformMap.set(platform, { total: 0, published: 0, failed: 0, retriedCount: 0, destCounts: new Map() });
+      }
+      const p = platformMap.get(platform)!;
+      p.total++;
+      if (target.status === 'publicado') p.published++;
+      if (target.status === 'erro') p.failed++;
+
+      // Track retry counts per destination within platform
+      const targetJobs = jobsByTargetId.get(target.id) ?? [];
+      for (const job of targetJobs) {
+        if (job.attempt > 1) {
+          const destId = target.destinationId || target.channelId || target.id;
+          p.destCounts.set(destId, (p.destCounts.get(destId) ?? 0) + (job.attempt - 1));
+        }
+      }
+    }
+
+    const platformStats: PlatformStats[] = [];
+    for (const [platform, data] of platformMap) {
+      const termTotal = data.published + data.failed;
+      const successRate = termTotal > 0 ? Math.round((data.published / termTotal) * 10000) / 100 : 0;
+
+      // Find top retry destination for this platform
+      let topRetryDestination: string | null = null;
+      let topRetryCount = 0;
+      for (const [destId, count] of data.destCounts) {
+        if (count > topRetryCount) {
+          topRetryCount = count;
+          topRetryDestination = destId;
+        }
+      }
+
+      platformStats.push({
+        platform: platform as 'youtube' | 'tiktok' | 'instagram',
+        totalTargets: data.total,
+        published: data.published,
+        failed: data.failed,
+        successRate,
+        retriedTargets: data.destCounts.size,
+        topRetryDestination,
+      });
+    }
+
+    // Sort platform stats by published count descending
+    platformStats.sort((a, b) => b.published - a.published || a.platform.localeCompare(b.platform));
+
+    // Destination stats aggregation
+    const destinationMap = new Map<string, {
+      platform: string;
+      label: string | null;
+      total: number;
+      published: number;
+      failed: number;
+      retriedCount: number;
+      latestFailureMessage: string | null;
+    }>();
+
+    for (const target of allTargets) {
+      const destId = target.destinationId || target.channelId || target.id;
+      const key = `${target.platform || 'youtube'}:${destId}`;
+
+      if (!destinationMap.has(key)) {
+        destinationMap.set(key, {
+          platform: target.platform || 'youtube',
+          label: target.destinationLabel || null,
+          total: 0,
+          published: 0,
+          failed: 0,
+          retriedCount: 0,
+          latestFailureMessage: null,
+        });
+      }
+
+      const dest = destinationMap.get(key)!;
+      dest.total++;
+      if (target.status === 'publicado') dest.published++;
+      if (target.status === 'erro') {
+        dest.failed++;
+        if (!dest.latestFailureMessage) {
+          dest.latestFailureMessage = target.errorMessage || null;
+        }
+      }
+
+      // Count retries for this destination
+      const targetJobs = jobsByTargetId.get(target.id) ?? [];
+      for (const job of targetJobs) {
+        if (job.attempt > 1) {
+          dest.retriedCount += (job.attempt - 1);
+        }
+      }
+    }
+
+    const destinationStats: DestinationStats[] = [];
+    for (const [key, data] of destinationMap) {
+      const [platform, destId] = key.split(':');
+      const termTotal = data.published + data.failed;
+      const successRate = termTotal > 0 ? Math.round((data.published / termTotal) * 10000) / 100 : 0;
+
+      destinationStats.push({
+        destinationId: destId,
+        destinationLabel: data.label,
+        platform: data.platform as 'youtube' | 'tiktok' | 'instagram',
+        totalTargets: data.total,
+        published: data.published,
+        failed: data.failed,
+        successRate,
+        retriedCount: data.retriedCount,
+        latestFailureMessage: data.latestFailureMessage,
+      });
+    }
+
+    // Sort destination stats by published count descending, limit to top 20
+    destinationStats.sort((a, b) => b.published - a.published || a.destinationId.localeCompare(b.destinationId));
+    const topDestinationStats = destinationStats.slice(0, 20);
+
     return {
       campaigns: { total: campaigns.length, byStatus: campaignByStatus },
       targets: { total: allTargets.length, byStatus: targetByStatus, successRate },
@@ -553,6 +673,8 @@ export class DashboardService {
         blockedChannelIds: reauthChannelIds,
       },
       channels,
+      platformStats,
+      destinationStats: topDestinationStats,
     };
   }
 }

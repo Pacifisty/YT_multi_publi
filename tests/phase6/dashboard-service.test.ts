@@ -43,6 +43,7 @@ describe('DashboardService.getStats', () => {
       topReason: null,
       reasons: [],
     });
+    expect(stats.failedJobs).toEqual([]);
     expect(stats.retries).toEqual({
       retriedTargets: 0,
       highestAttempt: 0,
@@ -87,6 +88,36 @@ describe('DashboardService.getStats', () => {
 
     expect(stats.campaigns.byStatus.launching).toBe(0);
     expect(stats.campaigns.byStatus.completed).toBe(1);
+  });
+
+  test('counts social targets with external publish ids as completed dashboard work', async () => {
+    const { campaignRepo, campaignService, dashboard } = createDashboard();
+
+    const { campaign } = await campaignService.createCampaign({ title: 'Social Done', videoAssetId: 'a1' });
+    const { target } = await campaignService.addTarget(campaign.id, {
+      platform: 'instagram',
+      destinationId: 'ig-account-1',
+      destinationLabel: 'Instagram Main',
+      connectedAccountId: 'acct-ig',
+      videoTitle: 'Reel',
+      videoDescription: 'Caption',
+    });
+    await campaignService.updateTargetStatus(campaign.id, target.id, 'publicado', { externalPublishId: 'ig-media-1' });
+
+    campaignRepo.update(campaign.id, { status: 'launching' });
+
+    const stats = await dashboard.getStats();
+
+    expect(stats.campaigns.byStatus.launching).toBe(0);
+    expect(stats.campaigns.byStatus.completed).toBe(1);
+    expect(stats.channels).toEqual([
+      expect.objectContaining({
+        channelId: 'Instagram Main',
+        totalTargets: 1,
+        published: 1,
+        successRate: 100,
+      }),
+    ]);
   });
 
   test('calculates target success rate', async () => {
@@ -293,6 +324,101 @@ describe('DashboardService.getStats', () => {
       blockedChannelCount: 2,
       blockedChannelIds: ['ch-reauth-1', 'ch-reauth-2'],
     });
+  });
+
+  test('builds an actionable failed job queue for dashboard triage', async () => {
+    const campaignRepo = new InMemoryCampaignRepository();
+    const campaignService = new CampaignService({ repository: campaignRepo });
+    const jobRepo = new InMemoryPublishJobRepository();
+    let tick = 0;
+    const jobService = new PublishJobService({
+      repository: jobRepo,
+      now: () => new Date(Date.UTC(2026, 3, 28, 12, 0, tick++)),
+    });
+    const auditRepo = new InMemoryAuditEventRepository();
+    const auditService = new AuditEventService({ repository: auditRepo });
+    const dashboard = new DashboardService({ campaignService, jobService, auditService });
+
+    const { campaign } = await campaignService.createCampaign({ title: 'Failed Queue', videoAssetId: 'a1' });
+    const { target: retryTarget } = await campaignService.addTarget(campaign.id, {
+      platform: 'tiktok',
+      destinationId: 'tt-account',
+      destinationLabel: 'TikTok Main',
+      connectedAccountId: 'acct-tt',
+      videoTitle: 'TikTok Clip',
+      videoDescription: 'Caption',
+    });
+    const { target: reviewTarget } = await campaignService.addTarget(campaign.id, {
+      platform: 'instagram',
+      destinationId: 'ig-account',
+      destinationLabel: 'Instagram Main',
+      connectedAccountId: 'acct-ig',
+      videoTitle: 'Instagram Clip',
+      videoDescription: 'Caption',
+    });
+    const { target: reauthTarget } = await campaignService.addTarget(campaign.id, {
+      channelId: 'ch-reauth',
+      videoTitle: 'YouTube Clip',
+      videoDescription: 'Description',
+    });
+
+    const [retryJobSeed, reviewJobSeed] = await jobService.enqueueForTargets([
+      { id: retryTarget.id, campaignId: campaign.id },
+      { id: reviewTarget.id, campaignId: campaign.id },
+    ]);
+    const retryJob = await jobService.pickNext();
+    expect(retryJob?.id).toBe(retryJobSeed.id);
+    await jobService.markFailed(retryJob!.id, 'temporarily unavailable', { errorClass: 'transient' });
+    await campaignService.updateTargetStatus(campaign.id, retryTarget.id, 'erro', { errorMessage: 'temporarily unavailable' });
+
+    const reviewJob = await jobService.pickNext();
+    expect(reviewJob?.id).toBe(reviewJobSeed.id);
+    await jobService.markFailed(reviewJob!.id, 'copyright violation', { errorClass: 'permanent' });
+    await campaignService.updateTargetStatus(campaign.id, reviewTarget.id, 'erro', { errorMessage: 'copyright violation' });
+    await campaignService.updateTargetStatus(campaign.id, reauthTarget.id, 'erro', { errorMessage: 'REAUTH_REQUIRED' });
+
+    const stats = await dashboard.getStats();
+
+    expect(stats.failedJobs).toEqual([
+      expect.objectContaining({
+        jobId: reviewJob!.id,
+        campaignId: campaign.id,
+        campaignTitle: 'Failed Queue',
+        targetId: reviewTarget.id,
+        platform: 'instagram',
+        destinationId: 'ig-account',
+        destinationLabel: 'Instagram Main',
+        videoTitle: 'Instagram Clip',
+        errorMessage: 'copyright violation',
+        errorClass: 'permanent',
+        attempt: 1,
+        failedAt: '2026-04-28T12:00:02.000Z',
+        suggestedAction: 'review',
+      }),
+      expect.objectContaining({
+        jobId: retryJob!.id,
+        targetId: retryTarget.id,
+        platform: 'tiktok',
+        destinationId: 'tt-account',
+        destinationLabel: 'TikTok Main',
+        videoTitle: 'TikTok Clip',
+        errorClass: 'transient',
+        failedAt: '2026-04-28T12:00:01.000Z',
+        suggestedAction: 'retry',
+      }),
+      expect.objectContaining({
+        jobId: null,
+        targetId: reauthTarget.id,
+        platform: 'youtube',
+        destinationId: 'ch-reauth',
+        videoTitle: 'YouTube Clip',
+        errorMessage: 'REAUTH_REQUIRED',
+        errorClass: null,
+        attempt: null,
+        failedAt: null,
+        suggestedAction: 'reauth',
+      }),
+    ]);
   });
 
   test('estimates quota consumption from started uploads, queued uploads, and post-upload operations', async () => {
@@ -514,5 +640,153 @@ describe('DashboardService.getStats', () => {
     expect(stats.audit.lastEventType).toBe('delete_campaign');
     expect(stats.audit.lastActorEmail).toBe('admin@test.com');
     expect(stats.audit.lastEventAt).toBeTruthy();
+  });
+
+  test('returns empty platformStats when no campaigns exist', async () => {
+    const { dashboard } = createDashboard();
+    const stats = await dashboard.getStats();
+
+    expect(stats.platformStats).toEqual([]);
+  });
+
+  test('calculates platformStats with multiple platforms', async () => {
+    const { campaignService, dashboard } = createDashboard();
+
+    // Create YouTube campaign: 2 targets, 1 published, 1 failed
+    const { campaign: c1 } = await campaignService.createCampaign({ title: 'YouTube Mixed', videoAssetId: 'a1' });
+    const { target: ytSuccess } = await campaignService.addTarget(c1.id, {
+      platform: 'youtube',
+      channelId: 'ch-yt-1',
+      videoTitle: 'YT Video 1',
+      videoDescription: 'D1',
+    });
+    const { target: ytFail } = await campaignService.addTarget(c1.id, {
+      platform: 'youtube',
+      channelId: 'ch-yt-2',
+      videoTitle: 'YT Video 2',
+      videoDescription: 'D2',
+    });
+    await campaignService.updateTargetStatus(c1.id, ytSuccess.id, 'publicado', { youtubeVideoId: 'yt-1' });
+    await campaignService.updateTargetStatus(c1.id, ytFail.id, 'erro', { errorMessage: 'quota' });
+
+    // Create TikTok campaign: 2 targets, both published
+    const { campaign: c2 } = await campaignService.createCampaign({ title: 'TikTok Success', videoAssetId: 'a2' });
+    const { target: ttSuccess1 } = await campaignService.addTarget(c2.id, {
+      platform: 'tiktok',
+      destinationId: 'tt-acc-1',
+      destinationLabel: 'TikTok Account 1',
+      connectedAccountId: 'acct-tt-1',
+      videoTitle: 'TT Video 1',
+      videoDescription: 'D3',
+    });
+    const { target: ttSuccess2 } = await campaignService.addTarget(c2.id, {
+      platform: 'tiktok',
+      destinationId: 'tt-acc-2',
+      destinationLabel: 'TikTok Account 2',
+      connectedAccountId: 'acct-tt-2',
+      videoTitle: 'TT Video 2',
+      videoDescription: 'D4',
+    });
+    await campaignService.updateTargetStatus(c2.id, ttSuccess1.id, 'publicado', { externalPublishId: 'tt-media-1' });
+    await campaignService.updateTargetStatus(c2.id, ttSuccess2.id, 'publicado', { externalPublishId: 'tt-media-2' });
+
+    const stats = await dashboard.getStats();
+
+    expect(stats.platformStats).toHaveLength(2);
+
+    // Platforms should be sorted by published count descending (TikTok: 2, YouTube: 1)
+    expect(stats.platformStats[0]).toEqual(
+      expect.objectContaining({
+        platform: 'tiktok',
+        totalTargets: 2,
+        published: 2,
+        failed: 0,
+        successRate: 100,
+        retriedTargets: 0,
+        topRetryDestination: null,
+      }),
+    );
+
+    expect(stats.platformStats[1]).toEqual(
+      expect.objectContaining({
+        platform: 'youtube',
+        totalTargets: 2,
+        published: 1,
+        failed: 1,
+        successRate: 50,
+        retriedTargets: 0,
+        topRetryDestination: null,
+      }),
+    );
+  });
+
+  test('calculates destinationStats with retry counts', async () => {
+    const campaignRepo = new InMemoryCampaignRepository();
+    const campaignService = new CampaignService({ repository: campaignRepo });
+    const jobRepo = new InMemoryPublishJobRepository();
+    const jobService = new PublishJobService({ repository: jobRepo });
+    const dashboard = new DashboardService({ campaignService, jobService });
+
+    // YouTube target that succeeds
+    const { campaign: c1 } = await campaignService.createCampaign({ title: 'YouTube', videoAssetId: 'a1' });
+    const { target: ytTarget } = await campaignService.addTarget(c1.id, {
+      platform: 'youtube',
+      channelId: 'ch-yt-main',
+      videoTitle: 'YT Video',
+      videoDescription: 'D1',
+    });
+    await campaignService.updateTargetStatus(c1.id, ytTarget.id, 'publicado', { youtubeVideoId: 'yt-1' });
+
+    // TikTok target that fails and gets retried
+    const { campaign: c2 } = await campaignService.createCampaign({ title: 'TikTok', videoAssetId: 'a2' });
+    const { target: ttTarget } = await campaignService.addTarget(c2.id, {
+      platform: 'tiktok',
+      destinationId: 'tiktok-1',
+      destinationLabel: 'TikTok Main',
+      connectedAccountId: 'acct-tt',
+      videoTitle: 'TT Video',
+      videoDescription: 'D2',
+    });
+    await campaignService.updateTargetStatus(c2.id, ttTarget.id, 'erro', { errorMessage: 'temporarily unavailable' });
+
+    // Enqueue job for TikTok target and retry it
+    const [ttJob] = await jobService.enqueueForTargets([{ id: ttTarget.id, campaignId: c2.id }]);
+    await jobService.pickNext();
+    await jobService.markFailed(ttJob.id, 'temporarily unavailable');
+    await jobService.retry(ttJob.id); // attempt 2
+
+    const stats = await dashboard.getStats();
+
+    // Should have both destinations
+    expect(stats.destinationStats.length).toBeGreaterThanOrEqual(2);
+
+    const ytDest = stats.destinationStats.find((d) => d.platform === 'youtube' && d.destinationId === 'ch-yt-main');
+    expect(ytDest).toEqual(
+      expect.objectContaining({
+        destinationId: 'ch-yt-main',
+        platform: 'youtube',
+        totalTargets: 1,
+        published: 1,
+        failed: 0,
+        successRate: 100,
+        retriedCount: 0,
+        latestFailureMessage: null,
+      }),
+    );
+
+    const ttDest = stats.destinationStats.find((d) => d.platform === 'tiktok' && d.destinationId === 'tiktok-1');
+    expect(ttDest).toEqual(
+      expect.objectContaining({
+        destinationId: 'tiktok-1',
+        destinationLabel: 'TikTok Main',
+        platform: 'tiktok',
+        totalTargets: 1,
+        published: 0,
+        failed: 1,
+        successRate: 0,
+        retriedCount: 1,
+        latestFailureMessage: 'temporarily unavailable',
+      }),
+    );
   });
 });

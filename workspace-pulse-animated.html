@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workspace Pulse - Animated</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 900px;
+    }
+
+    .pulse-header {
+      font-size: 14px;
+      letter-spacing: 2px;
+      color: #00ff88;
+      text-transform: uppercase;
+      margin-bottom: 32px;
+      font-weight: 600;
+      animation: fadeInDown 0.8s ease-out;
+    }
+
+    .pulse-content {
+      min-height: 280px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .text-carousel {
+      position: relative;
+      height: 200px;
+      overflow: hidden;
+    }
+
+    .carousel-item {
+      position: absolute;
+      width: 100%;
+      opacity: 0;
+      animation: carouselCycle 30s infinite;
+      line-height: 1.2;
+    }
+
+    .carousel-item:nth-child(1) { animation-delay: 0s; }
+    .carousel-item:nth-child(2) { animation-delay: 5s; }
+    .carousel-item:nth-child(3) { animation-delay: 10s; }
+    .carousel-item:nth-child(4) { animation-delay: 15s; }
+    .carousel-item:nth-child(5) { animation-delay: 20s; }
+    .carousel-item:nth-child(6) { animation-delay: 25s; }
+
+    @keyframes carouselCycle {
+      0% {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      5% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      83% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      88% {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      100% {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+    }
+
+    .carousel-item h1 {
+      font-size: 56px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 16px;
+      letter-spacing: -0.5px;
+    }
+
+    .carousel-item p {
+      font-size: 16px;
+      color: #a0a0a0;
+      font-weight: 400;
+    }
+
+    .status-indicator {
+      margin-top: 32px;
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      transition: all 0.3s ease;
+    }
+
+    .dot.active {
+      background: #00ff88;
+      box-shadow: 0 0 12px rgba(0, 255, 136, 0.6);
+      transform: scale(1.3);
+    }
+
+    @keyframes fadeInDown {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (max-width: 768px) {
+      .carousel-item h1 {
+        font-size: 36px;
+      }
+      .carousel-item p {
+        font-size: 14px;
+      }
+      .pulse-header {
+        font-size: 12px;
+        margin-bottom: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="pulse-header">→ WORKSPACE PULSE</div>
+
+    <div class="pulse-content">
+      <div class="text-carousel">
+        <div class="carousel-item">
+          <h1>Every campaign, account, queue and asset in one live cockpit.</h1>
+          <p>Today: 0 launches / next: no scheduled campaign</p>
+        </div>
+
+        <div class="carousel-item">
+          <h1>Multi-platform publishing at your fingertips.</h1>
+          <p>YouTube, TikTok & Instagram unified control center</p>
+        </div>
+
+        <div class="carousel-item">
+          <h1>Real-time insights across all channels.</h1>
+          <p>Monitor success rates, retries, and deployment status live</p>
+        </div>
+
+        <div class="carousel-item">
+          <h1>One dashboard, infinite possibilities.</h1>
+          <p>Manage campaigns, payments, and multi-platform assets seamlessly</p>
+        </div>
+
+        <div class="carousel-item">
+          <h1>Launch, track, and optimize all platforms.</h1>
+          <p>Real-time feedback for smarter publishing decisions</p>
+        </div>
+
+        <div class="carousel-item">
+          <h1>Your content, every platform, one command.</h1>
+          <p>Publish to YouTube, TikTok, and Instagram simultaneously</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="status-indicator">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <script>
+    const dots = document.querySelectorAll('.dot');
+    let currentIndex = 0;
+
+    function updateDots() {
+      dots.forEach((dot, index) => {
+        dot.classList.toggle('active', index === currentIndex);
+      });
+    }
+
+    // Update active dot every 5 seconds
+    setInterval(() => {
+      currentIndex = (currentIndex + 1) % dots.length;
+      updateDots();
+    }, 5000);
+
+    // Record mode detection (for video export)
+    window.__ready = true;
+    if (window.__recording) {
+      // Loop indefinitely during recording
+    }
+  </script>
+</body>
+</html>

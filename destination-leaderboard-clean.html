@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Destination Leaderboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 32px;
+    }
+
+    .header h1 {
+      font-size: 28px;
+      color: #ffffff;
+      font-weight: 600;
+      letter-spacing: -0.5px;
+    }
+
+    .header-meta {
+      font-size: 14px;
+      color: #a0a0a0;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .leaderboard {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .leaderboard-item {
+      display: grid;
+      grid-template-columns: 50px 1fr 200px;
+      gap: 20px;
+      align-items: center;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(0, 255, 136, 0.15);
+      border-radius: 8px;
+      backdrop-filter: blur(10px);
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+
+    .leaderboard-item:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(0, 255, 136, 0.3);
+      transform: translateX(8px);
+    }
+
+    .rank {
+      font-size: 24px;
+      font-weight: 700;
+      color: #00ff88;
+      text-align: center;
+    }
+
+    .leaderboard-item:nth-child(1) .rank {
+      font-size: 28px;
+      color: #ffd700;
+      text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+    }
+
+    .leaderboard-item:nth-child(2) .rank {
+      color: #c0c0c0;
+    }
+
+    .leaderboard-item:nth-child(3) .rank {
+      color: #cd7f32;
+    }
+
+    .content {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .account-name {
+      font-size: 16px;
+      font-weight: 600;
+      color: #ffffff;
+      letter-spacing: -0.3px;
+    }
+
+    .video-title {
+      font-size: 14px;
+      color: #a0a0a0;
+      font-weight: 400;
+      line-height: 1.4;
+    }
+
+    .metrics {
+      display: flex;
+      gap: 16px;
+      text-align: right;
+    }
+
+    .metric {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .metric-label {
+      font-size: 11px;
+      color: #707070;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .metric-value {
+      font-size: 16px;
+      font-weight: 700;
+      color: #00ff88;
+    }
+
+    .metric-value.secondary {
+      color: #ffffff;
+    }
+
+    @media (max-width: 768px) {
+      .leaderboard-item {
+        grid-template-columns: 40px 1fr 100px;
+        gap: 12px;
+        padding: 16px;
+      }
+
+      .header h1 {
+        font-size: 20px;
+      }
+
+      .metrics {
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .account-name {
+        font-size: 14px;
+      }
+
+      .video-title {
+        font-size: 12px;
+      }
+
+      .metric-value {
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Destination Leaderboard</h1>
+      <div class="header-meta">Views and Delivery</div>
+    </div>
+
+    <div class="leaderboard">
+      <!-- Rank 1 -->
+      <div class="leaderboard-item">
+        <div class="rank">01</div>
+        <div class="content">
+          <div class="account-name">TikTok - @official_account</div>
+          <div class="video-title">Resident Evil Requiem - Official Trailer</div>
+        </div>
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-label">Performance</div>
+            <div class="metric-value">6 top / 6 total</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rank 2 -->
+      <div class="leaderboard-item">
+        <div class="rank">02</div>
+        <div class="content">
+          <div class="account-name">Instagram - @creativevisuals</div>
+          <div class="video-title">Resident Evil Requiem - Behind the Scenes</div>
+        </div>
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-label">Performance</div>
+            <div class="metric-value">4 top / 4 total</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rank 3 -->
+      <div class="leaderboard-item">
+        <div class="rank">03</div>
+        <div class="content">
+          <div class="account-name">TikTok - @horror_collection</div>
+          <div class="video-title">Resident Evil Requiem - Highlights</div>
+        </div>
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-label">Performance</div>
+            <div class="metric-value">2 top / 2 total</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rank 4 -->
+      <div class="leaderboard-item">
+        <div class="rank">04</div>
+        <div class="content">
+          <div class="account-name">YouTube - @entertainment</div>
+          <div class="video-title">Resident Evil Requiem - Full Review</div>
+        </div>
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-label">Performance</div>
+            <div class="metric-value">2 top / 2 total</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rank 5 -->
+      <div class="leaderboard-item">
+        <div class="rank">05</div>
+        <div class="content">
+          <div class="account-name">Instagram - @filmclips</div>
+          <div class="video-title">Resident Evil Requiem - Clips</div>
+        </div>
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-label">Performance</div>
+            <div class="metric-value">2 top / 2 total</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rank 6 -->
+      <div class="leaderboard-item">
+        <div class="rank">06</div>
+        <div class="content">
+          <div class="account-name">TikTok - @viral_moments</div>
+          <div class="video-title">Resident Evil Requiem - Trending</div>
+        </div>
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-label">Performance</div>
+            <div class="metric-value">1 top / 1 total</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rank 7 -->
+      <div class="leaderboard-item">
+        <div class="rank">07</div>
+        <div class="content">
+          <div class="account-name">YouTube - @shorts_channel</div>
+          <div class="video-title">Resident Evil Requiem - Short Clip</div>
+        </div>
+        <div class="metrics">
+          <div class="metric">
+            <div class="metric-label">Performance</div>
+            <div class="metric-value">1 top / 1 total</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -26,6 +26,7 @@ export interface DestinationStats {
 
 export interface ChannelStats {
   channelId: string;
+  channelLabel: string | null;
   totalTargets: number;
   published: number;
   failed: number;
@@ -336,7 +337,7 @@ export class DashboardService {
     const targetByStatus: Record<CampaignTargetRecord['status'], number> = {
       aguardando: 0, enviando: 0, publicado: 0, erro: 0,
     };
-    const channelMap = new Map<string, { total: number; published: number; failed: number }>();
+    const channelMap = new Map<string, { total: number; published: number; failed: number; label: string | null }>();
 
     const allTargets = campaigns.flatMap((c) => c.targets);
     const targetById = new Map(allTargets.map((target) => [target.id, target]));
@@ -362,7 +363,7 @@ export class DashboardService {
 
       const dashboardDestinationKey = this.getTargetDashboardDestinationKey(t);
       if (!channelMap.has(dashboardDestinationKey)) {
-        channelMap.set(dashboardDestinationKey, { total: 0, published: 0, failed: 0 });
+        channelMap.set(dashboardDestinationKey, { total: 0, published: 0, failed: 0, label: t.destinationLabel ?? null });
       }
       const ch = channelMap.get(dashboardDestinationKey)!;
       ch.total++;
@@ -501,6 +502,7 @@ export class DashboardService {
       }
       channels.push({
         channelId,
+        channelLabel: data.label,
         totalTargets: data.total,
         published: data.published,
         failed: data.failed,

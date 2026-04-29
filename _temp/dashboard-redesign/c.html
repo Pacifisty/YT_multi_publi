@@ -1,0 +1,866 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>Dashboard — Direction C · Editorial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,500&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Editorial palette — warm charcoal + cream + single rust accent */
+    --bg: #14110f;
+    --bg-elev: #1a1614;
+    --bg-elev-2: #211c18;
+    --ink: #f5ede0;
+    --ink-mid: #b3a999;
+    --ink-low: #7a6f63;
+    --rule: #2a2520;
+    --rule-strong: #3a322c;
+    --accent: #d97847;       /* burnt sienna — single accent */
+    --accent-deep: #b85e30;
+    --accent-soft: rgba(217, 120, 71, 0.12);
+    --positive: #9eb087;     /* muted moss */
+    --negative: #c47a6c;     /* muted brick */
+    --warning: #d4a056;      /* muted ochre */
+
+    --serif: 'Newsreader', 'Source Serif 4', Georgia, serif;
+    --sans: 'Inter', -apple-system, system-ui, sans-serif;
+    --mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    /* Subtle paper-grain texture — barely visible */
+    background-image:
+      radial-gradient(ellipse 1200px 400px at 20% 0%, rgba(217, 120, 71, 0.04), transparent),
+      radial-gradient(ellipse 800px 300px at 80% 100%, rgba(217, 120, 71, 0.025), transparent);
+    min-height: 100vh;
+  }
+
+  .page {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 32px 48px 80px;
+  }
+
+  /* ─────────── MASTHEAD ─────────── */
+  .masthead {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 32px;
+  }
+  .masthead-brand {
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    font-style: italic;
+  }
+  .masthead-brand .accent { color: var(--accent); font-style: normal; }
+  .masthead-meta {
+    display: flex;
+    gap: 24px;
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-low);
+  }
+  .masthead-meta .live::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--positive);
+    margin-right: 6px;
+    vertical-align: middle;
+    animation: pulse 2.5s infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.4 } }
+
+  /* ─────────── HERO HEADLINE ─────────── */
+  .hero {
+    padding: 24px 0 40px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 40px;
+  }
+  .hero-kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+  .hero-headline {
+    font-family: var(--serif);
+    font-size: 52px;
+    font-weight: 500;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+    margin-bottom: 20px;
+    max-width: 900px;
+  }
+  .hero-headline em {
+    color: var(--accent);
+    font-style: italic;
+    font-weight: 500;
+  }
+  .hero-lede {
+    font-family: var(--serif);
+    font-size: 19px;
+    line-height: 1.55;
+    color: var(--ink-mid);
+    max-width: 720px;
+    text-wrap: pretty;
+    margin-bottom: 28px;
+  }
+  .hero-lede strong { color: var(--ink); font-weight: 500; }
+  .hero-actions {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #14110f;
+    border: 0;
+    padding: 13px 22px;
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    transition: background 150ms ease, transform 150ms ease;
+  }
+  .btn-primary:hover { background: var(--accent-deep); transform: translateY(-1px); }
+  .btn-primary::after { content: ' →'; }
+  .btn-ghost {
+    background: transparent;
+    color: var(--ink-mid);
+    border: 0;
+    padding: 13px 4px;
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 1px solid var(--rule-strong);
+    transition: color 150ms, border-color 150ms;
+  }
+  .btn-ghost:hover { color: var(--ink); border-color: var(--accent); }
+
+  /* ─────────── KPI STRIP ─────────── */
+  .kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    padding: 24px 0;
+    margin-bottom: 48px;
+  }
+  .kpi {
+    padding: 0 24px;
+    border-right: 1px solid var(--rule);
+  }
+  .kpi:last-child { border-right: 0; }
+  .kpi:first-child { padding-left: 0; }
+  .kpi-val {
+    font-family: var(--serif);
+    font-size: 38px;
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+    font-variant-numeric: tabular-nums;
+  }
+  .kpi-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ink-low);
+    margin-bottom: 6px;
+  }
+  .kpi-delta {
+    font-family: var(--sans);
+    font-size: 12px;
+    color: var(--ink-mid);
+  }
+  .kpi-delta.up { color: var(--positive); }
+  .kpi-delta.down { color: var(--negative); }
+  .kpi-delta.warn { color: var(--warning); }
+  .kpi-delta::before { content: '↑ '; }
+  .kpi-delta.down::before { content: '↓ '; }
+  .kpi-delta.warn::before { content: '◔ '; }
+  .kpi-delta.flat::before { content: '— '; }
+
+  /* ─────────── FEATURE STORIES ROW ─────────── */
+  .features {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr;
+    gap: 48px;
+    margin-bottom: 56px;
+  }
+  .feature {
+    border-top: 2px solid var(--ink);
+    padding-top: 16px;
+  }
+  .feature-kicker {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--ink-low);
+    margin-bottom: 12px;
+  }
+  .feature-title {
+    font-family: var(--serif);
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    margin-bottom: 14px;
+    text-wrap: balance;
+  }
+  .feature-byline {
+    font-family: var(--serif);
+    font-size: 14px;
+    font-style: italic;
+    color: var(--ink-mid);
+    margin-bottom: 16px;
+  }
+
+  /* Channel pulse — top 3 as featured stories */
+  .pulse-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .pulse-item {
+    display: grid;
+    grid-template-columns: 32px 1fr auto;
+    gap: 14px;
+    align-items: baseline;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .pulse-item:last-child { border-bottom: 0; }
+  .pulse-rank {
+    font-family: var(--serif);
+    font-size: 28px;
+    font-weight: 500;
+    color: var(--ink-low);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  .pulse-item:nth-child(1) .pulse-rank { color: var(--accent); }
+  .pulse-name {
+    font-family: var(--serif);
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1.3;
+    margin-bottom: 4px;
+  }
+  .pulse-sub {
+    font-family: var(--serif);
+    font-size: 13px;
+    font-style: italic;
+    color: var(--ink-mid);
+  }
+  .pulse-views {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .pulse-views small {
+    display: block;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--ink-low);
+    margin-top: 3px;
+  }
+
+  /* Quota Watch */
+  .quota-readout {
+    font-family: var(--serif);
+    font-size: 56px;
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: -0.025em;
+    margin-bottom: 8px;
+    font-variant-numeric: tabular-nums;
+  }
+  .quota-readout small {
+    font-size: 22px;
+    color: var(--ink-low);
+    font-weight: 400;
+  }
+  .quota-runway {
+    font-family: var(--serif);
+    font-size: 14px;
+    font-style: italic;
+    color: var(--ink-mid);
+    margin-bottom: 18px;
+  }
+  .spark-7d {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 56px;
+    margin-bottom: 12px;
+  }
+  .spark-bar {
+    flex: 1;
+    background: var(--rule-strong);
+    transition: background 200ms;
+  }
+  .spark-bar.today { background: var(--accent); }
+  .spark-labels {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--ink-low);
+  }
+
+  /* Risk Watch */
+  .risk-stat {
+    font-family: var(--serif);
+    font-size: 56px;
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: -0.025em;
+    color: var(--positive);
+    margin-bottom: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  .risk-stat.alert { color: var(--negative); }
+  .risk-summary {
+    font-family: var(--serif);
+    font-size: 14px;
+    font-style: italic;
+    color: var(--ink-mid);
+    line-height: 1.5;
+    margin-bottom: 18px;
+  }
+  .risk-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .risk-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 8px 0;
+    border-top: 1px solid var(--rule);
+    font-size: 13px;
+  }
+  .risk-row strong {
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .risk-row .num {
+    font-family: var(--mono);
+    color: var(--ink-mid);
+    font-variant-numeric: tabular-nums;
+  }
+  .risk-row.alert .num { color: var(--negative); }
+
+  /* ─────────── CHANNELS TABLE ─────────── */
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 18px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--ink);
+  }
+  .section-title {
+    font-family: var(--serif);
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+  .section-meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ink-low);
+  }
+
+  table.channels {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 56px;
+  }
+  table.channels th {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ink-low);
+    font-weight: 500;
+    padding: 14px 12px;
+    border-bottom: 1px solid var(--rule);
+  }
+  table.channels th.right { text-align: right; }
+  table.channels td {
+    padding: 16px 12px;
+    border-bottom: 1px solid var(--rule);
+    font-family: var(--sans);
+    vertical-align: baseline;
+  }
+  table.channels tr:hover td { background: var(--bg-elev); }
+  .ch-name {
+    font-family: var(--serif);
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .ch-platform {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--ink-low);
+    margin-left: 8px;
+  }
+  .ch-video {
+    font-family: var(--serif);
+    font-size: 14px;
+    font-style: italic;
+    color: var(--ink-mid);
+  }
+  .ch-num {
+    font-family: var(--mono);
+    font-size: 14px;
+    text-align: right;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .ch-num.muted { color: var(--ink-low); }
+  .ch-bar {
+    width: 100px;
+    height: 4px;
+    background: var(--rule);
+    margin-left: auto;
+    margin-top: 4px;
+    overflow: hidden;
+  }
+  .ch-bar-fill {
+    height: 100%;
+    background: var(--accent);
+  }
+
+  /* ─────────── ACTIVITY TIMELINE ─────────── */
+  .timeline {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+    margin-bottom: 56px;
+  }
+  .timeline-col {
+    border-top: 2px solid var(--ink);
+    padding-top: 16px;
+  }
+  .timeline-event {
+    display: grid;
+    grid-template-columns: 60px 1fr;
+    gap: 16px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .timeline-event:last-child { border-bottom: 0; }
+  .timeline-time {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-low);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding-top: 2px;
+  }
+  .timeline-body {
+    font-family: var(--serif);
+    font-size: 15px;
+    line-height: 1.45;
+    color: var(--ink);
+  }
+  .timeline-body em {
+    font-style: italic;
+    color: var(--ink-mid);
+  }
+  .timeline-body strong {
+    font-weight: 500;
+    color: var(--accent);
+  }
+  .timeline-body .tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    padding: 2px 6px;
+    margin-left: 6px;
+    color: var(--ink-low);
+    background: var(--bg-elev);
+    border: 1px solid var(--rule);
+  }
+  .timeline-body .tag.success { color: var(--positive); border-color: rgba(158, 176, 135, 0.3); }
+  .timeline-body .tag.fail { color: var(--negative); border-color: rgba(196, 122, 108, 0.3); }
+
+  /* ─────────── COLOPHON ─────────── */
+  .colophon {
+    border-top: 1px solid var(--rule);
+    padding-top: 24px;
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--serif);
+    font-size: 13px;
+    font-style: italic;
+    color: var(--ink-low);
+  }
+
+  /* Responsive */
+  @media (max-width: 980px) {
+    .features { grid-template-columns: 1fr; gap: 32px; }
+    .timeline { grid-template-columns: 1fr; }
+    .kpi-strip { grid-template-columns: repeat(3, 1fr); }
+    .kpi { padding: 12px 16px; border-bottom: 1px solid var(--rule); }
+    .hero-headline { font-size: 38px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- MASTHEAD -->
+  <header class="masthead">
+    <div class="masthead-brand">The <span class="accent">Publisher</span> Dispatch</div>
+    <div class="masthead-meta">
+      <span>Edition 042 · Tuesday</span>
+      <span>April 28, 2026</span>
+      <span class="live">Live · 14:23 BRT</span>
+    </div>
+  </header>
+
+  <!-- HERO HEADLINE -->
+  <section class="hero">
+    <div class="hero-kicker">Today's Dispatch</div>
+    <h1 class="hero-headline">
+      Twelve videos went live across <em>seven channels</em>, with PacifistyZone leading the room.
+    </h1>
+    <p class="hero-lede">
+      "Resident Evil requiem" published cleanly to all destinations this morning.
+      <strong>PacifistyZone</strong> drew the most early views (6), trailed by PacifistyPlay (4) and three channels tied at 2.
+      Quota usage sits at <strong>38%</strong> with roughly <strong>5 days of headroom</strong> at the current pace.
+      One target failed and is awaiting retry; no accounts are blocked.
+    </p>
+    <div class="hero-actions">
+      <button class="btn-primary">Start a publish run</button>
+      <button class="btn-ghost">View all campaigns</button>
+      <button class="btn-ghost">Resolve 1 failed target</button>
+    </div>
+  </section>
+
+  <!-- KPI STRIP -->
+  <section class="kpi-strip">
+    <div class="kpi">
+      <div class="kpi-label">Published today</div>
+      <div class="kpi-val">12</div>
+      <div class="kpi-delta up">+3 vs yesterday</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Jobs completed</div>
+      <div class="kpi-val">64</div>
+      <div class="kpi-delta up">+12 this week</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Failed targets</div>
+      <div class="kpi-val">1</div>
+      <div class="kpi-delta down">−2 vs yesterday</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Total views</div>
+      <div class="kpi-val">18</div>
+      <div class="kpi-delta flat">across 7 channels</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Quota used</div>
+      <div class="kpi-val">38%</div>
+      <div class="kpi-delta warn">5 days of runway</div>
+    </div>
+  </section>
+
+  <!-- FEATURE STORIES -->
+  <section class="features">
+    <article class="feature">
+      <div class="feature-kicker">The Front Page</div>
+      <h2 class="feature-title">Channel performance, ranked.</h2>
+      <p class="feature-byline">Top destinations by views on today's run.</p>
+      <div class="pulse-list">
+        <div class="pulse-item">
+          <div class="pulse-rank">1</div>
+          <div>
+            <div class="pulse-name">PacifistyZone</div>
+            <div class="pulse-sub">"Resident Evil requiem"</div>
+          </div>
+          <div class="pulse-views">6<small>views</small></div>
+        </div>
+        <div class="pulse-item">
+          <div class="pulse-rank">2</div>
+          <div>
+            <div class="pulse-name">PacifistyPlay</div>
+            <div class="pulse-sub">"Resident Evil requiem"</div>
+          </div>
+          <div class="pulse-views">4<small>views</small></div>
+        </div>
+        <div class="pulse-item">
+          <div class="pulse-rank">3</div>
+          <div>
+            <div class="pulse-name">PacifistyGames</div>
+            <div class="pulse-sub">"Resident Evil requiem"</div>
+          </div>
+          <div class="pulse-views">2<small>views</small></div>
+        </div>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="feature-kicker">Quota Watch</div>
+      <h2 class="feature-title">Spending pace.</h2>
+      <p class="feature-byline">Estimated against your daily ceiling of 10,000 units.</p>
+      <div class="quota-readout">38<small>%</small></div>
+      <p class="quota-runway">≈ 5 days of headroom at the current 7-day pace.</p>
+      <div class="spark-7d">
+        <div class="spark-bar" style="height: 22%"></div>
+        <div class="spark-bar" style="height: 36%"></div>
+        <div class="spark-bar" style="height: 28%"></div>
+        <div class="spark-bar" style="height: 44%"></div>
+        <div class="spark-bar" style="height: 31%"></div>
+        <div class="spark-bar" style="height: 39%"></div>
+        <div class="spark-bar today" style="height: 38%"></div>
+      </div>
+      <div class="spark-labels">
+        <span>Apr 22</span><span>Today</span>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="feature-kicker">Risk Watch</div>
+      <h2 class="feature-title">All systems calm.</h2>
+      <p class="feature-byline">No blocked accounts. One retry pending.</p>
+      <div class="risk-stat">0</div>
+      <p class="risk-summary">Accounts requiring re-authentication.</p>
+      <div class="risk-list">
+        <div class="risk-row">
+          <strong>Failed targets</strong>
+          <span class="num">1</span>
+        </div>
+        <div class="risk-row">
+          <strong>Retry pressure</strong>
+          <span class="num">low</span>
+        </div>
+        <div class="risk-row">
+          <strong>Hotspot channel</strong>
+          <span class="num">stable</span>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <!-- CHANNELS TABLE -->
+  <section>
+    <header class="section-head">
+      <h2 class="section-title">All channels</h2>
+      <span class="section-meta">7 destinations · sorted by top views</span>
+    </header>
+    <table class="channels">
+      <thead>
+        <tr>
+          <th style="width: 40px">#</th>
+          <th>Channel</th>
+          <th>Top video</th>
+          <th class="right">Top views</th>
+          <th class="right">Total views</th>
+          <th class="right" style="width: 140px">Share</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="ch-num muted">01</td>
+          <td><span class="ch-name">PacifistyZone</span><span class="ch-platform">YouTube</span></td>
+          <td class="ch-video">Resident Evil requiem</td>
+          <td class="ch-num">6</td>
+          <td class="ch-num muted">6</td>
+          <td><div class="ch-bar"><div class="ch-bar-fill" style="width: 100%"></div></div></td>
+        </tr>
+        <tr>
+          <td class="ch-num muted">02</td>
+          <td><span class="ch-name">PacifistyPlay</span><span class="ch-platform">YouTube</span></td>
+          <td class="ch-video">Resident Evil requiem</td>
+          <td class="ch-num">4</td>
+          <td class="ch-num muted">4</td>
+          <td><div class="ch-bar"><div class="ch-bar-fill" style="width: 67%"></div></div></td>
+        </tr>
+        <tr>
+          <td class="ch-num muted">03</td>
+          <td><span class="ch-name">PacifistyGames</span><span class="ch-platform">YouTube</span></td>
+          <td class="ch-video">Resident Evil requiem</td>
+          <td class="ch-num">2</td>
+          <td class="ch-num muted">2</td>
+          <td><div class="ch-bar"><div class="ch-bar-fill" style="width: 33%"></div></div></td>
+        </tr>
+        <tr>
+          <td class="ch-num muted">04</td>
+          <td><span class="ch-name">PacifistyLive</span><span class="ch-platform">YouTube</span></td>
+          <td class="ch-video">Resident Evil requiem</td>
+          <td class="ch-num">2</td>
+          <td class="ch-num muted">2</td>
+          <td><div class="ch-bar"><div class="ch-bar-fill" style="width: 33%"></div></div></td>
+        </tr>
+        <tr>
+          <td class="ch-num muted">05</td>
+          <td><span class="ch-name">PacifistyTV</span><span class="ch-platform">YouTube</span></td>
+          <td class="ch-video">Resident Evil requiem</td>
+          <td class="ch-num">2</td>
+          <td class="ch-num muted">2</td>
+          <td><div class="ch-bar"><div class="ch-bar-fill" style="width: 33%"></div></div></td>
+        </tr>
+        <tr>
+          <td class="ch-num muted">06</td>
+          <td><span class="ch-name">PacifistyClips</span><span class="ch-platform">YouTube</span></td>
+          <td class="ch-video">Resident Evil requiem</td>
+          <td class="ch-num">1</td>
+          <td class="ch-num muted">1</td>
+          <td><div class="ch-bar"><div class="ch-bar-fill" style="width: 17%"></div></div></td>
+        </tr>
+        <tr>
+          <td class="ch-num muted">07</td>
+          <td><span class="ch-name">PacifistyShorts</span><span class="ch-platform">YouTube</span></td>
+          <td class="ch-video">Resident Evil requiem</td>
+          <td class="ch-num">1</td>
+          <td class="ch-num muted">1</td>
+          <td><div class="ch-bar"><div class="ch-bar-fill" style="width: 17%"></div></div></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ACTIVITY TIMELINE -->
+  <section class="timeline">
+    <div class="timeline-col">
+      <header class="section-head" style="margin-bottom: 0; border-bottom: 0; padding-bottom: 0">
+        <h2 class="section-title" style="font-size: 22px">Today's events</h2>
+        <span class="section-meta">12 entries</span>
+      </header>
+      <div style="margin-top: 12px">
+        <div class="timeline-event">
+          <div class="timeline-time">14:21</div>
+          <div class="timeline-body">
+            <strong>PacifistyZone</strong> published <em>Resident Evil requiem</em>
+            <span class="tag success">success</span>
+          </div>
+        </div>
+        <div class="timeline-event">
+          <div class="timeline-time">14:18</div>
+          <div class="timeline-body">
+            <strong>PacifistyPlay</strong> published <em>Resident Evil requiem</em>
+            <span class="tag success">success</span>
+          </div>
+        </div>
+        <div class="timeline-event">
+          <div class="timeline-time">14:15</div>
+          <div class="timeline-body">
+            Job retry succeeded on <strong>PacifistyClips</strong> after one quota throttle.
+            <span class="tag">retry</span>
+          </div>
+        </div>
+        <div class="timeline-event">
+          <div class="timeline-time">14:09</div>
+          <div class="timeline-body">
+            Target failed on <strong>PacifistyShorts</strong> — <em>upload step timeout</em>.
+            <span class="tag fail">failed</span>
+          </div>
+        </div>
+        <div class="timeline-event">
+          <div class="timeline-time">13:54</div>
+          <div class="timeline-body">
+            Campaign <strong>"Resident Evil requiem · Wave 2"</strong> launched.
+            <span class="tag">launch</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="timeline-col">
+      <header class="section-head" style="margin-bottom: 0; border-bottom: 0; padding-bottom: 0">
+        <h2 class="section-title" style="font-size: 22px">Recent campaigns</h2>
+        <span class="section-meta">last 5</span>
+      </header>
+      <div style="margin-top: 12px">
+        <div class="timeline-event">
+          <div class="timeline-time">Apr 28</div>
+          <div class="timeline-body">
+            <strong style="color: var(--ink)">Resident Evil requiem · Wave 2</strong>
+            <div style="font-size: 13px; color: var(--ink-mid); font-style: italic; margin-top: 4px">7 targets · 6 published, 1 failed</div>
+          </div>
+        </div>
+        <div class="timeline-event">
+          <div class="timeline-time">Apr 27</div>
+          <div class="timeline-body">
+            <strong style="color: var(--ink)">Resident Evil requiem · Wave 1</strong>
+            <div style="font-size: 13px; color: var(--ink-mid); font-style: italic; margin-top: 4px">7 targets · all published</div>
+          </div>
+        </div>
+        <div class="timeline-event">
+          <div class="timeline-time">Apr 25</div>
+          <div class="timeline-body">
+            <strong style="color: var(--ink)">Devil May Cry teaser</strong>
+            <div style="font-size: 13px; color: var(--ink-mid); font-style: italic; margin-top: 4px">3 targets · all published</div>
+          </div>
+        </div>
+        <div class="timeline-event">
+          <div class="timeline-time">Apr 22</div>
+          <div class="timeline-body">
+            <strong style="color: var(--ink)">Silent Hill review drop</strong>
+            <div style="font-size: 13px; color: var(--ink-mid); font-style: italic; margin-top: 4px">5 targets · 4 published, 1 retry</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COLOPHON -->
+  <footer class="colophon">
+    <div>The Publisher Dispatch · Edition 042 · Auto-refreshes every 12 seconds.</div>
+    <div>Plataform Multi Publi · 2026</div>
+  </footer>
+
+</div>
+</body>
+</html>

@@ -1,528 +1,349 @@
 # Go-Live Verification Checklist: YT Multi-Publisher v1
 
 **Created:** 2026-04-28  
-**Environment:** Production (or Staging if pre-flight)  
-**Verified By:** [Executor name]
+**Environment:** Staging or Production  
+**Verified By:** ____________________
 
 ---
 
-## How to Use This Checklist
+## How To Use This Checklist
 
-1. Run each verification step IN ORDER
-2. For each step: note the command, observe the result, record PASS or FAIL
-3. If a step fails, do NOT proceed — document the failure and stop
-4. If all steps pass, the application is ready for launch
-5. Archive this completed checklist for audit/regulatory purposes
+1. Run each verification step in order.
+2. Record command/path, observed result, and PASS/FAIL.
+3. If any blocker fails, stop and open incident + fix plan.
+4. If all blockers pass, proceed to launch gate review.
+5. Archive this completed checklist with timestamp and owner.
 
-**Note:** This checklist is repeatable. Run it again before each launch attempt.
+Severity:
+- `blocker`: launch must stop.
+- `high`: launch proceeds only with explicit owner acceptance.
+- `medium`: launch may proceed with post-launch action owner and due date.
 
 ---
 
 ## Verification 1: Authentication Flow
 
 ### Objective
-Verify that users can connect OAuth accounts (Google, TikTok, Instagram) and maintain authenticated sessions.
+Verify OAuth login/session behavior and connected account management.
 
 ### Prerequisites
-- Application is deployed and accessible at {railway-domain}
-- Google OAuth credentials configured in .env.production
-- TikTok OAuth credentials configured (if applicable)
-- Staging users available for testing
+- App available at `https://{app-domain}`.
+- OAuth credentials configured for Google/TikTok/Instagram.
+- Test user account exists.
 
-### Verification Steps
+### Steps
 
-#### 1.1 — Google OAuth Login
+#### 1.1 Google OAuth Login (`blocker`)
 
-**Command:** Browser test
+Path: `https://{app-domain}/login`
 
-**Steps:**
-1. Open https://{railway-domain}/login
-2. Click "Sign in with Google"
-3. Log in with test account (e.g., user@example.com)
-4. Verify redirect: Should land on /workspace/dashboard
-5. Verify session: Open developer console → Application → Cookies
-6. Look for session cookie (e.g., "next-auth.session-token")
-   - Session cookie should have Secure flag (HTTPS only)
-   - Should have HttpOnly flag (JavaScript can't access)
+1. Click `Sign in with Google`.
+2. Complete login with test account.
+3. Confirm redirect to workspace page.
+4. Confirm protected pages are accessible.
 
-**Expected Result:**
-- ✓ Login succeeds without errors
-- ✓ Redirect to dashboard works
-- ✓ Session cookie created with Secure + HttpOnly flags
-- ✓ Can access authenticated pages (dashboard loads)
+Expected:
+- Login succeeds.
+- Redirect works.
+- Authenticated page loads.
 
-**Result:** [ ] PASS   [ ] FAIL
+Result: [ ] PASS [ ] FAIL  
+Evidence: ____________________
 
-**Evidence:** Screenshot of dashboard or session cookie in dev tools
+#### 1.2 TikTok OAuth Connection (`blocker`)
 
-**Notes:** [Executor can add observations]
+Path: `/workspace/accounts`
 
----
+1. Click `Connect TikTok`.
+2. Complete consent.
+3. Confirm redirect back to accounts page.
+4. Confirm TikTok account appears connected.
 
-#### 1.2 — TikTok OAuth Connection
+Expected:
+- OAuth flow completes.
+- Account status is active/connected.
 
-**Command:** Browser test
+Result: [ ] PASS [ ] FAIL  
+Evidence: ____________________
 
-**Steps:**
-1. While logged in, navigate to /workspace/accounts
-2. Click "Connect TikTok"
-3. Authorize TikTok OAuth (use test TikTok account)
-4. Verify redirect back to /workspace/accounts
-5. Verify TikTok account appears in accounts list
+#### 1.3 Instagram OAuth Connection (`blocker`)
 
-**Expected Result:**
-- ✓ OAuth flow completes without errors
-- ✓ Account added to database (check accounts list)
-- ✓ Access token received and stored
+Path: `/workspace/accounts`
 
-**Result:** [ ] PASS   [ ] FAIL
+1. Click `Connect Instagram`.
+2. Complete consent.
+3. Confirm redirect back to accounts page.
+4. Confirm Instagram account appears connected.
 
-**Evidence:** Screenshot of accounts list showing TikTok account
+Expected:
+- OAuth flow completes.
+- Account status is active/connected.
 
-**Notes:**
+Result: [ ] PASS [ ] FAIL  
+Evidence: ____________________
 
----
+#### 1.4 Session Persistence (`high`)
 
-#### 1.3 — Instagram OAuth Connection (if applicable)
+1. Close tab after login.
+2. Re-open `https://{app-domain}/workspace/dashboard`.
 
-**Command:** Browser test
+Expected:
+- Session still valid.
+- No forced re-login.
 
-**Steps:**
-1. While logged in, navigate to /workspace/accounts
-2. Click "Connect Instagram"
-3. Authorize Instagram OAuth
-4. Verify redirect back to /workspace/accounts
-5. Verify Instagram account appears in accounts list
+Result: [ ] PASS [ ] FAIL  
+Evidence: ____________________
 
-**Expected Result:**
-- ✓ OAuth flow completes without errors
-- ✓ Account added to database
-- ✓ Access token received and stored
+#### 1.5 Logout Protection (`blocker`)
 
-**Result:** [ ] PASS   [ ] FAIL
+1. Click logout.
+2. Open a protected route directly.
 
-**Evidence:** Screenshot of accounts list showing Instagram account
+Expected:
+- User is redirected to login.
 
-**Notes:**
+Result: [ ] PASS [ ] FAIL  
+Evidence: ____________________
 
----
+### Authentication Summary
 
-#### 1.4 — Session Persistence
+| Scenario | Severity | Result | Notes |
+|---|---|---|---|
+| Google OAuth Login | blocker | [ ] PASS / [ ] FAIL | |
+| TikTok OAuth Connection | blocker | [ ] PASS / [ ] FAIL | |
+| Instagram OAuth Connection | blocker | [ ] PASS / [ ] FAIL | |
+| Session Persistence | high | [ ] PASS / [ ] FAIL | |
+| Logout Protection | blocker | [ ] PASS / [ ] FAIL | |
 
-**Command:** Browser test
-
-**Steps:**
-1. While logged in, close the browser tab
-2. Open a new tab and visit https://{railway-domain}/workspace/dashboard
-3. Verify user is still logged in (no redirect to /login)
-
-**Expected Result:**
-- ✓ Session persists across tab closes
-- ✓ No login required on page refresh
-
-**Result:** [ ] PASS   [ ] FAIL
-
-**Evidence:**
-
-**Notes:**
-
----
-
-#### 1.5 — Logout
-
-**Command:** Browser test
-
-**Steps:**
-1. While logged in, click user menu → "Sign Out"
-2. Verify redirect to /login
-3. Try to access /workspace/dashboard
-4. Verify redirect to /login (not authenticated)
-
-**Expected Result:**
-- ✓ Logout clears session
-- ✓ Protected pages redirect to login
-
-**Result:** [ ] PASS   [ ] FAIL
-
-**Evidence:**
-
-**Notes:**
-
----
-
-### Authentication Verification Summary
-
-| Scenario | Result | Notes |
-|----------|--------|-------|
-| Google OAuth | [ ] PASS / [ ] FAIL | |
-| TikTok OAuth | [ ] PASS / [ ] FAIL | |
-| Instagram OAuth | [ ] PASS / [ ] FAIL | |
-| Session Persistence | [ ] PASS / [ ] FAIL | |
-| Logout | [ ] PASS / [ ] FAIL | |
-
-**Auth Flow Status:** [ ] ALL PASS → Proceed to Payment Verification   [ ] ANY FAIL → STOP
+Auth Gate: [ ] PASS [ ] FAIL
 
 ---
 
 ## Verification 2: Payment Flow
 
 ### Objective
-Verify that users can initiate checkout and receive payment confirmation.
+Verify checkout, webhook processing, and token crediting with idempotency safety.
 
 ### Prerequisites
-- Mercado Pago credentials configured in .env.production
-- Staging merchant account set up
-- Webhook URL registered in Mercado Pago (e.g., https://{railway-domain}/api/webhooks/mercado-pago)
-- Test user account with TikTok/Instagram connected (from Verification 1)
+- Mercado Pago credentials configured.
+- Webhook endpoint configured.
+- Test plan and test user account available.
 
-### Verification Steps
+### Steps
 
-#### 2.1 — Create Checkout Session
+#### 2.1 Create Checkout Session (`blocker`)
 
-**Command:** Browser test
+Path: `/workspace/planos`
 
-**Steps:**
-1. Log in with test account
-2. Navigate to /workspace/planos (pricing/checkout page)
-3. Select a plan (e.g., "Starter")
-4. Click "Subscribe" or "Checkout"
-5. Verify redirect to Mercado Pago checkout page
-   - Should show plan name, price, user email
-6. Do NOT complete payment (only verify redirect works)
+1. Select a paid plan.
+2. Start checkout.
+3. Confirm redirect to Mercado Pago checkout.
 
-**Expected Result:**
-- ✓ /workspace/planos loads without error
-- ✓ Plan selection works
-- ✓ Redirect to Mercado Pago succeeds
-- ✓ Checkout page shows correct amount and user email
+Expected:
+- Checkout initializes successfully.
+- Correct plan and user details shown.
 
-**Result:** [ ] PASS   [ ] FAIL
+Result: [ ] PASS [ ] FAIL  
+Evidence: ____________________
 
-**Evidence:** Screenshot of Mercado Pago checkout page
+#### 2.2 Complete Sandbox Payment (`blocker`)
 
-**Notes:**
+1. Complete payment with sandbox method.
+2. Confirm return to app success page/workspace.
+3. Review logs for webhook receive and confirm events.
 
----
+Expected:
+- Payment succeeds.
+- Webhook processed.
+- No server errors.
 
-#### 2.2 — Complete Test Payment
+Result: [ ] PASS [ ] FAIL  
+Evidence: ____________________
 
-**Command:** Browser + Mercado Pago sandbox
+#### 2.3 Verify Token Crediting (`blocker`)
 
-**Steps:**
-1. From checkout page, fill in test card details:
-   - Card: 4111 1111 1111 1111
-   - Expiry: 11/25
-   - CVV: 123
-2. Complete payment
-3. Verify redirect back to app (success page or dashboard)
-4. Check application logs for webhook delivery confirmation
-   - Look for: "Webhook received" and "Payment confirmed"
+Path: workspace dashboard (and optional DB query)
 
-**Expected Result:**
-- ✓ Payment completes (Mercado Pago accepts card)
-- ✓ Redirect back to app succeeds
-- ✓ Webhook received and logged
-- ✓ User status updated to "active" or similar
+1. Check token balance in UI.
+2. Optionally validate DB row for user token balance.
 
-**Result:** [ ] PASS   [ ] FAIL
+Expected:
+- Token credit matches purchased plan.
 
-**Evidence:** 
-- Screenshot of success page
-- Screenshot of webhook log entry (Railway logs or Sentry)
+Result: [ ] PASS [ ] FAIL  
+Evidence: ____________________
 
-**Notes:**
+#### 2.4 Webhook Idempotency (`blocker`)
 
----
+1. Check webhook/payment logs for duplicate processing.
+2. Confirm balance was not credited twice.
 
-#### 2.3 — Verify Token Crediting
+Expected:
+- Single logical credit for one payment.
 
-**Command:** Browser + database check
+Result: [ ] PASS [ ] FAIL  
+Evidence: ____________________
 
-**Steps:**
-1. After payment completes, log in and check workspace/dashboard
-2. Verify tokens/credits appear:
-   - Should see "Monthly Tokens: X" or similar
-3. Optional: Check database directly
-   ```bash
-   psql {DATABASE_URL} -c "SELECT email, tokens_remaining FROM users WHERE email='test@example.com'"
-   ```
+### Payment Summary
 
-**Expected Result:**
-- ✓ Tokens/credits visible in dashboard
-- ✓ Token count matches purchased plan (e.g., 1000 tokens for Starter)
-- ✓ Database query confirms token update
+| Scenario | Severity | Result | Notes |
+|---|---|---|---|
+| Create Checkout Session | blocker | [ ] PASS / [ ] FAIL | |
+| Complete Sandbox Payment | blocker | [ ] PASS / [ ] FAIL | |
+| Verify Token Crediting | blocker | [ ] PASS / [ ] FAIL | |
+| Webhook Idempotency | blocker | [ ] PASS / [ ] FAIL | |
 
-**Result:** [ ] PASS   [ ] FAIL
-
-**Evidence:** Screenshot of dashboard showing tokens
-
-**Notes:**
-
----
-
-#### 2.4 — Webhook Idempotency
-
-**Command:** Manual (simulates duplicate webhook)
-
-**Steps:**
-1. In Mercado Pago dashboard, find the payment you just made
-2. Look for webhook delivery history (if available)
-3. Verify webhook was delivered once (not multiple times)
-4. In application logs, search for duplicate "Payment confirmed" messages
-   - Expected: ONE confirmation message
-   - If seen: Multiple messages = idempotency failure
-
-**Expected Result:**
-- ✓ Webhook delivered exactly once
-- ✓ No duplicate token crediting
-- ✓ User has correct token count (not double-charged)
-
-**Result:** [ ] PASS   [ ] FAIL
-
-**Evidence:** Screenshot of webhook logs
-
-**Notes:**
-
----
-
-### Payment Verification Summary
-
-| Scenario | Result | Notes |
-|----------|--------|-------|
-| Create Checkout Session | [ ] PASS / [ ] FAIL | |
-| Complete Test Payment | [ ] PASS / [ ] FAIL | |
-| Token Crediting | [ ] PASS / [ ] FAIL | |
-| Webhook Idempotency | [ ] PASS / [ ] FAIL | |
-
-**Payment Flow Status:** [ ] ALL PASS → Proceed to Multi-Platform Verification   [ ] ANY FAIL → STOP
+Payment Gate: [ ] PASS [ ] FAIL
 
 ---
 
 ## Verification 3: Multi-Platform Campaign Publishing
 
 ### Objective
-Verify that campaigns can be created and published to YouTube, TikTok, and Instagram with correct status tracking.
+Verify campaign creation and publish status across YouTube, TikTok, and Instagram.
 
 ### Prerequisites
-- User logged in with active tokens (from Verification 2)
-- YouTube account connected (should already be connected)
-- TikTok account connected (from Verification 1)
-- Instagram account connected (from Verification 1)
-- Test video file available (e.g., sample.mp4, 30-60 seconds, vertical format)
+- Auth and payment gates passed.
+- Connected accounts available for all platforms.
+- Test video asset available.
 
-### Verification Steps
+### Steps
 
-#### 3.1 — Create Campaign (YouTube)
+#### 3.1 Create Campaign for YouTube (`blocker`)
 
-**Command:** Browser test
+Path: `/workspace/campanhas`
 
-**Steps:**
-1. Navigate to /workspace/campaigns
-2. Click "New Campaign"
-3. Fill in:
-   - Name: "Test Campaign YouTube"
-   - Description: "GO-LIVE test"
-   - Select video file (test.mp4)
-4. In "Targets" section, select YouTube channel(s)
-5. Click "Create Campaign"
-6. Verify campaign appears in campaigns list with status "pending" or "ready"
+1. Create a new campaign with one YouTube destination.
+2. Save draft/ready campaign.
 
-**Expected Result:**
-- ✓ Campaign created successfully
-- ✓ Video uploaded to storage (R2)
-- ✓ Campaign shows in list with YouTube target selected
-- ✓ Status shows "pending" (waiting for publish)
+Expected:
+- Campaign created.
+- Target appears correctly.
 
-**Result:** [ ] PASS   [ ] FAIL
+Result: [ ] PASS [ ] FAIL  
+Evidence: ____________________
 
-**Evidence:** Screenshot of campaign in list
+#### 3.2 Publish to YouTube (`blocker`)
 
-**Notes:**
+1. Launch publish for YouTube target.
+2. Observe status transitions.
 
----
+Expected:
+- No fatal error.
+- Target reaches published/success status.
 
-#### 3.2 — Publish to YouTube
+Result: [ ] PASS [ ] FAIL  
+Evidence: ____________________
 
-**Command:** Browser test
+#### 3.3 Create + Publish TikTok Campaign (`blocker`)
 
-**Steps:**
-1. From campaigns list, click the campaign just created
-2. Click "Publish to YouTube"
-3. Verify no errors appear
-4. Wait up to 2 minutes for status to change
-5. Verify status updates: "publishing" → "published" or "success"
+1. Create campaign with TikTok destination.
+2. Launch publish.
+3. Observe completion.
 
-**Expected Result:**
-- ✓ Publish action accepted (no 500 errors)
-- ✓ Status changes from "pending" to "publishing" then "published"
-- ✓ No errors in application logs
+Expected:
+- Target reaches published/success status.
 
-**Result:** [ ] PASS   [ ] FAIL
+Result: [ ] PASS [ ] FAIL  
+Evidence: ____________________
 
-**Evidence:** Screenshot showing status as "published"
+#### 3.4 Create + Publish Instagram Campaign (`blocker`)
 
-**Notes:** (YouTube uploads may take 1-2 minutes; this is normal)
+1. Create campaign with Instagram destination.
+2. Launch publish.
+3. Observe completion.
 
----
+Expected:
+- Target reaches published/success status.
 
-#### 3.3 — Create and Publish to TikTok
+Result: [ ] PASS [ ] FAIL  
+Evidence: ____________________
 
-**Command:** Browser test
+#### 3.5 Multi-Destination Campaign (`high`)
 
-**Steps:**
-1. Create new campaign (steps same as 3.1, but name: "Test Campaign TikTok")
-2. Select TikTok account in Targets section
-3. Click "Create Campaign"
-4. Once created, click "Publish to TikTok"
-5. Wait up to 3 minutes for status to change
-6. Verify status: "published" or "success"
+1. Create one campaign with YouTube + TikTok + Instagram.
+2. Launch publish for all destinations.
+3. Confirm per-destination statuses are independent.
 
-**Expected Result:**
-- ✓ Campaign created with TikTok target
-- ✓ Publish action accepted
-- ✓ Status updates to "published"
+Expected:
+- All selected destinations process correctly.
+- One platform failure does not corrupt other status rows.
 
-**Result:** [ ] PASS   [ ] FAIL
+Result: [ ] PASS [ ] FAIL  
+Evidence: ____________________
 
-**Evidence:** Screenshot of TikTok campaign status
+#### 3.6 Status Persistence (`high`)
 
-**Notes:** (TikTok uploads typically take 1-3 minutes due to their processing)
+1. Refresh campaigns page.
+2. Re-open campaign details.
 
----
+Expected:
+- Published/failure statuses persist after reload.
 
-#### 3.4 — Create and Publish to Instagram (if applicable)
+Result: [ ] PASS [ ] FAIL  
+Evidence: ____________________
 
-**Command:** Browser test
+### Multi-Platform Summary
 
-**Steps:**
-1. Create new campaign with name: "Test Campaign Instagram"
-2. Select Instagram account in Targets section
-3. Click "Create Campaign"
-4. Once created, click "Publish to Instagram"
-5. Wait up to 3 minutes for status to change
-6. Verify status: "published" or "success"
+| Scenario | Severity | Result | Notes |
+|---|---|---|---|
+| Create Campaign for YouTube | blocker | [ ] PASS / [ ] FAIL | |
+| Publish to YouTube | blocker | [ ] PASS / [ ] FAIL | |
+| Create + Publish TikTok Campaign | blocker | [ ] PASS / [ ] FAIL | |
+| Create + Publish Instagram Campaign | blocker | [ ] PASS / [ ] FAIL | |
+| Multi-Destination Campaign | high | [ ] PASS / [ ] FAIL | |
+| Status Persistence | high | [ ] PASS / [ ] FAIL | |
 
-**Expected Result:**
-- ✓ Campaign created with Instagram target
-- ✓ Publish action accepted
-- ✓ Status updates to "published"
-
-**Result:** [ ] PASS   [ ] FAIL
-
-**Evidence:** Screenshot of Instagram campaign status
-
-**Notes:** (If Instagram account not available, mark as N/A but document reason)
-
----
-
-#### 3.5 — Multi-Platform Campaign (All Targets)
-
-**Command:** Browser test
-
-**Steps:**
-1. Create new campaign: "Test Campaign All Platforms"
-2. In Targets section, select ALL platforms:
-   - [ ] YouTube
-   - [ ] TikTok
-   - [ ] Instagram (if available)
-3. Click "Create Campaign"
-4. Verify campaign appears with all targets selected
-5. Publish to all platforms (either one-by-one or bulk if available)
-6. Wait up to 5 minutes for all statuses to update
-7. Verify each platform shows status "published" or "success"
-
-**Expected Result:**
-- ✓ Multi-target campaign created
-- ✓ All platforms selected without error
-- ✓ Each platform shows published status independently
-- ✓ No cross-platform interference (TikTok doesn't affect YouTube status, etc.)
-
-**Result:** [ ] PASS   [ ] FAIL
-
-**Evidence:** Screenshot showing all platforms with published status
-
-**Notes:**
-
----
-
-#### 3.6 — Verify Campaign Status Persistence
-
-**Command:** Browser test
-
-**Steps:**
-1. After all campaigns published, refresh the campaigns page
-2. Verify published status persists (doesn't revert to "pending")
-3. Click on one of the published campaigns
-4. Verify campaign details load correctly
-
-**Expected Result:**
-- ✓ Status persists across page refresh
-- ✓ Campaign details load without error
-- ✓ Platform statuses remain correct
-
-**Result:** [ ] PASS   [ ] FAIL
-
-**Evidence:**
-
-**Notes:**
-
----
-
-### Multi-Platform Publishing Summary
-
-| Scenario | Result | Notes |
-|----------|--------|-------|
-| Create & Publish to YouTube | [ ] PASS / [ ] FAIL | |
-| Create & Publish to TikTok | [ ] PASS / [ ] FAIL | |
-| Create & Publish to Instagram | [ ] PASS / [ ] FAIL | |
-| Multi-Platform Campaign | [ ] PASS / [ ] FAIL | |
-| Status Persistence | [ ] PASS / [ ] FAIL | |
-
-**Multi-Platform Status:** [ ] ALL PASS → LAUNCH READY   [ ] ANY FAIL → STOP
+Multi-Platform Gate: [ ] PASS [ ] FAIL
 
 ---
 
 ## Overall Go-Live Decision
 
-Based on the three verification flows above, determine launch readiness:
+Authentication Gate: [ ] PASS [ ] FAIL  
+Payment Gate: [ ] PASS [ ] FAIL  
+Multi-Platform Gate: [ ] PASS [ ] FAIL
 
-### Launch Readiness Assessment
+Overall:
+- [ ] GO TO LAUNCH
+- [ ] HOLD (fix required before launch)
 
-**Authentication Flow:** [ ] PASS [ ] FAIL
-**Payment Flow:** [ ] PASS [ ] FAIL  
-**Multi-Platform Flow:** [ ] PASS [ ] FAIL
+Blocking Failures:
+____________________________________________________
+____________________________________________________
 
-**Overall Status:**
-- [ ] GO TO LAUNCH — All three flows passed, production ready
-- [ ] HOLD — Some flows failed, requires fixes before launch
-- [ ] ROLLBACK NOT NEEDED — No prior version to rollback to (this is initial launch)
-
-**Failures (if any):**
-[Executor documents any failures and root cause]
-
-**Approval:**
-- Verified By: [Name]
-- Verified On: [Date/Time]
-- Evidence Archived: [Location]
+Approvals:
+- Verified by: ____________________
+- Date/time: ____________________
+- Evidence location: ____________________
 
 ---
 
 ## Command Reference
 
-Quick copy-paste commands for execution:
-
 ```bash
-# Check health (after launch)
-curl -s https://{railway-domain}/api/health | jq .
+# Health
+curl -s https://{app-domain}/api/health
 
-# View recent logs
-railway logs --service {app-name} --tail 100
+# Optional readiness
+curl -s https://{app-domain}/api/ready
 
-# Check webhook logs (if accessible via app)
-# Depends on app logging infrastructure; see docs/DEPLOYMENT.md
+# Prisma startup verification (local/staging shell)
+node --env-file-if-exists=.env scripts/verify-prisma-startup.cjs --skip-generate
 
-# Database check (if accessible)
-# psql {DATABASE_URL} -c "SELECT id, email FROM users LIMIT 5"
+# Focused automated checks (local CI-style pass before launch window)
+npx vitest run tests/phase2/campaign-wizard-ui.test.tsx tests/phase7/campanhas-api-integration.test.ts tests/phase107 tests/phase108
+
+# Platform smoke scripts (deployed environment)
+BASE_URL=https://{app-domain} ./scripts/smoke-test-tiktok.sh
+BASE_URL=https://{app-domain} ./scripts/smoke-test-instagram.sh
 ```
 
 ---
+
+## Evidence Log Template
+
+| Timestamp (UTC) | Environment | Step | Command/Path | Result | Severity | Owner | Notes |
+|---|---|---|---|---|---|---|---|
+| | | | | PASS/FAIL | blocker/high/medium | | |
+

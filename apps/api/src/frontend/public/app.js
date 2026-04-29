@@ -1294,6 +1294,7 @@ const state = {
   mediaDurationBackfillInFlight: new Set(),
   uiNotice: null,
   autoRefreshTimer: null,
+  pulseRotateTimer: null,
 };
 
 function applyBackgroundTheme(backgroundThemeId) {
@@ -1541,6 +1542,13 @@ function clearAutoRefreshTimer() {
   if (state.autoRefreshTimer) {
     clearTimeout(state.autoRefreshTimer);
     state.autoRefreshTimer = null;
+  }
+}
+
+function clearPulseRotateTimer() {
+  if (state.pulseRotateTimer) {
+    clearInterval(state.pulseRotateTimer);
+    state.pulseRotateTimer = null;
   }
 }
 
@@ -4198,9 +4206,118 @@ function dashboardPlatformLabel(platform) {
   }
 }
 
+function renderEditorialPulseIcon(icon) {
+  const paths = {
+    create: '<path d="M12 5v14"/><path d="M5 12h14"/><path d="M5 5h14v14H5z"/>',
+    campaigns: '<path d="M5 7h14"/><path d="M5 12h14"/><path d="M5 17h9"/><path d="M3 7h.01"/><path d="M3 12h.01"/><path d="M3 17h.01"/>',
+    accounts: '<path d="M16 11a4 4 0 1 0-8 0"/><path d="M4 20a8 8 0 0 1 16 0"/><path d="M18 8a3 3 0 0 1 3 3"/><path d="M20 20a6 6 0 0 0-2.5-4.9"/>',
+  };
+  return `<svg class="od-hero-action-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[icon] ?? paths.create}</svg>`;
+}
+
+function getDashboardChannelLabel(channel) {
+  return String(channel?.channelLabel ?? '').trim() || 'Connected account';
+}
+
+function renderRankBadge(index) {
+  const rank = index + 1;
+  const tier = index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : 'standard';
+  const iconPath = index === 0
+    ? '<path d="M7 9 4 7l2 9h12l2-9-3 2-5-5-5 5Z"/><path d="M7 20h10"/>'
+    : index < 3
+      ? '<circle cx="12" cy="9" r="4"/><path d="m9 13-2 7 5-3 5 3-2-7"/>'
+      : '<path d="M7 7h10"/><path d="M8.5 12h7"/><path d="M10.5 17h3"/>';
+  return `
+    <span class="od-rank-badge" data-rank-tier="${tier}" aria-label="Rank ${rank}">
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${iconPath}</svg>
+      <span class="od-rank-number">${String(rank).padStart(2, '0')}</span>
+    </span>
+  `;
+}
+
+function renderLeadershipRows(rankedChannels, emptyLabel) {
+  if (!rankedChannels.length) {
+    return `<div class="od-muted" style="padding:1rem 0">${escapeHtml(emptyLabel)}</div>`;
+  }
+  return rankedChannels.slice(0, 6).map((channel, index) => {
+    const topVideoViews = Number(channel?.topVideoViews ?? 0);
+    const topVideoLabel = channel?.topVideoTitle ?? 'Untitled video';
+    const topVideoId = String(channel?.topVideoId ?? '').trim();
+    const accountLabel = getDashboardChannelLabel(channel);
+    const thumbnailUrl = topVideoId ? `https://i.ytimg.com/vi/${encodeURIComponent(topVideoId)}/hqdefault.jpg` : '';
+    return `
+      <div class="od-leader-row">
+        <span class="od-leader-rank">${renderRankBadge(index)}</span>
+        <div class="od-leader-main">
+          ${thumbnailUrl
+            ? `<img class="od-leader-thumb" src="${escapeAttribute(thumbnailUrl)}" alt="${escapeAttribute(topVideoLabel)}" loading="lazy" referrerpolicy="no-referrer" />`
+            : '<div class="od-leader-thumb od-leader-thumb-empty" aria-hidden="true"></div>'}
+          <div class="od-leader-copy">
+            <small class="od-leader-account">${escapeHtml(accountLabel)}</small>
+            <small class="od-leader-sub">${escapeHtml(topVideoLabel)}</small>
+          </div>
+        </div>
+        <span class="od-leader-pub od-mono">${formatNumber(topVideoViews)} views</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderViewsPerformancePanel(rankedChannels) {
+  const visibleChannels = rankedChannels.slice(0, 6);
+  if (!visibleChannels.length) {
+    return '<div class="od-muted" style="padding:1rem 0">Connect accounts to unlock channel performance.</div>';
+  }
+  const totalViews = visibleChannels.reduce((sum, channel) => sum + Number(channel?.totalViews ?? 0), 0);
+  const averageSuccess = visibleChannels.reduce((sum, channel) => sum + Number(channel?.successRate ?? 0), 0) / visibleChannels.length;
+  const topChannel = visibleChannels[0];
+  const maxViews = Math.max(1, ...visibleChannels.map((channel) => Number(channel?.totalViews ?? 0)));
+  const rows = visibleChannels.map((channel) => {
+    const channelViews = Number(channel?.totalViews ?? 0);
+    const topVideoViews = Number(channel?.topVideoViews ?? 0);
+    const totalPct = clampPercent((channelViews / maxViews) * 100);
+    const topVideoPct = channelViews > 0 ? clampPercent((topVideoViews / channelViews) * 100) : 0;
+    return `
+      <div class="od-views-row">
+        <div class="od-views-row-head">
+          <span>${escapeHtml(getDashboardChannelLabel(channel))}</span>
+          <strong class="od-mono">${formatNumber(channelViews)}</strong>
+        </div>
+        <div class="od-views-track" aria-label="${escapeAttribute(`${getDashboardChannelLabel(channel)} total views`)}">
+          <span class="od-views-fill" style="width:${totalPct}%">
+            <span class="od-views-top-video" style="width:${topVideoPct}%"></span>
+          </span>
+        </div>
+        <div class="od-views-row-foot od-muted">
+          <span>${formatNumber(topVideoViews)} top video views</span>
+          <span>${formatPercent(channel?.successRate ?? 0)} delivery</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+  return `
+    <div class="od-views-summary">
+      <div class="od-views-total">
+        <span class="od-kpi-label od-mono">Total views</span>
+        <strong>${formatNumber(totalViews)}</strong>
+      </div>
+      <div class="od-views-chip">
+        <span>Leader</span>
+        <strong>${escapeHtml(getDashboardChannelLabel(topChannel))}</strong>
+      </div>
+      <div class="od-views-chip">
+        <span>Avg delivery</span>
+        <strong>${formatPercent(averageSuccess)}</strong>
+      </div>
+    </div>
+    <div class="od-views-chart">${rows}</div>
+  `;
+}
+
 function bindDashboardInteractions() {
   const dashboardRoot = document.getElementById('od-root');
   if (!dashboardRoot) return;
+  clearPulseRotateTimer();
 
   dashboardRoot.querySelectorAll('[data-dashboard-mode]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -4218,6 +4335,17 @@ function bindDashboardInteractions() {
       void renderPlatformDashboardPage();
     });
   });
+
+  const pulseLines = Array.from(dashboardRoot.querySelectorAll('[data-pulse-line]'));
+  if (pulseLines.length > 1) {
+    let activeIndex = 0;
+    state.pulseRotateTimer = setInterval(() => {
+      activeIndex = (activeIndex + 1) % pulseLines.length;
+      pulseLines.forEach((line, index) => {
+        line.classList.toggle('active', index === activeIndex);
+      });
+    }, 5000);
+  }
 }
 
 async function renderPlatformDashboardPage() {
@@ -4225,16 +4353,14 @@ async function renderPlatformDashboardPage() {
   let campaignsResult;
   let mediaResult;
   let accountsResult;
-  let playlistsResult;
   let destinationsResult;
 
   try {
-    [result, campaignsResult, mediaResult, accountsResult, playlistsResult, destinationsResult] = await Promise.all([
+    [result, campaignsResult, mediaResult, accountsResult, destinationsResult] = await Promise.all([
       api.dashboard(),
-      api.campaigns({ limit: 50, offset: 0 }),
+      api.campaigns({ limit: 12, offset: 0 }),
       api.media(),
       api.accounts(),
-      api.playlists(),
       loadConnectedPublishDestinations(),
     ]);
   } catch (error) {
@@ -4247,13 +4373,12 @@ async function renderPlatformDashboardPage() {
     return;
   }
 
-  const authFailure = [result, campaignsResult, mediaResult, accountsResult, playlistsResult, destinationsResult]
+  const authFailure = [result, campaignsResult, mediaResult, accountsResult, destinationsResult]
     .find((entry) => entry && !entry.ok && entry.status === 401);
   if (authFailure) {
     unauthorizedRedirect();
     return;
   }
-
   if (!result.ok) {
     renderWorkspaceShell({
       title: 'Dashboard',
@@ -4265,349 +4390,80 @@ async function renderPlatformDashboardPage() {
   }
 
   const stats = result.body ?? {};
-  const campaignsByStatus = stats?.campaigns?.byStatus ?? {};
-  const targetsByStatus = stats?.targets?.byStatus ?? {};
-  const jobsByStatus = stats?.jobs?.byStatus ?? {};
-  const channels = Array.isArray(stats?.channels) ? [...stats.channels] : [];
-  const campaigns = campaignsResult?.ok && Array.isArray(campaignsResult.body?.campaigns)
-    ? campaignsResult.body.campaigns
-    : [];
+  const campaigns = campaignsResult?.ok && Array.isArray(campaignsResult.body?.campaigns) ? campaignsResult.body.campaigns : [];
   const assets = mediaResult?.ok && Array.isArray(mediaResult.body?.assets) ? mediaResult.body.assets : [];
-  const accounts = accountsResult?.ok && Array.isArray(accountsResult.body?.accounts)
-    ? accountsResult.body.accounts.filter((account) => isSupportedWorkspaceProvider(account.provider))
-    : [];
-  const playlists = playlistsResult?.ok && Array.isArray(playlistsResult.body?.playlists) ? playlistsResult.body.playlists : [];
+  const accounts = accountsResult?.ok && Array.isArray(accountsResult.body?.accounts) ? accountsResult.body.accounts : [];
   const destinations = destinationsResult?.ok && Array.isArray(destinationsResult.destinations) ? destinationsResult.destinations : [];
-
+  const channels = Array.isArray(stats?.channels) ? [...stats.channels] : [];
+  const rankedChannels = [...channels].sort((left, right) => {
+    const leftTopViews = Number(left?.topVideoViews ?? 0);
+    const rightTopViews = Number(right?.topVideoViews ?? 0);
+    if (rightTopViews !== leftTopViews) return rightTopViews - leftTopViews;
+    return String(left?.channelId ?? '').localeCompare(String(right?.channelId ?? ''));
+  });
   const liveClock = formatClockLabel();
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const nextCampaign = campaigns.find((campaign) => campaign.scheduledAt) ?? null;
+
   const campaignTotal = dashboardNumber(stats?.campaigns?.total ?? campaignsResult?.body?.total ?? campaigns.length);
   const targetTotal = dashboardNumber(stats?.targets?.total);
-  const publishedTargets = dashboardNumber(targetsByStatus.publicado);
-  const failedTargets = dashboardNumber(targetsByStatus.erro);
-  const waitingTargets = dashboardNumber(targetsByStatus.aguardando);
-  const sendingTargets = dashboardNumber(targetsByStatus.enviando);
-  const activeJobs = dashboardNumber(jobsByStatus.queued) + dashboardNumber(jobsByStatus.processing);
-  const successRate = dashboardNumber(stats?.targets?.successRate);
-  const completionRate = targetTotal > 0 ? ((publishedTargets + failedTargets) / targetTotal) * 100 : 0;
-  const quotaWarningState = stats?.quota?.warningState ?? 'healthy';
-  const quotaTone = quotaWarningState === 'critical' ? 'danger' : quotaWarningState === 'warning' ? 'warning' : 'info';
+  const publishedTargets = dashboardNumber(stats?.targets?.byStatus?.publicado);
+  const failedTargets = dashboardNumber(stats?.targets?.byStatus?.erro);
   const projectedQuota = dashboardNumber(stats?.quota?.projectedPercent);
-  const reauthBlockedTargets = dashboardNumber(stats?.reauth?.blockedTargets);
-  const totalStorageBytes = assets.reduce((sum, asset) => sum + dashboardNumber(asset.size_bytes), 0);
-  const totalDurationSeconds = assets.reduce((sum, asset) => sum + dashboardNumber(asset.duration_seconds), 0);
-  const videoAssets = assets.filter((asset) => asset.asset_type === 'video');
-  const thumbnailAssets = assets.filter((asset) => asset.asset_type === 'thumbnail');
-  const shortVideos = videoAssets.filter((asset) => getVideoPublishFormat(asset) === 'short').length;
-  const standardVideos = videoAssets.filter((asset) => getVideoPublishFormat(asset) === 'standard').length;
-  const connectedAccounts = accounts.filter((account) => account.status === 'connected').length;
-  const reauthAccounts = accounts.filter((account) => account.status === 'reauth_required').length;
-  const disconnectedAccounts = accounts.filter((account) => account.status === 'disconnected').length;
-  const todayLaunches = campaigns.filter((campaign) => {
-    const value = campaign.scheduledAt ? new Date(campaign.scheduledAt).getTime() : NaN;
-    return Number.isFinite(value) && value >= todayStart && value < todayStart + 86400000;
-  }).length;
-  const nextCampaign = campaigns
-    .filter((campaign) => campaign.scheduledAt && new Date(campaign.scheduledAt).getTime() > now.getTime())
-    .sort((left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime())[0] ?? null;
-
-  const platformTargets = { youtube: 0, tiktok: 0, instagram: 0 };
-  for (const campaign of campaigns) {
-    for (const target of campaign.targets ?? []) {
-      const platform = (target.platform ?? 'youtube').toLowerCase();
-      platformTargets[platform] = (platformTargets[platform] ?? 0) + 1;
-    }
-  }
-  const platformDestinations = destinations.reduce((acc, destination) => {
-    const platform = (destination.platform ?? 'youtube').toLowerCase();
-    acc[platform] = (acc[platform] ?? 0) + 1;
-    return acc;
-  }, {});
-  const providerAccounts = accounts.reduce((acc, account) => {
-    const platform = getAccountPlatformKey(account.provider);
-    acc[platform] = (acc[platform] ?? 0) + 1;
-    return acc;
-  }, {});
-
-  const quotaPenalty = Math.min(35, projectedQuota * 0.35);
-  const failurePenalty = targetTotal > 0 ? Math.min(28, (failedTargets / targetTotal) * 100 * 0.32) : 0;
-  const reauthPenalty = Math.min(22, reauthBlockedTargets * 7);
-  const queueSignal = activeJobs > 0 ? 3 : 0;
-  const healthScore = Math.round(clampPercent(92 - quotaPenalty - failurePenalty - reauthPenalty + queueSignal));
-  const healthTone = healthScore < 58 ? 'danger' : healthScore < 78 ? 'warning' : 'success';
-  const selectedBackgroundTheme = getSelectedBackgroundTheme();
-
-  const rankedChannels = [...channels].sort((left, right) => {
-    const leftTopViews = dashboardNumber(left?.topVideoViews);
-    const rightTopViews = dashboardNumber(right?.topVideoViews);
-    if (rightTopViews !== leftTopViews) return rightTopViews - leftTopViews;
-    const leftTotalViews = dashboardNumber(left?.totalViews);
-    const rightTotalViews = dashboardNumber(right?.totalViews);
-    if (rightTotalViews !== leftTotalViews) return rightTotalViews - leftTotalViews;
-    return dashboardNumber(right?.published) - dashboardNumber(left?.published);
-  });
-
-  function buildModeButton(mode, label, detail) {
-    return `
-      <button type="button" class="od-mode-btn${mode === 'overview' ? ' active' : ''}" data-dashboard-mode="${escapeHtml(mode)}">
-        <strong>${escapeHtml(label)}</strong>
-        <span>${escapeHtml(detail)}</span>
-      </button>
-    `;
-  }
-
-  function buildKpiCard({ label, value, detail, tone = 'info', href = '', ring = null }) {
-    const tag = href ? 'a' : 'article';
-    const hrefAttr = href ? ` href="${escapeHtml(href)}" data-link` : '';
-    const ringHtml = ring === null
-      ? ''
-      : `<span class="od-mini-ring" style="--ring:${clampPercent(ring)}" aria-hidden="true"></span>`;
-    return `
-      <${tag} class="od-kpi-card" data-tone="${escapeHtml(tone)}"${hrefAttr}>
-        <span class="od-kpi-label od-mono">${escapeHtml(label)}</span>
-        <strong>${escapeHtml(value)}</strong>
-        <span class="od-kpi-detail">${escapeHtml(detail)}</span>
-        ${ringHtml}
-      </${tag}>
-    `;
-  }
-
-  function buildStatusStack(title, entries, emptyLabel) {
-    const total = Math.max(1, entries.reduce((sum, item) => sum + dashboardNumber(item.count), 0));
-    const rows = entries
-      .filter((item) => dashboardNumber(item.count) > 0)
-      .map((item) => {
-        const pct = clampPercent((dashboardNumber(item.count) / total) * 100);
-        return `
-          <a class="od-stack-row" data-tone="${escapeHtml(item.tone)}" href="${escapeHtml(item.href)}" data-link>
-            <span>${escapeHtml(item.label)}</span>
-            <strong class="od-mono">${formatNumber(item.count)}</strong>
-            <span class="od-stack-track"><span class="od-stack-fill" style="width:${pct}%"></span></span>
-          </a>
-        `;
-      }).join('');
-
-    return `
-      <div class="od-status-stack">
-        <div class="od-stack-title od-mono">${escapeHtml(title)}</div>
-        ${rows || `<p class="od-muted">${escapeHtml(emptyLabel)}</p>`}
-      </div>
-    `;
-  }
-
-  function buildSparkline() {
-    const days = [];
-    for (let index = 11; index >= 0; index -= 1) {
-      const dayStart = todayStart - index * 86400000;
-      const dayEnd = dayStart + 86400000;
-      const count = campaigns.filter((campaign) => {
-        const timestamp = new Date(campaign.scheduledAt ?? campaign.createdAt ?? 0).getTime();
-        return timestamp >= dayStart && timestamp < dayEnd;
-      }).length;
-      days.push({
-        count,
-        label: new Date(dayStart).toLocaleDateString([], { month: 'short', day: 'numeric' }),
-      });
-    }
-    const max = Math.max(1, ...days.map((day) => day.count));
-    return `
-      <div class="od-spark-bars" aria-label="Campaign rhythm">
-        ${days.map((day, index) => `
-          <span class="od-spark-col" title="${escapeAttribute(`${day.label}: ${day.count}`)}">
-            <span class="od-spark-fill${index === days.length - 1 ? ' today' : ''}" style="height:${clampPercent((day.count / max) * 100)}%"></span>
-          </span>
-        `).join('')}
-      </div>
-    `;
-  }
-
-  function buildPlatformMix() {
-    const platforms = ['youtube', 'tiktok', 'instagram'];
-    const max = Math.max(1, ...platforms.map((platform) => dashboardNumber(platformTargets[platform]) + dashboardNumber(platformDestinations[platform])));
-    return platforms.map((platform) => {
-      const targetCount = dashboardNumber(platformTargets[platform]);
-      const destinationCount = dashboardNumber(platformDestinations[platform]);
-      const accountCount = dashboardNumber(providerAccounts[platform]);
-      const pct = clampPercent(((targetCount + destinationCount) / max) * 100);
-      return `
-        <a class="od-platform-row ${escapeHtml(platform)}" href="${escapeHtml(buildUrl('/workspace/accounts', { search: dashboardPlatformLabel(platform) }))}" data-link>
-          <span class="od-platform-icon">${renderPlatformGlyph(platform, 'small')}</span>
-          <span class="od-platform-copy">
-            <strong>${escapeHtml(dashboardPlatformLabel(platform))}</strong>
-            <small>${formatNumber(targetCount)} targets / ${formatNumber(destinationCount)} destinations / ${formatNumber(accountCount)} accounts</small>
-            <span class="od-platform-meter"><span style="width:${pct}%"></span></span>
-          </span>
-        </a>
-      `;
-    }).join('');
-  }
-
-  function buildMediaComposition() {
-    const total = Math.max(1, assets.length);
-    const otherAssets = Math.max(0, assets.length - videoAssets.length - thumbnailAssets.length);
-    const pieces = [
-      { label: 'Video', count: videoAssets.length, tone: 'info' },
-      { label: 'Thumb', count: thumbnailAssets.length, tone: 'warning' },
-      { label: 'Other', count: otherAssets, tone: 'neutral' },
-    ];
-    return `
-      <div class="od-composition">
-        <div class="od-composition-bar">
-          ${pieces.map((piece) => `<span data-tone="${escapeHtml(piece.tone)}" style="width:${clampPercent((piece.count / total) * 100)}%"></span>`).join('')}
-        </div>
-        <div class="od-composition-legend">
-          ${pieces.map((piece) => `<span>${escapeHtml(piece.label)} <strong>${formatNumber(piece.count)}</strong></span>`).join('')}
-        </div>
-      </div>
-    `;
-  }
-
-  function buildChannelLeaderboard() {
-    if (rankedChannels.length === 0) {
-      return '<p class="od-muted">Connect accounts and publish targets to unlock channel ranking.</p>';
-    }
-    const maxViews = Math.max(1, ...rankedChannels.map((channel) => dashboardNumber(channel?.topVideoViews)));
-    return rankedChannels.slice(0, 7).map((channel, index) => {
-      const label = channel?.channelId ?? 'Unknown destination';
-      const topVideoViews = dashboardNumber(channel?.topVideoViews);
-      const totalViews = dashboardNumber(channel?.totalViews);
-      const pct = clampPercent((topVideoViews / maxViews) * 100);
-      return `
-        <a class="od-leader-row od-leader-link" href="${escapeHtml(buildUrl('/workspace/accounts', { search: label }))}" data-link>
-          <span class="od-leader-rank od-mono">${String(index + 1).padStart(2, '0')}</span>
-          <span class="od-leader-main">
-            <strong>${escapeHtml(label)}</strong>
-            <small class="od-leader-sub">${escapeHtml(channel?.topVideoTitle ?? channel?.topVideoId ?? 'No YouTube view data yet')}</small>
-            <span class="od-leader-bar-track"><span class="od-leader-bar-fill" style="width:${pct}%"></span></span>
-          </span>
-          <span class="od-leader-pub od-mono">${formatNumber(topVideoViews)} top / ${formatNumber(totalViews)} total</span>
-        </a>
-      `;
-    }).join('');
-  }
-
-  function buildRecentCampaigns() {
-    if (campaigns.length === 0) {
-      return '<p class="od-muted">No campaigns yet. Create one to populate the command timeline.</p>';
-    }
-    return campaigns.slice(0, 8).map((campaign) => {
-      const outcome = summarizeCampaignOutcomes(campaign);
-      const progress = outcome.total > 0 ? ((outcome.published + outcome.failed) / outcome.total) * 100 : 0;
-      return `
-        <a class="od-campaign-row" href="/workspace/campanhas/${encodeURIComponent(campaign.id)}" data-link>
-          <span class="od-campaign-status" data-tone="${escapeHtml(statusTone(campaign.status))}"></span>
-          <span class="od-campaign-copy">
-            <strong>${escapeHtml(campaign.title ?? 'Untitled campaign')}</strong>
-            <small>${escapeHtml(normalizeLabel(campaign.status))} / ${formatNumber(outcome.published)} published / ${formatNumber(outcome.failed)} failed / ${formatNumber(outcome.pending)} pending</small>
-            <span class="od-campaign-meter"><span style="width:${clampPercent(progress)}%"></span></span>
-          </span>
-          <span class="od-campaign-date od-mono">${escapeHtml(campaign.scheduledAt ? formatDate(campaign.scheduledAt) : 'No schedule')}</span>
-        </a>
-      `;
-    }).join('');
-  }
-
-  function buildAuditList() {
-    const entries = Object.entries(stats?.audit?.byType ?? {})
-      .filter(([, count]) => dashboardNumber(count) > 0)
-      .sort((left, right) => dashboardNumber(right[1]) - dashboardNumber(left[1]))
-      .slice(0, 8);
-    if (entries.length === 0) {
-      return '<p class="od-muted">No audit activity recorded yet.</p>';
-    }
-    const max = Math.max(1, ...entries.map(([, count]) => dashboardNumber(count)));
-    return entries.map(([eventType, count]) => `
-      <div class="od-audit-row">
-        <span>${escapeHtml(normalizeLabel(eventType))}</span>
-        <strong class="od-mono">${formatNumber(count)}</strong>
-        <span class="od-stack-track"><span class="od-stack-fill" style="width:${clampPercent((dashboardNumber(count) / max) * 100)}%"></span></span>
-      </div>
-    `).join('');
-  }
-
-  function buildRiskList() {
-    const reasons = Array.isArray(stats?.failures?.reasons) ? stats.failures.reasons : [];
-    const blockedIds = Array.isArray(stats?.reauth?.blockedChannelIds) ? stats.reauth.blockedChannelIds : [];
-    const riskItems = [
-      {
-        label: 'Failed targets',
-        value: failedTargets,
-        detail: dashboardFailureReasonLabel(stats?.failures?.topReason),
-        tone: failedTargets > 0 ? 'danger' : 'success',
-      },
-      {
-        label: 'Reauth blocks',
-        value: reauthBlockedTargets,
-        detail: blockedIds.slice(0, 2).join(', ') || 'All credentials clear',
-        tone: reauthBlockedTargets > 0 ? 'warning' : 'success',
-      },
-      {
-        label: 'Retries',
-        value: dashboardNumber(stats?.jobs?.totalRetries),
-        detail: stats?.retries?.hotspotChannelId ? `Hotspot ${stats.retries.hotspotChannelId}` : 'No hotspot',
-        tone: dashboardNumber(stats?.jobs?.totalRetries) > 0 ? 'warning' : 'success',
-      },
-      {
-        label: 'Quota pressure',
-        value: formatPercent(projectedQuota),
-        detail: `${formatNumber(stats?.quota?.estimatedRemainingUnits ?? 0)} units remaining`,
-        tone: quotaTone,
-      },
-    ];
-    const reasonRows = reasons.length === 0
-      ? '<p class="od-muted">No failure reasons recorded.</p>'
-      : reasons.map((entry) => `
-          <div class="od-reason-row">
-            <span>${escapeHtml(dashboardFailureReasonLabel(entry.reason))}</span>
-            <strong class="od-mono">${formatNumber(entry.count)}</strong>
-          </div>
-        `).join('');
-
-    return `
-      <div class="od-risk-grid">
-        ${riskItems.map((item) => `
-          <div class="od-risk-card" data-tone="${escapeHtml(item.tone)}">
-            <span class="od-kpi-label od-mono">${escapeHtml(item.label)}</span>
-            <strong>${escapeHtml(String(item.value))}</strong>
-            <small>${escapeHtml(item.detail)}</small>
-          </div>
-        `).join('')}
-      </div>
-      <div class="od-reason-list">${reasonRows}</div>
-    `;
-  }
-
-  const campaignStatusEntries = [
-    { label: 'Draft', count: campaignsByStatus.draft, tone: 'neutral', href: dashboardStatusHref('draft') },
-    { label: 'Ready', count: campaignsByStatus.ready, tone: 'info', href: dashboardStatusHref('ready') },
-    { label: 'Launching', count: campaignsByStatus.launching, tone: 'warning', href: dashboardStatusHref('launching') },
-    { label: 'Completed', count: campaignsByStatus.completed, tone: 'success', href: dashboardStatusHref('completed') },
-    { label: 'Failed', count: campaignsByStatus.failed, tone: 'danger', href: dashboardStatusHref('failed') },
-  ];
-  const targetStatusEntries = [
-    { label: 'Waiting', count: waitingTargets, tone: 'neutral', href: '/workspace/campanhas' },
-    { label: 'Sending', count: sendingTargets, tone: 'warning', href: '/workspace/campanhas' },
-    { label: 'Published', count: publishedTargets, tone: 'success', href: '/workspace/campanhas' },
-    { label: 'Error', count: failedTargets, tone: 'danger', href: '/workspace/campanhas' },
-  ];
-  const jobStatusEntries = [
-    { label: 'Queued', count: jobsByStatus.queued, tone: 'warning', href: '/workspace/campanhas' },
-    { label: 'Processing', count: jobsByStatus.processing, tone: 'info', href: '/workspace/campanhas' },
-    { label: 'Completed', count: jobsByStatus.completed, tone: 'success', href: '/workspace/campanhas' },
-    { label: 'Failed', count: jobsByStatus.failed, tone: 'danger', href: '/workspace/campanhas' },
-  ];
-
-  const warningBannerHtml = quotaWarningState !== 'healthy'
-    ? `<div class="od-warning-banner" data-tone="${escapeHtml(quotaTone)}">Quota ${escapeHtml(quotaWarningState)}: ${formatPercent(projectedQuota)} projected of ${formatNumber(stats?.quota?.dailyLimitUnits ?? 0)} units.</div>`
-    : '';
+  const successRate = dashboardNumber(stats?.targets?.successRate);
+  const activeJobs = dashboardNumber(stats?.jobs?.byStatus?.queued) + dashboardNumber(stats?.jobs?.byStatus?.processing);
+  const campaignHeadlineCorpus = campaigns
+    .map((campaign) => String(campaign?.title ?? ''))
+    .join(' ')
+    .toLowerCase();
+  const profileTag = /tutorial|how to|guide|aula/.test(campaignHeadlineCorpus)
+    ? 'tutorial'
+    : /podcast|interview|talk/.test(campaignHeadlineCorpus)
+      ? 'podcast'
+      : /game|gaming|playthrough/.test(campaignHeadlineCorpus)
+        ? 'gaming'
+        : /music|song|cover|beat/.test(campaignHeadlineCorpus)
+          ? 'music'
+          : /review|tech|ai|software/.test(campaignHeadlineCorpus)
+            ? 'tech'
+            : 'creator';
+  const pulseAdsByProfile = {
+    tutorial: [
+      'Your tutorial content is outperforming with consistent completion.',
+      'Turn every lesson into cross-platform reach in one launch flow.',
+      'Publish smarter: queue, schedule, and optimize every tutorial drop.',
+    ],
+    podcast: [
+      'Podcast clips are your growth engine. Keep momentum every week.',
+      'From long-form episodes to short highlights, publish in one command.',
+      'Editorial cadence for creators who win by consistency.',
+    ],
+    gaming: [
+      'Gameplay highlights are pulling attention across your channels.',
+      'Stack launches, keep the hype cycle, and ship every drop faster.',
+      'One control room for shorts, recaps, and high-view uploads.',
+    ],
+    music: [
+      'Your music releases are building compounding audience demand.',
+      'Drop clips, visuals, and full cuts with synchronized publishing.',
+      'From teaser to premiere, your release flow stays launch-ready.',
+    ],
+    tech: [
+      'Tech-focused videos are driving strong view momentum.',
+      'Ship reviews, explainers, and updates with editorial precision.',
+      'Campaign-level control for creators publishing at high velocity.',
+    ],
+    creator: [
+      'Your content profile is primed for multi-platform distribution.',
+      'Scale reach with a campaign workflow tuned to your publishing rhythm.',
+      'From idea to live post, every launch stays organized and fast.',
+    ],
+  };
+  const pulseAds = pulseAdsByProfile[profileTag];
+  const leadershipHtml = renderLeadershipRows(rankedChannels, 'No ranked videos yet.');
+  const viewsPerformanceHtml = renderViewsPerformancePanel(rankedChannels);
 
   const contentHtml = `
     <div id="od-root" class="od-root od-dashboard-pro" data-mode="overview">
-      <div class="od-bracket od-bracket-tl"></div>
-      <div class="od-bracket od-bracket-tr"></div>
-      <div class="od-bracket od-bracket-bl"></div>
-      <div class="od-bracket od-bracket-br"></div>
       <div class="od-bg-globe-field" aria-hidden="true">
         <div class="od-bg-globe od-bg-globe-secondary">${buildOdGlobe()}</div>
         <div class="od-bg-globe">${buildOdGlobe()}</div>
@@ -4615,14 +4471,8 @@ async function renderPlatformDashboardPage() {
 
       <div class="od-topbar od-command-topbar">
         <div>
-          <div class="od-brand od-mono">PLATFORM COMMAND</div>
-          <span id="od-theme-name" class="od-muted od-mono">THEME: ${escapeHtml(selectedBackgroundTheme.label)}</span>
-        </div>
-        <div class="od-mode-switch" role="tablist" aria-label="Dashboard view">
-          ${buildModeButton('overview', 'Overview', 'health')}
-          ${buildModeButton('flow', 'Flow', 'targets')}
-          ${buildModeButton('library', 'Library', 'assets')}
-          ${buildModeButton('risk', 'Risk', 'alerts')}
+          <div class="od-brand">Editorial Dashboard</div>
+          <span class="od-muted">Signal-rich overview for operations and publishing.</span>
         </div>
         <div class="od-topbar-right od-muted od-mono">
           <span class="od-live-dot"></span>${escapeHtml(liveClock)}
@@ -4630,177 +4480,81 @@ async function renderPlatformDashboardPage() {
         </div>
       </div>
 
-      ${warningBannerHtml}
-
       <section class="od-command-hero">
         <div class="od-hero-copy od-panel">
-          <span class="od-kpi-label od-mono">Workspace pulse</span>
-          <h1>Every campaign, account, queue and asset in one live cockpit.</h1>
-          <p class="od-muted">Today: ${formatNumber(todayLaunches)} launches / next: ${escapeHtml(nextCampaign ? `${nextCampaign.title} at ${formatDate(nextCampaign.scheduledAt)}` : 'no scheduled campaign')}</p>
+          <span class="od-kpi-label od-mono">Editorial Pulse</span>
+          <div class="od-pulse-rotator" aria-live="polite">
+            ${pulseAds.map((line, index) => `<h1 class="od-pulse-line${index === 0 ? ' active' : ''}" data-pulse-line>${escapeHtml(line)}</h1>`).join('')}
+          </div>
+          <p class="od-muted">
+            Next campaign: ${escapeHtml(nextCampaign ? `${nextCampaign.title ?? 'Untitled'} at ${formatDate(nextCampaign.scheduledAt)}` : 'none scheduled')}
+          </p>
           <div class="od-hero-actions">
-            <a class="platform-button-primary" data-link href="/workspace/campanhas/nova">Create campaign</a>
-            <a class="button button-secondary" data-link href="/workspace/accounts">Accounts</a>
-            <a class="button button-secondary" data-link href="/workspace/media">Media</a>
-          </div>
-          ${buildSparkline()}
-        </div>
-        <div class="od-hero-ring od-panel" data-tone="${escapeHtml(healthTone)}">
-          <div class="od-health-ring" style="--ring:${healthScore}">
-            <span>${formatNumber(healthScore)}</span>
-            <small>health</small>
-          </div>
-          <div class="od-health-metrics">
-            <div><span>Success</span><strong>${formatPercent(successRate)}</strong></div>
-            <div><span>Complete</span><strong>${formatPercent(completionRate)}</strong></div>
-            <div><span>Quota</span><strong>${formatPercent(projectedQuota)}</strong></div>
+            <a class="platform-button-primary od-hero-action-btn" data-link href="/workspace/campanhas/nova">
+              <span class="od-hero-action-icon">${renderEditorialPulseIcon('create')}</span>
+              <span>Create campaign</span>
+            </a>
+            <a class="button button-secondary od-hero-action-btn" data-link href="/workspace/campanhas">
+              <span class="od-hero-action-icon">${renderEditorialPulseIcon('campaigns')}</span>
+              <span>Campaigns</span>
+            </a>
+            <a class="button button-secondary od-hero-action-btn" data-link href="/workspace/accounts">
+              <span class="od-hero-action-icon">${renderEditorialPulseIcon('accounts')}</span>
+              <span>Accounts</span>
+            </a>
           </div>
         </div>
       </section>
 
       <section class="od-kpi-grid">
-        ${buildKpiCard({ label: 'Campaigns', value: formatNumber(campaignTotal), detail: `${formatNumber(campaignsByStatus.launching ?? 0)} launching`, href: '/workspace/campanhas', ring: completionRate })}
-        ${buildKpiCard({ label: 'Targets', value: formatNumber(targetTotal), detail: `${formatNumber(publishedTargets)} published`, tone: 'success', href: '/workspace/campanhas', ring: successRate })}
-        ${buildKpiCard({ label: 'Queue', value: formatNumber(activeJobs), detail: `${formatNumber(stats?.jobs?.total ?? 0)} jobs tracked`, tone: activeJobs > 0 ? 'warning' : 'info', href: '/workspace/campanhas', ring: activeJobs > 0 ? 72 : 12 })}
-        ${buildKpiCard({ label: 'Accounts', value: formatNumber(connectedAccounts), detail: `${formatNumber(destinations.length)} active destinations`, tone: reauthAccounts > 0 ? 'warning' : 'info', href: '/workspace/accounts', ring: accounts.length > 0 ? (connectedAccounts / accounts.length) * 100 : 0 })}
-        ${buildKpiCard({ label: 'Assets', value: formatNumber(assets.length), detail: `${formatBytes(totalStorageBytes)} stored`, tone: 'info', href: '/workspace/media', ring: assets.length > 0 ? (videoAssets.length / assets.length) * 100 : 0 })}
-        ${buildKpiCard({ label: 'Tokens', value: formatNumber(state.account?.tokens ?? 0), detail: state.account ? `Plan ${state.account.planLabel ?? '-'}` : 'No plan', tone: 'success', href: '/workspace/planos', ring: Math.min(100, dashboardNumber(state.account?.tokens ?? 0) / 5) })}
+        <article class="od-kpi-card" data-tone="info"><span class="od-kpi-label od-mono">Campaigns</span><strong>${formatNumber(campaignTotal)}</strong><span class="od-kpi-detail">Total in workspace</span></article>
+        <article class="od-kpi-card" data-tone="success"><span class="od-kpi-label od-mono">Published</span><strong>${formatNumber(publishedTargets)}</strong><span class="od-kpi-detail">Successful targets</span></article>
+        <article class="od-kpi-card" data-tone="warning"><span class="od-kpi-label od-mono">In Queue</span><strong>${formatNumber(activeJobs)}</strong><span class="od-kpi-detail">Queued + processing jobs</span></article>
+        <article class="od-kpi-card" data-tone="danger"><span class="od-kpi-label od-mono">Failures</span><strong>${formatNumber(failedTargets)}</strong><span class="od-kpi-detail">Targets with error</span></article>
+        <article class="od-kpi-card" data-tone="info"><span class="od-kpi-label od-mono">Assets</span><strong>${formatNumber(assets.length)}</strong><span class="od-kpi-detail">Media library size</span></article>
+        <article class="od-kpi-card" data-tone="success"><span class="od-kpi-label od-mono">Quota</span><strong>${formatPercent(projectedQuota)}</strong><span class="od-kpi-detail">${formatPercent(successRate)} success rate</span></article>
       </section>
 
       <section class="od-dashboard-section" data-dashboard-panel="overview">
         <div class="od-dashboard-main">
-          <div class="od-panel od-flow-panel">
-            <div class="od-panel-head">
-              <span class="od-panel-label od-mono">Campaign and target flow</span>
-              <span class="od-panel-meta od-muted od-mono">${formatNumber(targetTotal)} targets</span>
-            </div>
-            <div class="od-flow-grid">
-              ${buildStatusStack('Campaign lifecycle', campaignStatusEntries, 'No campaigns yet.')}
-              ${buildStatusStack('Target delivery', targetStatusEntries, 'No targets yet.')}
-              ${buildStatusStack('Job queue', jobStatusEntries, 'No jobs yet.')}
-            </div>
-          </div>
-          <div class="od-panel od-platform-panel">
-            <div class="od-panel-head">
-              <span class="od-panel-label od-mono">Platform mix</span>
-              <span class="od-panel-meta od-muted od-mono">${formatNumber(destinations.length)} destinations</span>
-            </div>
-            ${buildPlatformMix()}
-          </div>
-        </div>
-        <div class="od-dashboard-main">
           <div class="od-panel">
             <div class="od-panel-head">
-              <span class="od-panel-label od-mono">Destination leaderboard</span>
-              <span class="od-panel-meta od-muted od-mono">views and delivery</span>
+              <span class="od-panel-label od-mono">Operations Summary</span>
             </div>
-            ${buildChannelLeaderboard()}
-          </div>
-          <div class="od-panel">
-            <div class="od-panel-head">
-              <span class="od-panel-label od-mono">Recent campaigns</span>
-              <span class="od-panel-meta od-muted od-mono">latest 8</span>
-            </div>
-            <div class="od-campaign-list">${buildRecentCampaigns()}</div>
-          </div>
-        </div>
-      </section>
-
-      <section class="od-dashboard-section" data-dashboard-panel="flow">
-        <div class="od-dashboard-main">
-          <div class="od-panel">
-            <div class="od-panel-head">
-              <span class="od-panel-label od-mono">Delivery lanes</span>
-              <span class="od-panel-meta od-muted od-mono">${formatPercent(successRate)} success</span>
-            </div>
-            <div class="od-lane-grid">
-              ${buildStatusStack('Targets', targetStatusEntries, 'No target lane data.')}
-              ${buildStatusStack('Jobs', jobStatusEntries, 'No job lane data.')}
-            </div>
-          </div>
-          <div class="od-panel">
-            <div class="od-panel-head">
-              <span class="od-panel-label od-mono">Quota forecast</span>
-              <span class="od-panel-meta od-muted od-mono">${formatNumber(stats?.quota?.dailyLimitUnits ?? 0)} daily limit</span>
-            </div>
-            <div class="od-quota-large">
-              <span class="od-quota-large-track">
-                <span class="od-quota-large-used" style="width:${clampPercent(stats?.quota?.usagePercent ?? 0)}%"></span>
-                <span class="od-quota-large-projected" style="width:${clampPercent(projectedQuota)}%"></span>
-              </span>
-              <div class="od-health-metrics">
-                <div><span>Used</span><strong>${formatNumber(stats?.quota?.estimatedConsumedUnits ?? 0)}</strong></div>
-                <div><span>Queued</span><strong>${formatNumber(stats?.quota?.estimatedQueuedUnits ?? 0)}</strong></div>
-                <div><span>Remaining</span><strong>${formatNumber(stats?.quota?.estimatedRemainingUnits ?? 0)}</strong></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="od-dashboard-section" data-dashboard-panel="library">
-        <div class="od-dashboard-main">
-          <div class="od-panel">
-            <div class="od-panel-head">
-              <span class="od-panel-label od-mono">Media library</span>
-              <span class="od-panel-meta od-muted od-mono">${formatBytes(totalStorageBytes)}</span>
-            </div>
-            ${buildMediaComposition()}
             <div class="od-health-metrics">
-              <div><span>Videos</span><strong>${formatNumber(videoAssets.length)}</strong></div>
-              <div><span>Short form</span><strong>${formatNumber(shortVideos)}</strong></div>
-              <div><span>Standard</span><strong>${formatNumber(standardVideos)}</strong></div>
-              <div><span>Thumbnails</span><strong>${formatNumber(thumbnailAssets.length)}</strong></div>
-            </div>
-          </div>
-          <div class="od-panel">
-            <div class="od-panel-head">
-              <span class="od-panel-label od-mono">Project inventory</span>
-              <span class="od-panel-meta od-muted od-mono">${formatDurationSeconds(totalDurationSeconds)}</span>
-            </div>
-            <div class="od-risk-grid">
-              <div class="od-risk-card"><span class="od-kpi-label od-mono">Playlists</span><strong>${formatNumber(playlists.length)}</strong><small>auto-rotation sources</small></div>
-              <div class="od-risk-card"><span class="od-kpi-label od-mono">Accounts</span><strong>${formatNumber(accounts.length)}</strong><small>${formatNumber(connectedAccounts)} connected</small></div>
-              <div class="od-risk-card"><span class="od-kpi-label od-mono">Destinations</span><strong>${formatNumber(destinations.length)}</strong><small>publish-ready</small></div>
-              <div class="od-risk-card"><span class="od-kpi-label od-mono">Disconnected</span><strong>${formatNumber(disconnectedAccounts)}</strong><small>needs review</small></div>
+              <div><span>Targets</span><strong>${formatNumber(targetTotal)}</strong></div>
+              <div><span>Accounts</span><strong>${formatNumber(accounts.length)}</strong></div>
+              <div><span>Destinations</span><strong>${formatNumber(destinations.length)}</strong></div>
+              <div><span>Clock</span><strong>${escapeHtml(liveClock)}</strong></div>
             </div>
           </div>
         </div>
-      </section>
-
-      <section class="od-dashboard-section" data-dashboard-panel="risk">
-        <div class="od-dashboard-main">
-          <div class="od-panel">
+        <div class="od-dashboard-main od-performance-row">
+          <div class="od-panel od-leader-panel">
             <div class="od-panel-head">
-              <span class="od-panel-label od-mono">Operational risk</span>
-              <span class="od-panel-meta od-muted od-mono">${formatNumber(failedTargets + reauthBlockedTargets)} blockers</span>
+              <span class="od-panel-label od-mono">LEADERSHIP</span>
+              <span class="od-panel-meta od-muted od-mono">Ranked videos by views</span>
             </div>
-            ${buildRiskList()}
+            ${leadershipHtml}
           </div>
-          <div class="od-panel">
+          <div class="od-panel od-views-panel">
             <div class="od-panel-head">
-              <span class="od-panel-label od-mono">Audit activity</span>
-              <span class="od-panel-meta od-muted od-mono">${formatNumber(stats?.audit?.totalEvents ?? 0)} events</span>
+              <span class="od-panel-label od-mono">VIEW PERFORMANCE</span>
+              <span class="od-panel-meta od-muted od-mono">Overall channel views</span>
             </div>
-            <div class="od-audit-list">${buildAuditList()}</div>
-            <div class="od-audit-last od-muted">
-              Last: ${escapeHtml(stats?.audit?.lastEventType ? normalizeLabel(stats.audit.lastEventType) : 'none')} / ${escapeHtml(stats?.audit?.lastEventAt ? formatDate(stats.audit.lastEventAt) : '-')}
-            </div>
+            ${viewsPerformanceHtml}
           </div>
         </div>
       </section>
-
-      <div class="od-footer od-muted od-mono">
-        PLATFORM MULTI PUBLI / ${escapeHtml(liveClock)} / ${formatNumber(campaignTotal)} campaigns / ${formatNumber(publishedTargets)} published / ${formatNumber(destinations.length)} destinations
-      </div>
     </div>
   `;
 
   renderWorkspaceShell({ title: '', contentHtml });
   applyOdThemeFromSettings();
-  bindDashboardInteractions();
+  if (typeof bindDashboardInteractions === 'function') bindDashboardInteractions();
   clearAutoRefreshTimer();
 
-  if (shouldAutoRefreshDashboard(stats)) {
+  if (typeof shouldAutoRefreshDashboard === 'function' && shouldAutoRefreshDashboard(stats)) {
     state.autoRefreshTimer = setTimeout(() => {
       if (window.location.pathname !== '/workspace/dashboard') return;
       if (typeof document !== 'undefined' && document.hidden) return;
@@ -4862,8 +4616,6 @@ async function renderPlatformDashboardLegacyPage() {
   const liveClock = formatClockLabel();
   const quotaWarningState = stats?.quota?.warningState ?? 'healthy';
   const quotaTone = quotaWarningState === 'critical' ? 'danger' : quotaWarningState === 'warning' ? 'warning' : 'info';
-  const channelMaxTopViews = Math.max(1, ...rankedChannels.map((channel) => Number(channel?.topVideoViews ?? 0)));
-
   function statCard(label, val, sub) {
     return `<div class="od-stat-card">
       <div class="od-stat-val od-mono">${val}</div>
@@ -4907,27 +4659,7 @@ async function renderPlatformDashboardLegacyPage() {
     ...recentCampaigns.slice(0, 2).map(c => ({ tone: statusTone(c.status ?? 'draft'), label: c.title ?? 'Untitled', meta: normalizeLabel(c.status ?? 'draft') })),
   ];
 
-  const leaderboardHtml = rankedChannels.length === 0
-    ? '<div class="od-muted" style="padding:1rem 0">Connect accounts to unlock leaderboard.</div>'
-    : rankedChannels.slice(0, 6).map((channel, index) => {
-        const topVideoViews = Number(channel?.topVideoViews ?? 0);
-        const totalViews = Number(channel?.totalViews ?? 0);
-        const pct = clampPercent((topVideoViews / channelMaxTopViews) * 100);
-        const topVideoLabel = channel?.topVideoTitle ?? (channel?.topVideoId ? `Video ${channel.topVideoId}` : 'No published YouTube video');
-        const topVideoReference = channel?.topVideoId ? `ID ${channel.topVideoId}` : 'No video id';
-        return `
-          <div class="od-leader-row">
-            <span class="od-leader-rank od-mono">${String(index + 1).padStart(2, '0')}</span>
-            <div class="od-leader-main">
-              <span>${escapeHtml(channel?.channelId ?? '-')}</span>
-              <small class="od-leader-sub">${escapeHtml(topVideoLabel)}</small>
-              <small class="od-leader-mini od-mono">${escapeHtml(topVideoReference)} · ${formatNumber(totalViews)} total views</small>
-              <div class="od-leader-bar-track"><div class="od-leader-bar-fill" style="width:${pct}%"></div></div>
-            </div>
-            <span class="od-leader-pub od-mono">${formatNumber(topVideoViews)} views</span>
-          </div>
-        `;
-      }).join('');
+  const leaderboardHtml = renderLeadershipRows(rankedChannels, 'Connect accounts to unlock leaderboard.');
 
   const selectedBackgroundTheme = getSelectedBackgroundTheme();
 
@@ -4987,8 +4719,8 @@ async function renderPlatformDashboardLegacyPage() {
       <div class="od-bottom-row">
         <div class="od-panel od-leader-panel">
           <div class="od-panel-head">
-            <span class="od-panel-label od-mono">CHANNEL LEADERBOARD</span>
-            <span class="od-panel-meta od-muted od-mono">Top video views by channel</span>
+            <span class="od-panel-label od-mono">LEADERSHIP</span>
+            <span class="od-panel-meta od-muted od-mono">Ranked videos by views</span>
           </div>
           ${leaderboardHtml}
         </div>

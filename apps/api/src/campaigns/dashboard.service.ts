@@ -2,6 +2,28 @@ import type { AuditEventService, AuditEventType } from './audit-event.service';
 import type { CampaignService, CampaignRecord, CampaignTargetRecord } from './campaign.service';
 import type { PublishJobRecord, PublishJobService } from './publish-job.service';
 
+export interface PlatformStats {
+  platform: 'youtube' | 'tiktok' | 'instagram';
+  totalTargets: number;
+  published: number;
+  failed: number;
+  successRate: number;
+  retriedTargets: number;
+  topRetryDestination: string | null;
+}
+
+export interface DestinationStats {
+  destinationId: string;
+  destinationLabel: string | null;
+  platform: 'youtube' | 'tiktok' | 'instagram';
+  totalTargets: number;
+  published: number;
+  failed: number;
+  successRate: number;
+  retriedCount: number;
+  latestFailureMessage: string | null;
+}
+
 export interface ChannelStats {
   channelId: string;
   totalTargets: number;
@@ -18,6 +40,24 @@ interface DashboardVideoStats {
   videoId: string;
   title: string | null;
   views: number;
+}
+
+export type FailedJobSuggestedAction = 'retry' | 'reauth' | 'review';
+
+export interface FailedJobDashboardItem {
+  jobId: string | null;
+  campaignId: string;
+  campaignTitle: string;
+  targetId: string;
+  platform: CampaignTargetRecord['platform'];
+  destinationId: string;
+  destinationLabel: string | null;
+  videoTitle: string;
+  errorMessage: string;
+  errorClass: PublishJobRecord['errorClass'];
+  attempt: number | null;
+  failedAt: string | null;
+  suggestedAction: FailedJobSuggestedAction;
 }
 
 export interface DashboardStats {
@@ -54,6 +94,7 @@ export interface DashboardStats {
       count: number;
     }>;
   };
+  failedJobs: FailedJobDashboardItem[];
   retries: {
     retriedTargets: number;
     highestAttempt: number;
@@ -74,6 +115,8 @@ export interface DashboardStats {
     blockedChannelIds: string[];
   };
   channels: ChannelStats[];
+  platformStats: PlatformStats[];
+  destinationStats: DestinationStats[];
 }
 
 export interface DashboardServiceOptions {
@@ -154,8 +197,19 @@ export class DashboardService {
     return statsByChannel;
   }
 
-  private isTerminalTarget(target: Pick<CampaignTargetRecord, 'status' | 'youtubeVideoId' | 'errorMessage'>): boolean {
-    return (target.status === 'publicado' && Boolean(target.youtubeVideoId)) ||
+  private getTargetDashboardDestinationKey(
+    target: Pick<CampaignTargetRecord, 'platform' | 'channelId' | 'destinationId' | 'destinationLabel' | 'connectedAccountId'>,
+  ): string {
+    return target.channelId ??
+      target.destinationLabel ??
+      target.destinationId ??
+      target.connectedAccountId ??
+      target.platform ??
+      'unknown-destination';
+  }
+
+  private isTerminalTarget(target: Pick<CampaignTargetRecord, 'status' | 'youtubeVideoId' | 'externalPublishId' | 'errorMessage'>): boolean {
+    return (target.status === 'publicado' && Boolean(target.youtubeVideoId ?? target.externalPublishId)) ||
       (target.status === 'erro' && Boolean(target.errorMessage));
   }
 
@@ -169,7 +223,7 @@ export class DashboardService {
 
     const allTargetsTerminal = campaign.targets.every((target) => this.isTerminalTarget(target));
     if (allTargetsTerminal) {
-      return campaign.targets.some((target) => target.status === 'publicado' && Boolean(target.youtubeVideoId))
+      return campaign.targets.some((target) => target.status === 'publicado' && Boolean(target.youtubeVideoId ?? target.externalPublishId))
         ? 'completed'
         : 'failed';
     }
@@ -202,6 +256,55 @@ export class DashboardService {
       return 'post_upload_step_failed';
     }
     return 'other_failure';
+  }
+
+  private buildFailedJobQueue(
+    campaigns: CampaignRecord[],
+    jobsByTargetId: Map<string, PublishJobRecord[]>,
+  ): FailedJobDashboardItem[] {
+    const items = campaigns.flatMap((campaign) =>
+      campaign.targets
+        .map((target): FailedJobDashboardItem | null => {
+          const targetJobs = jobsByTargetId.get(target.id) ?? [];
+          const latestFailedJob = [...targetJobs].reverse().find((job) => job.status === 'failed') ?? null;
+          if (target.status !== 'erro' && !latestFailedJob) {
+            return null;
+          }
+
+          const errorMessage = target.errorMessage ?? latestFailedJob?.errorMessage ?? 'Unknown publish failure';
+          const suggestedAction: FailedJobSuggestedAction = errorMessage === 'REAUTH_REQUIRED'
+            ? 'reauth'
+            : latestFailedJob && latestFailedJob.errorClass !== 'permanent'
+              ? 'retry'
+              : 'review';
+          const destinationId = target.destinationId ?? target.channelId ?? target.connectedAccountId ?? target.id;
+
+          return {
+            jobId: latestFailedJob?.id ?? null,
+            campaignId: campaign.id,
+            campaignTitle: campaign.title,
+            targetId: target.id,
+            platform: target.platform,
+            destinationId,
+            destinationLabel: target.destinationLabel ?? null,
+            videoTitle: target.videoTitle,
+            errorMessage,
+            errorClass: latestFailedJob?.errorClass ?? null,
+            attempt: latestFailedJob?.attempt ?? null,
+            failedAt: latestFailedJob?.completedAt ?? latestFailedJob?.startedAt ?? latestFailedJob?.createdAt ?? null,
+            suggestedAction,
+          };
+        })
+        .filter((item): item is FailedJobDashboardItem => item !== null),
+    );
+
+    return items
+      .sort((a, b) => {
+        const aTime = a.failedAt ? Date.parse(a.failedAt) || 0 : 0;
+        const bTime = b.failedAt ? Date.parse(b.failedAt) || 0 : 0;
+        return bTime - aTime || a.campaignTitle.localeCompare(b.campaignTitle) || a.targetId.localeCompare(b.targetId);
+      })
+      .slice(0, 10);
   }
 
   async getStats(ownerEmail?: string): Promise<DashboardStats> {
@@ -245,7 +348,7 @@ export class DashboardService {
       }))
       .filter((entry): entry is { target: CampaignTargetRecord; reason: 'quota_exceeded' | 'post_upload_step_failed' | 'other_failure' } =>
         entry.target.status === 'erro' && entry.reason !== null);
-    const reauthChannelIds = [...new Set(reauthTargets.map((target) => target.channelId))].sort();
+    const reauthChannelIds = [...new Set(reauthTargets.map((target) => this.getTargetDashboardDestinationKey(target)))].sort();
     const reauthCampaignIds = [...new Set(
       campaigns
         .filter((campaign) => campaign.targets.some((target) => target.errorMessage === 'REAUTH_REQUIRED'))
@@ -257,10 +360,11 @@ export class DashboardService {
     for (const t of allTargets) {
       targetByStatus[t.status]++;
 
-      if (!channelMap.has(t.channelId)) {
-        channelMap.set(t.channelId, { total: 0, published: 0, failed: 0 });
+      const dashboardDestinationKey = this.getTargetDashboardDestinationKey(t);
+      if (!channelMap.has(dashboardDestinationKey)) {
+        channelMap.set(dashboardDestinationKey, { total: 0, published: 0, failed: 0 });
       }
-      const ch = channelMap.get(t.channelId)!;
+      const ch = channelMap.get(dashboardDestinationKey)!;
       ch.total++;
       if (t.status === 'publicado') ch.published++;
       if (t.status === 'erro') ch.failed++;
@@ -291,9 +395,10 @@ export class DashboardService {
 
         const target = targetById.get(j.campaignTargetId);
         if (target) {
+          const dashboardDestinationKey = this.getTargetDashboardDestinationKey(target);
           retryCountsByChannel.set(
-            target.channelId,
-            (retryCountsByChannel.get(target.channelId) ?? 0) + retryCount,
+            dashboardDestinationKey,
+            (retryCountsByChannel.get(dashboardDestinationKey) ?? 0) + retryCount,
           );
         }
       }
@@ -427,6 +532,7 @@ export class DashboardService {
         topReason,
         reasons,
       },
+      failedJobs: this.buildFailedJobQueue(campaigns, jobsByTargetId),
       retries: {
         retriedTargets,
         highestAttempt,

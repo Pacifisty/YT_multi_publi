@@ -162,7 +162,7 @@
 **Plans:**
 - [x] 04-01-PLAN.md — Failed Job Dashboard (complete: operations queue with retry/reauth/review actions)
 - [x] 04-02-PLAN.md — Analytics Dashboard (platform and destination-level metrics)
-- [x] 04-03-PLAN.md — Email Notifications (payment confirmation and campaign outcome emails)
+- [ ] 04-03-PLAN.md — Email Notifications (payment confirmation and campaign outcome emails)
 
 **Success Criteria:**
 1. ✓ User receives email when payment completes
@@ -197,9 +197,9 @@
 - LR-03: Rollback and incident playbooks
 
 **Plans:**
-- [ ] 05-01-PLAN.md - Go-Live Verification Suite
-- [ ] 05-02-PLAN.md - Release Gate and Ownership Matrix
-- [ ] 05-03-PLAN.md - Rollback and Incident Playbooks
+- [ ] 05-01-PLAN.md - Go-Live Verification Suite (3 tasks: auth flow, payment flow, multi-platform publish)
+- [ ] 05-02-PLAN.md - Release Gate and Ownership Matrix (2 tasks: gates definition, launch sign-off template)
+- [ ] 05-03-PLAN.md - Rollback and Incident Playbooks (2 tasks: rollback procedures, incident response)
 
 **Success Criteria:**
 1. Launch decision is based on recorded evidence, not ad-hoc checks
@@ -264,4 +264,4 @@ Total (achieved by 2026-04-28):       83% complete
 ---
 
 *Roadmap created: 2026-04-27 after requirements definition*  
-*Last updated: 2026-04-28 after Phase 5 kickoff planning*
+*Last updated: 2026-04-29 after Phase 5 planning (05-02 and 05-03 plans created)*

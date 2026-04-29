@@ -1,4 +1,4 @@
-import * as Sentry from '@sentry/node';
+import { createRequire } from 'node:module';
 import type { AdminSession } from './auth/session.guard';
 import type { AuthModuleInstance } from './auth/auth.module';
 import { createAuthModule } from './auth/auth.module';
@@ -24,6 +24,15 @@ import { MercadoPagoPaymentProviderAdapter } from './account-plan/mercadopago-pa
 import { PrismaWebhookDeduplicator } from './account-plan/webhook-deduplication';
 import { validatePaymentConfig } from './startup/payment-startup-validator';
 import { SessionGuard } from './auth/session.guard';
+import { EmailService, selectEmailProvider } from './integrations/email/email-service';
+
+const optionalRequire = createRequire(import.meta.url);
+
+type OptionalSentry = {
+  init(options: Record<string, unknown>): void;
+  captureException(error: unknown, context?: Record<string, unknown>): void;
+  Integrations?: Record<string, new (...args: any[]) => unknown>;
+};
 
 export interface BackgroundProcessor {
   kick(): Promise<void>;
@@ -74,20 +83,22 @@ export interface AppInstance {
 export function createApp(config: AppConfig = {}): AppInstance {
   const env = config.env ?? process.env;
   const nodeEnv = (env.NODE_ENV ?? 'development') as string;
+  const sentry = env.SENTRY_DSN && nodeEnv === 'production'
+    ? loadOptionalSentry()
+    : null;
 
   // Initialize Sentry error tracking (only if DSN is configured)
-  if (env.SENTRY_DSN && nodeEnv === 'production') {
-    Sentry.init({
+  if (sentry) {
+    const integrations = createSentryIntegrations(sentry);
+    sentry.init({
       dsn: env.SENTRY_DSN,
       environment: nodeEnv,
       tracesSampleRate: 1.0,
-      integrations: [
-        new Sentry.Integrations.Http({ tracing: true }),
-        new Sentry.Integrations.OnUncaughtException(),
-        new Sentry.Integrations.OnUnhandledRejection(),
-      ],
+      ...(integrations.length > 0 ? { integrations } : {}),
     });
     console.log('[api] Sentry error tracking initialized');
+  } else if (env.SENTRY_DSN && nodeEnv === 'production') {
+    console.warn('[api] WARNING: SENTRY_DSN configured, but @sentry/node is not installed. Error tracking is disabled.');
   } else if (nodeEnv === 'production') {
     console.warn('[api] WARNING: SENTRY_DSN not configured. Error tracking is disabled.');
   }
@@ -116,9 +127,18 @@ export function createApp(config: AppConfig = {}): AppInstance {
   console.log(`[api] payment provider: ${paymentProviderName}`);
   console.log(`[api] mercadopago api timeout: ${MERCADOPAGO_TIMEOUT_MS}ms`);
   console.log('[api] webhook deduplication: disabled (prisma not initialized)');
+
+  // Initialize email service
+  const emailProvider = selectEmailProvider();
+  const emailService = new EmailService({ provider: emailProvider });
+  const emailProviderType = config.env?.EMAIL_PROVIDER || 'mock';
+  console.log(`[api] email provider: ${emailProviderType}`);
+
   const paymentService = new PaymentService({
     provider: paymentProvider,
     webhookDeduplicator: null,
+    emailService,
+    accountPlanService,
     defaultSuccessUrl: config.env?.PAYMENT_SUCCESS_URL,
     defaultCancelUrl: config.env?.PAYMENT_CANCEL_URL,
     defaultNotificationUrl: config.env?.PAYMENT_WEBHOOK_URL,
@@ -133,6 +153,7 @@ export function createApp(config: AppConfig = {}): AppInstance {
   const campaignsModule = createCampaignsModule({
     ...config.campaignsModuleOptions,
     accountPlanService,
+    emailService,
     getAccessTokenForChannel: (channelId, options) =>
       accountsModule.accountsService.resolveAccessTokenForChannel(channelId, options),
   });
@@ -176,7 +197,7 @@ export function createApp(config: AppConfig = {}): AppInstance {
       accountsModule.accountsService.resolveAccessTokenForConnectedAccount(connectedAccountId),
     getPublicVideoUrl: async (videoAssetId) => {
       if (!publicMediaUrlService) {
-        throw new Error('PUBLIC_APP_URL is required for TikTok publishing.');
+        throw new Error('PUBLIC_APP_URL is required for TikTok and Instagram publishing.');
       }
 
       const asset = await mediaModule.mediaService.getAsset(videoAssetId);
@@ -239,8 +260,8 @@ export function createApp(config: AppConfig = {}): AppInstance {
       return { status: apiResult.status, body: apiResult.body, cookies: apiResult.cookies, redirect: (apiResult as any).redirect };
     } catch (error) {
       // Capture errors in Sentry with context
-      if (env.SENTRY_DSN && nodeEnv === 'production') {
-        Sentry.captureException(error, {
+      if (sentry) {
+        sentry.captureException(error, {
           contexts: {
             http: {
               method: request.method,
@@ -271,6 +292,35 @@ export function createApp(config: AppConfig = {}): AppInstance {
     accountPlanService,
     accountPlanController,
   };
+}
+
+function loadOptionalSentry(): OptionalSentry | null {
+  try {
+    return optionalRequire('@sentry/node') as OptionalSentry;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'MODULE_NOT_FOUND') {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+function createSentryIntegrations(sentry: OptionalSentry): unknown[] {
+  const integrations = sentry.Integrations ?? {};
+  const result: unknown[] = [];
+
+  if (typeof integrations.Http === 'function') {
+    result.push(new integrations.Http({ tracing: true }));
+  }
+  if (typeof integrations.OnUncaughtException === 'function') {
+    result.push(new integrations.OnUncaughtException());
+  }
+  if (typeof integrations.OnUnhandledRejection === 'function') {
+    result.push(new integrations.OnUnhandledRejection());
+  }
+
+  return result;
 }
 
 function createPublicMediaUrlService(env: Record<string, string | undefined> | undefined): PublicMediaUrlService | undefined {

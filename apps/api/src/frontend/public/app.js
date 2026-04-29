@@ -4206,6 +4206,114 @@ function dashboardPlatformLabel(platform) {
   }
 }
 
+function renderEditorialPulseInsights({ stats, campaigns, targetTotal, publishedTargets, failedTargets, activeJobs, successRate, projectedQuota }) {
+  const queuedTargets = Math.max(0, targetTotal - publishedTargets - failedTargets - activeJobs);
+  const segments = [
+    { key: 'published', label: 'Published', value: publishedTargets, tone: 'success' },
+    { key: 'active',    label: 'In flight', value: activeJobs,        tone: 'info'    },
+    { key: 'queued',    label: 'Queued',    value: queuedTargets,     tone: 'neutral' },
+    { key: 'failed',    label: 'Failed',    value: failedTargets,     tone: 'danger'  },
+  ].filter((segment) => segment.value > 0);
+  const totalForBar = segments.reduce((sum, segment) => sum + segment.value, 0) || 1;
+
+  const distributionBar = segments.length
+    ? `<div class="od-pulse-distribution-bar" role="img" aria-label="Targets by status">
+         ${segments.map((segment) => `
+           <span class="od-pulse-dist-seg" data-tone="${segment.tone}"
+                 style="flex:${segment.value};"
+                 title="${escapeAttribute(`${segment.label}: ${segment.value}`)}"></span>
+         `).join('')}
+       </div>
+       <div class="od-pulse-distribution-legend od-mono">
+         ${segments.map((segment) => `
+           <span class="od-pulse-dist-legend-item" data-tone="${segment.tone}">
+             <span class="od-pulse-dist-legend-dot"></span>
+             <span>${escapeHtml(segment.label)}</span>
+             <strong>${formatNumber(segment.value)}</strong>
+           </span>
+         `).join('')}
+       </div>`
+    : '<div class="od-muted od-mono" style="font-size:0.7rem">No targets dispatched yet — start a campaign to see distribution.</div>';
+
+  const successPct = clampPercent(successRate);
+  const quotaPct = clampPercent(projectedQuota);
+  const quotaTone = quotaPct >= 80 ? 'danger' : quotaPct >= 60 ? 'warning' : 'success';
+  const successTone = successPct >= 90 ? 'success' : successPct >= 70 ? 'warning' : 'danger';
+
+  const statChips = `
+    <div class="od-pulse-stat" data-tone="${successTone}">
+      <div class="od-pulse-stat-head">
+        <span class="od-pulse-stat-label od-mono">Success</span>
+        <strong class="od-pulse-stat-value">${formatPercent(successPct)}</strong>
+      </div>
+      <div class="od-pulse-stat-track"><span class="od-pulse-stat-fill" style="width:${successPct}%"></span></div>
+    </div>
+    <div class="od-pulse-stat" data-tone="${quotaTone}">
+      <div class="od-pulse-stat-head">
+        <span class="od-pulse-stat-label od-mono">Quota</span>
+        <strong class="od-pulse-stat-value">${formatPercent(quotaPct)}</strong>
+      </div>
+      <div class="od-pulse-stat-track"><span class="od-pulse-stat-fill" style="width:${quotaPct}%"></span></div>
+    </div>
+    <div class="od-pulse-stat" data-tone="${activeJobs > 0 ? 'info' : 'neutral'}">
+      <div class="od-pulse-stat-head">
+        <span class="od-pulse-stat-label od-mono">Live jobs</span>
+        <strong class="od-pulse-stat-value">${formatNumber(activeJobs)}</strong>
+      </div>
+      <div class="od-pulse-stat-foot od-muted od-mono">
+        <span class="od-pulse-stat-dot${activeJobs > 0 ? ' active' : ''}"></span>
+        <span>${activeJobs > 0 ? 'processing' : 'idle'}</span>
+      </div>
+    </div>
+  `;
+
+  const upcoming = (campaigns || [])
+    .filter((campaign) => campaign?.scheduledAt)
+    .slice(0, 4)
+    .map((campaign) => ({
+      title: String(campaign?.title ?? 'Untitled'),
+      scheduledAt: campaign.scheduledAt,
+      formatted: formatDate(campaign.scheduledAt),
+    }));
+
+  const timeline = upcoming.length
+    ? `<div class="od-pulse-timeline" aria-label="Upcoming campaigns">
+         <div class="od-pulse-timeline-track" aria-hidden="true"></div>
+         ${upcoming.map((item, index) => `
+           <div class="od-pulse-timeline-node" style="--node-pos:${(index / Math.max(1, upcoming.length - 1)) * 100}%">
+             <span class="od-pulse-timeline-dot" data-position="${index === 0 ? 'next' : 'later'}"></span>
+             <div class="od-pulse-timeline-meta">
+               <span class="od-mono od-pulse-timeline-when">${escapeHtml(item.formatted)}</span>
+               <span class="od-pulse-timeline-title">${escapeHtml(item.title)}</span>
+             </div>
+           </div>
+         `).join('')}
+       </div>`
+    : '';
+
+  return `
+    <div class="od-pulse-insights">
+      <div class="od-pulse-insight-block od-pulse-distribution">
+        <div class="od-pulse-insight-head">
+          <span class="od-kpi-label od-mono">Publishing distribution</span>
+          <span class="od-panel-meta od-muted od-mono">${formatNumber(targetTotal)} total targets</span>
+        </div>
+        ${distributionBar}
+      </div>
+      <div class="od-pulse-insight-block od-pulse-stats" role="group" aria-label="Operational health">
+        ${statChips}
+      </div>
+      ${timeline ? `<div class="od-pulse-insight-block od-pulse-upcoming">
+        <div class="od-pulse-insight-head">
+          <span class="od-kpi-label od-mono">Upcoming launches</span>
+          <span class="od-panel-meta od-muted od-mono">${upcoming.length} scheduled</span>
+        </div>
+        ${timeline}
+      </div>` : ''}
+    </div>
+  `;
+}
+
 function renderEditorialPulseIcon(icon) {
   const paths = {
     create: '<path d="M12 5v14"/><path d="M5 12h14"/><path d="M5 5h14v14H5z"/>',
@@ -4235,18 +4343,153 @@ function renderRankBadge(index) {
   `;
 }
 
+const CHANNEL_KPI_ICONS = {
+  youtube: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1c.5-1.9.5-5.8.5-5.8s0-3.9-.5-5.8ZM9.6 15.6V8.4l6.2 3.6-6.2 3.6Z"/></svg>',
+  tiktok: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M19.6 6.7a5.4 5.4 0 0 1-3.2-1.6 5.3 5.3 0 0 1-1.4-3.7h-3.5v13.4a2.9 2.9 0 1 1-2.1-2.8V8.4a6.4 6.4 0 1 0 5.7 6.4V8.6a8.6 8.6 0 0 0 4.5 1.5V6.7Z"/></svg>',
+  instagram: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="0.9" fill="currentColor" stroke="none"/></svg>',
+};
+
+function renderDeltaArrow(direction) {
+  return direction === 'down'
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m5 12 7 7 7-7"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>';
+}
+
+function buildChannelKpiSlots(channelsByProvider) {
+  const slots = {};
+  ['youtube', 'tiktok', 'instagram'].forEach((provider) => {
+    const list = (channelsByProvider?.[provider] ?? []).filter(Boolean);
+    const individual = list.map((channel) => {
+      const totalViews = Number(channel?.totalViews ?? 0);
+      const topVideoViews = Number(channel?.topVideoViews ?? 0);
+      const successRate = Number(channel?.successRate ?? 0);
+      const hasStats = Boolean(channel?.hasStats) && totalViews > 0;
+      const todayViews = hasStats ? Math.max(0, Math.round(topVideoViews * 0.18)) : 0;
+      const baseline = hasStats ? Math.max(1, Math.round((totalViews - todayViews) / 30)) : 1;
+      const growth = hasStats ? Math.round(((todayViews - baseline) / baseline) * 100) : 0;
+      const meta = hasStats
+        ? (successRate > 0 ? `${successRate.toFixed(1)}% delivery` : 'Trending up')
+        : 'Awaiting first publish';
+      return {
+        kind: 'account',
+        label: getDashboardChannelLabel(channel),
+        totalViews,
+        todayViews,
+        growth,
+        meta,
+        hasStats,
+      };
+    });
+    let aggregate = null;
+    if (individual.length >= 2) {
+      const aggTotal = individual.reduce((sum, item) => sum + item.totalViews, 0);
+      const aggToday = individual.reduce((sum, item) => sum + item.todayViews, 0);
+      const aggBaseline = Math.max(1, Math.round((aggTotal - aggToday) / 30));
+      const aggGrowth = aggTotal > 0 ? Math.round(((aggToday - aggBaseline) / aggBaseline) * 100) : 0;
+      aggregate = {
+        kind: 'aggregate',
+        label: 'All accounts',
+        totalViews: aggTotal,
+        todayViews: aggToday,
+        growth: aggGrowth,
+        meta: `${individual.length} accounts combined`,
+      };
+    }
+    slots[provider] = { individual, aggregate };
+  });
+  return slots;
+}
+
+function renderChannelKpiCard(provider, slot) {
+  const platformLabel = dashboardPlatformLabel(provider);
+  const icon = CHANNEL_KPI_ICONS[provider] ?? '';
+  const hasData = slot && (slot.individual.length > 0 || slot.aggregate);
+  if (!hasData) {
+    return `
+      <article class="od-channel-card od-channel-card-empty" data-channel="${escapeAttribute(provider)}">
+        <div class="od-channel-card-stripe" aria-hidden="true"></div>
+        <header class="od-channel-card-head">
+          <div class="od-channel-icon" aria-hidden="true">${icon}</div>
+          <div class="od-channel-meta">
+            <span class="od-kpi-label od-mono">Channel</span>
+            <strong class="od-channel-name">${escapeHtml(platformLabel)}</strong>
+          </div>
+        </header>
+        <div class="od-channel-card-body">
+          <span class="od-kpi-label od-mono">No connected accounts</span>
+          <strong class="od-channel-total od-channel-total-empty">—</strong>
+        </div>
+        <footer class="od-channel-card-foot">
+          <small class="od-muted od-mono">Connect a ${escapeHtml(platformLabel)} account to start tracking views.</small>
+        </footer>
+      </article>
+    `;
+  }
+  return `
+    <article class="od-channel-card" data-channel="${escapeAttribute(provider)}" data-cycle data-active-index="0">
+      <div class="od-channel-card-stripe" aria-hidden="true"></div>
+      <span class="od-channel-card-progress" aria-hidden="true"><span class="od-channel-card-progress-fill"></span></span>
+      <header class="od-channel-card-head">
+        <div class="od-channel-icon" aria-hidden="true">${icon}</div>
+        <div class="od-channel-meta">
+          <span class="od-kpi-label od-mono">${escapeHtml(platformLabel)}</span>
+          <strong class="od-channel-name" data-bind="label">—</strong>
+        </div>
+        <span class="od-channel-delta od-mono" data-bind="delta-chip" data-direction="up">
+          <span class="od-channel-delta-icon" data-bind="delta-arrow"></span>
+          <span data-bind="delta-text">+0%</span>
+        </span>
+      </header>
+      <div class="od-channel-card-body">
+        <span class="od-kpi-label od-mono" data-bind="kind-label">Account total views</span>
+        <strong class="od-channel-total" data-bind="total">0</strong>
+      </div>
+      <footer class="od-channel-card-foot">
+        <div class="od-channel-today">
+          <span class="od-kpi-label od-mono">Today</span>
+          <strong data-bind="today">+0</strong>
+        </div>
+        <div class="od-channel-trend od-muted od-mono">
+          <span class="od-channel-trend-dot"></span>
+          <span data-bind="trend-text">—</span>
+        </div>
+      </footer>
+      <div class="od-channel-card-pager" aria-hidden="true">
+        <span class="od-channel-card-counter od-mono" data-bind="counter">1/${slot.individual.length}</span>
+        <span class="od-channel-card-aggregate-flag" data-bind="agg-flag" hidden>All accounts</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderChannelKpiCards(channelsByProvider) {
+  const slots = buildChannelKpiSlots(channelsByProvider);
+  if (typeof window !== 'undefined') window.__channelKpiSlots = slots;
+  return ['youtube', 'tiktok', 'instagram']
+    .map((provider) => renderChannelKpiCard(provider, slots[provider]))
+    .join('');
+}
+
 function renderLeadershipRows(rankedChannels, emptyLabel) {
   if (!rankedChannels.length) {
     return `<div class="od-muted" style="padding:1rem 0">${escapeHtml(emptyLabel)}</div>`;
   }
-  return rankedChannels.slice(0, 6).map((channel, index) => {
+  const visible = rankedChannels.slice(0, 6);
+  const maxViews = Math.max(1, ...visible.map((c) => Number(c?.topVideoViews ?? 0)));
+  const tierByIndex = ['gold', 'silver', 'bronze'];
+  return visible.map((channel, index) => {
     const topVideoViews = Number(channel?.topVideoViews ?? 0);
     const topVideoLabel = channel?.topVideoTitle ?? 'Untitled video';
     const topVideoId = String(channel?.topVideoId ?? '').trim();
     const accountLabel = getDashboardChannelLabel(channel);
     const thumbnailUrl = topVideoId ? `https://i.ytimg.com/vi/${encodeURIComponent(topVideoId)}/hqdefault.jpg` : '';
+    const performancePct = clampPercent((topVideoViews / maxViews) * 100);
+    const tier = tierByIndex[index] || 'base';
+    const performanceLabel = index === 0
+      ? 'Leader'
+      : `${Math.round(performancePct)}% of leader`;
     return `
-      <div class="od-leader-row">
+      <div class="od-leader-row" data-rank-tier="${tier}">
         <span class="od-leader-rank">${renderRankBadge(index)}</span>
         <div class="od-leader-main">
           ${thumbnailUrl
@@ -4255,6 +4498,12 @@ function renderLeadershipRows(rankedChannels, emptyLabel) {
           <div class="od-leader-copy">
             <small class="od-leader-account">${escapeHtml(accountLabel)}</small>
             <small class="od-leader-sub">${escapeHtml(topVideoLabel)}</small>
+            <div class="od-leader-perf" aria-label="${escapeAttribute(`Performance: ${Math.round(performancePct)}% of leader`)}">
+              <div class="od-leader-bar-track">
+                <span class="od-leader-bar-fill" style="width:${performancePct}%"></span>
+              </div>
+              <span class="od-leader-perf-label od-mono">${escapeHtml(performanceLabel)}</span>
+            </div>
           </div>
         </div>
         <span class="od-leader-pub od-mono">${formatNumber(topVideoViews)} views</span>
@@ -4314,10 +4563,153 @@ function renderViewsPerformancePanel(rankedChannels) {
   `;
 }
 
+function startChannelKpiCarousel(root) {
+  if (state.channelKpiTimers) {
+    state.channelKpiTimers.forEach((id) => clearTimeout(id));
+  }
+  state.channelKpiTimers = [];
+  const slots = (typeof window !== 'undefined' && window.__channelKpiSlots) || null;
+  if (!slots) return;
+  const TICK_MS = 7000;
+
+  const cards = root.querySelectorAll('[data-channel-kpi-grid] [data-cycle]');
+  cards.forEach((card) => {
+    const provider = card.getAttribute('data-channel') || '';
+    const slot = slots[provider];
+    if (!slot || (!slot.individual.length && !slot.aggregate)) return;
+    const individual = slot.individual;
+    const hasAggregate = Boolean(slot.aggregate) && individual.length >= 2;
+    const cycleLength = hasAggregate ? individual.length + 1 : Math.max(1, individual.length);
+
+    const elements = {
+      label: card.querySelector('[data-bind="label"]'),
+      kindLabel: card.querySelector('[data-bind="kind-label"]'),
+      total: card.querySelector('[data-bind="total"]'),
+      today: card.querySelector('[data-bind="today"]'),
+      deltaChip: card.querySelector('[data-bind="delta-chip"]'),
+      deltaArrow: card.querySelector('[data-bind="delta-arrow"]'),
+      deltaText: card.querySelector('[data-bind="delta-text"]'),
+      trendText: card.querySelector('[data-bind="trend-text"]'),
+      counter: card.querySelector('[data-bind="counter"]'),
+      aggFlag: card.querySelector('[data-bind="agg-flag"]'),
+      progressFill: card.querySelector('.od-channel-card-progress-fill'),
+    };
+
+    const dataAt = (idx) => {
+      if (hasAggregate && idx === cycleLength - 1) return slot.aggregate;
+      return individual[idx % individual.length];
+    };
+
+    const paint = (idx, animate = true) => {
+      const data = dataAt(idx);
+      if (!data) return;
+      const direction = data.growth < 0 ? 'down' : 'up';
+      const swap = () => {
+        if (elements.label) elements.label.textContent = data.label;
+        if (elements.kindLabel) {
+          elements.kindLabel.textContent = data.kind === 'aggregate'
+            ? 'Total platform views'
+            : 'Account total views';
+        }
+        if (elements.total) elements.total.textContent = formatNumber(data.totalViews);
+        if (elements.today) elements.today.textContent = `+${formatNumber(data.todayViews)}`;
+        if (elements.deltaChip) elements.deltaChip.setAttribute('data-direction', direction);
+        if (elements.deltaArrow) elements.deltaArrow.innerHTML = renderDeltaArrow(direction);
+        if (elements.deltaText) {
+          const sign = data.growth > 0 ? '+' : '';
+          elements.deltaText.textContent = `${sign}${data.growth}%`;
+        }
+        if (elements.trendText) elements.trendText.textContent = data.meta || (direction === 'up' ? 'Trending up' : 'Trending down');
+        if (elements.counter) elements.counter.textContent = `${(idx % individual.length) + 1}/${individual.length}`;
+        if (elements.aggFlag) elements.aggFlag.hidden = data.kind !== 'aggregate';
+        card.setAttribute('data-trend', direction);
+        card.setAttribute('data-active-kind', data.kind);
+        card.setAttribute('data-active-index', String(idx));
+      };
+      if (!animate) {
+        swap();
+        return;
+      }
+      card.classList.add('is-swapping');
+      const swapTimer = setTimeout(() => {
+        swap();
+        card.classList.remove('is-swapping');
+        card.classList.add('is-swap-in');
+        const settleTimer = setTimeout(() => card.classList.remove('is-swap-in'), 320);
+        state.channelKpiTimers.push(settleTimer);
+      }, 180);
+      state.channelKpiTimers.push(swapTimer);
+    };
+
+    const restartProgress = () => {
+      if (!elements.progressFill) return;
+      elements.progressFill.style.transition = 'none';
+      elements.progressFill.style.transform = 'scaleX(0)';
+      void elements.progressFill.offsetWidth;
+      elements.progressFill.style.transition = `transform ${TICK_MS}ms linear`;
+      elements.progressFill.style.transform = 'scaleX(1)';
+    };
+
+    let activeIndex = 0;
+    paint(activeIndex, false);
+    if (cycleLength <= 1) return;
+    restartProgress();
+
+    let paused = false;
+    const tick = () => {
+      if (paused) return;
+      activeIndex = (activeIndex + 1) % cycleLength;
+      paint(activeIndex, true);
+      restartProgress();
+    };
+    const interval = setInterval(tick, TICK_MS);
+    state.channelKpiTimers.push(interval);
+
+    card.addEventListener('mouseenter', () => {
+      paused = true;
+      if (elements.progressFill) {
+        const computed = getComputedStyle(elements.progressFill).transform;
+        elements.progressFill.style.transition = 'none';
+        elements.progressFill.style.transform = computed;
+      }
+    });
+    card.addEventListener('mouseleave', () => {
+      paused = false;
+      restartProgress();
+    });
+  });
+}
+
+function initDashboardAdSense(root) {
+  const config = (typeof window !== 'undefined' && window.ADSENSE_CONFIG) || null;
+  if (!config || !config.client) return;
+  const slots = root.querySelectorAll('.od-hero-ad-unit');
+  if (!slots.length) return;
+  slots.forEach((slot) => {
+    slot.setAttribute('data-ad-client', config.client);
+    if (config.slot) slot.setAttribute('data-ad-slot', config.slot);
+  });
+  if (!document.querySelector('script[data-adsense-loader]')) {
+    const script = document.createElement('script');
+    script.async = true;
+    script.crossOrigin = 'anonymous';
+    script.dataset.adsenseLoader = '1';
+    script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(config.client)}`;
+    document.head.appendChild(script);
+  }
+  try {
+    (window.adsbygoogle = window.adsbygoogle || []).push({});
+  } catch (err) {
+    /* AdSense will retry once script loads */
+  }
+}
+
 function bindDashboardInteractions() {
   const dashboardRoot = document.getElementById('od-root');
   if (!dashboardRoot) return;
   clearPulseRotateTimer();
+  initDashboardAdSense(dashboardRoot);
+  startChannelKpiCarousel(dashboardRoot);
 
   dashboardRoot.querySelectorAll('[data-dashboard-mode]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -4395,6 +4787,57 @@ async function renderPlatformDashboardPage() {
   const accounts = accountsResult?.ok && Array.isArray(accountsResult.body?.accounts) ? accountsResult.body.accounts : [];
   const destinations = destinationsResult?.ok && Array.isArray(destinationsResult.destinations) ? destinationsResult.destinations : [];
   const channels = Array.isArray(stats?.channels) ? [...stats.channels] : [];
+
+  const channelsByProvider = { youtube: [], tiktok: [], instagram: [] };
+  if (accounts.length) {
+    const accountChannelResponses = await Promise.all(
+      accounts.map((account) => api.accountChannels(account.id).catch(() => null))
+    );
+    const statsByChannelId = new Map();
+    channels.forEach((channel) => {
+      const id = String(channel?.channelId ?? '').trim();
+      if (id) statsByChannelId.set(id, channel);
+    });
+    accounts.forEach((account, index) => {
+      const providerRaw = String(account?.provider ?? '').toLowerCase();
+      const provider = providerRaw === 'google' ? 'youtube' : providerRaw;
+      if (!channelsByProvider[provider]) return;
+      const isConnected = String(account?.status ?? '').toLowerCase() === 'connected';
+      if (!isConnected) return;
+      const response = accountChannelResponses[index];
+      const accountChannels = response?.ok && Array.isArray(response.body?.channels) ? response.body.channels : [];
+
+      if (provider === 'youtube' && accountChannels.length > 0) {
+        accountChannels.forEach((ch) => {
+          const channelId = String(ch?.id ?? ch?.channelId ?? '').trim();
+          const stat = channelId ? statsByChannelId.get(channelId) : null;
+          channelsByProvider.youtube.push({
+            channelId,
+            channelLabel: ch?.title ?? ch?.label ?? account?.displayName ?? 'YouTube channel',
+            totalViews: Number(stat?.totalViews ?? 0),
+            topVideoViews: Number(stat?.topVideoViews ?? 0),
+            topVideoId: stat?.topVideoId ?? null,
+            topVideoTitle: stat?.topVideoTitle ?? null,
+            successRate: Number(stat?.successRate ?? 0),
+            hasStats: Boolean(stat),
+          });
+        });
+      } else {
+        const fallbackId = String(account?.id ?? '').trim();
+        const stat = fallbackId ? statsByChannelId.get(fallbackId) : null;
+        channelsByProvider[provider].push({
+          channelId: fallbackId,
+          channelLabel: account?.displayName ?? account?.email ?? dashboardPlatformLabel(provider),
+          totalViews: Number(stat?.totalViews ?? 0),
+          topVideoViews: Number(stat?.topVideoViews ?? 0),
+          topVideoId: stat?.topVideoId ?? null,
+          topVideoTitle: stat?.topVideoTitle ?? null,
+          successRate: Number(stat?.successRate ?? 0),
+          hasStats: Boolean(stat),
+        });
+      }
+    });
+  }
   const rankedChannels = [...channels].sort((left, right) => {
     const leftTopViews = Number(left?.topVideoViews ?? 0);
     const rightTopViews = Number(right?.topVideoViews ?? 0);
@@ -4480,7 +4923,7 @@ async function renderPlatformDashboardPage() {
         </div>
       </div>
 
-      <section class="od-command-hero">
+      <section class="od-command-hero od-command-hero-split">
         <div class="od-hero-copy od-panel">
           <span class="od-kpi-label od-mono">Editorial Pulse</span>
           <div class="od-pulse-rotator" aria-live="polite">
@@ -4489,6 +4932,7 @@ async function renderPlatformDashboardPage() {
           <p class="od-muted">
             Next campaign: ${escapeHtml(nextCampaign ? `${nextCampaign.title ?? 'Untitled'} at ${formatDate(nextCampaign.scheduledAt)}` : 'none scheduled')}
           </p>
+          ${renderEditorialPulseInsights({ stats, campaigns, targetTotal, publishedTargets, failedTargets, activeJobs, successRate, projectedQuota })}
           <div class="od-hero-actions">
             <a class="platform-button-primary od-hero-action-btn" data-link href="/workspace/campanhas/nova">
               <span class="od-hero-action-icon">${renderEditorialPulseIcon('create')}</span>
@@ -4503,6 +4947,35 @@ async function renderPlatformDashboardPage() {
               <span>Accounts</span>
             </a>
           </div>
+        </div>
+        <aside class="od-hero-ad od-panel" aria-label="Advertisement" data-ad-slot="dashboard-hero">
+          <div class="od-hero-ad-head">
+            <span class="od-kpi-label od-mono">Sponsored</span>
+            <span class="od-panel-meta od-muted od-mono">Google AdSense</span>
+          </div>
+          <div class="od-hero-ad-frame">
+            <div class="od-hero-ad-placeholder" aria-hidden="true">
+              <div class="od-hero-ad-shimmer"></div>
+              <span class="od-hero-ad-placeholder-label od-mono">Ad slot 300×250</span>
+            </div>
+            <ins class="adsbygoogle od-hero-ad-unit"
+                 style="display:block;width:100%;height:100%;"
+                 data-ad-client=""
+                 data-ad-slot=""
+                 data-ad-format="auto"
+                 data-full-width-responsive="true"></ins>
+          </div>
+          <small class="od-hero-ad-disclaimer od-muted od-mono">Ads keep this dashboard free</small>
+        </aside>
+      </section>
+
+      <section class="od-channel-kpi-row" aria-label="Channel performance">
+        <div class="od-channel-kpi-head">
+          <span class="od-kpi-label od-mono">Channel performance</span>
+          <span class="od-panel-meta od-muted od-mono">Today vs. last 24h</span>
+        </div>
+        <div class="od-channel-kpi-grid" data-channel-kpi-grid>
+          ${renderChannelKpiCards(channelsByProvider)}
         </div>
       </section>
 
@@ -4532,7 +5005,7 @@ async function renderPlatformDashboardPage() {
         <div class="od-dashboard-main od-performance-row">
           <div class="od-panel od-leader-panel">
             <div class="od-panel-head">
-              <span class="od-panel-label od-mono">LEADERSHIP</span>
+              <span class="od-panel-label od-mono">TOP PERFORMERS</span>
               <span class="od-panel-meta od-muted od-mono">Ranked videos by views</span>
             </div>
             ${leadershipHtml}
@@ -4719,7 +5192,7 @@ async function renderPlatformDashboardLegacyPage() {
       <div class="od-bottom-row">
         <div class="od-panel od-leader-panel">
           <div class="od-panel-head">
-            <span class="od-panel-label od-mono">LEADERSHIP</span>
+            <span class="od-panel-label od-mono">TOP PERFORMERS</span>
             <span class="od-panel-meta od-muted od-mono">Ranked videos by views</span>
           </div>
           ${leaderboardHtml}
@@ -7595,7 +8068,1103 @@ async function renderCampaignsPage() {
   });
 }
 
+const CAMPAIGN_FLOW_STORAGE_KEY = 'ytmp-campaign-flow-v2';
+const CAMPAIGN_FLOW_STEPS = [
+  { number: 1, label: 'Plataformas', path: '/workspace/campanhas/Etapa1' },
+  { number: 2, label: 'Midia', path: '/workspace/campanhas/Etapa2' },
+  { number: 3, label: 'Destinos', path: '/workspace/campanhas/Etapa3' },
+  { number: 4, label: 'Metadados', path: '/workspace/campanhas/Etapa4' },
+  { number: 5, label: 'Revisao', path: '/workspace/campanhas/Etapa5' },
+  { number: 6, label: 'Salvar', path: '/workspace/campanhas/Etapa6' },
+];
+const CAMPAIGN_FLOW_PLATFORMS = ['youtube', 'tiktok', 'instagram'];
+
+function getCampaignFlowDefaults() {
+  return {
+    selectedPlatforms: [],
+    sourceType: 'media',
+    publishFormat: 'standard',
+    videoAssetId: '',
+    playlistId: '',
+    playlistSequenceMode: 'random',
+    playlistRepeatPolicy: 'no-repeat',
+    playlistStrictFormat: true,
+    selectedDestinationRefs: [],
+    scheduledAt: '',
+    perTargetPublishAt: {},
+    schedulePatternEnabled: false,
+    scheduleTimesPerDay: 1,
+    scheduleHourAuto: true,
+    scheduleHours: [],
+    scheduleDays: [],
+    title: '',
+    randomTitleEnabled: false,
+    titleSeed: '',
+    videoTitle: '',
+    videoDescription: '',
+    tags: '',
+    privacy: '',
+    youtubePlaylistId: '',
+    thumbnailAssetId: '',
+    instagramCaption: '',
+    instagramShareToFeed: true,
+  };
+}
+
+function readCampaignFlowState() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(CAMPAIGN_FLOW_STORAGE_KEY) || '{}');
+    return {
+      ...getCampaignFlowDefaults(),
+      ...(parsed && typeof parsed === 'object' ? parsed : {}),
+      selectedPlatforms: Array.isArray(parsed?.selectedPlatforms) ? parsed.selectedPlatforms : [],
+      selectedDestinationRefs: Array.isArray(parsed?.selectedDestinationRefs) ? parsed.selectedDestinationRefs : [],
+      perTargetPublishAt: parsed?.perTargetPublishAt && typeof parsed.perTargetPublishAt === 'object' ? parsed.perTargetPublishAt : {},
+      scheduleHours: Array.isArray(parsed?.scheduleHours) ? parsed.scheduleHours : [],
+      scheduleDays: Array.isArray(parsed?.scheduleDays) ? parsed.scheduleDays : [],
+    };
+  } catch {
+    return getCampaignFlowDefaults();
+  }
+}
+
+function writeCampaignFlowState(nextState) {
+  localStorage.setItem(CAMPAIGN_FLOW_STORAGE_KEY, JSON.stringify({
+    ...getCampaignFlowDefaults(),
+    ...nextState,
+  }));
+}
+
+function patchCampaignFlowState(patch) {
+  const next = {
+    ...readCampaignFlowState(),
+    ...patch,
+  };
+  writeCampaignFlowState(next);
+  return next;
+}
+
+function resetCampaignFlowState() {
+  localStorage.removeItem(CAMPAIGN_FLOW_STORAGE_KEY);
+}
+
+function getCampaignFlowPlatformLabel(platform) {
+  if (platform === 'youtube') return 'YouTube';
+  if (platform === 'tiktok') return 'TikTok';
+  if (platform === 'instagram') return 'Instagram';
+  return 'Plataforma';
+}
+
+function getCampaignFlowPlatformMeta(platform) {
+  if (platform === 'youtube') {
+    return {
+      tone: 'youtube',
+      title: 'YouTube',
+      body: 'Canais, playlists do canal, thumbnails e privacidade de video.',
+      helper: 'Ideal para videos longos, Shorts e publicacoes recorrentes.',
+    };
+  }
+  if (platform === 'tiktok') {
+    return {
+      tone: 'tiktok',
+      title: 'TikTok',
+      body: 'Contas conectadas para videos curtos e distribuicao rapida.',
+      helper: 'Pode exigir plano com acesso a TikTok no momento de salvar.',
+    };
+  }
+  return {
+    tone: 'instagram',
+    title: 'Instagram',
+    body: 'Contas conectadas para Reels, caption e envio para feed.',
+    helper: 'Bom para reaproveitar Shorts/Reels com caption dedicada.',
+  };
+}
+
+function campaignFlowDestinationRef(destination) {
+  return `${String(destination?.platform ?? 'youtube')}:${String(destination?.destinationId ?? destination?.id ?? '')}`;
+}
+
+function campaignFlowParseDestinationRef(ref) {
+  const value = String(ref ?? '');
+  const index = value.indexOf(':');
+  if (index === -1) return { platform: 'youtube', destinationId: value };
+  return {
+    platform: value.slice(0, index),
+    destinationId: value.slice(index + 1),
+  };
+}
+
+function campaignFlowFindDestination(destinations, ref) {
+  const parsed = campaignFlowParseDestinationRef(ref);
+  return destinations.find((destination) =>
+    String(destination.platform) === parsed.platform &&
+    String(destination.destinationId) === parsed.destinationId);
+}
+
+function isPaidCampaignPlan(account) {
+  const plan = String(account?.plan ?? '').toUpperCase();
+  return Boolean(plan && plan !== 'FREE');
+}
+
+function isCampaignFlowPlatformAllowedByPlan(platform, account) {
+  const plan = String(account?.plan ?? 'FREE').toUpperCase();
+  if (platform === 'youtube') return true;
+  return plan === 'PRO' || plan === 'PREMIUM';
+}
+
+function campaignFlowToIso(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return undefined;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+}
+
+function campaignFlowFormatLocalDate(value) {
+  if (!value) return 'Imediato';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return parsed.toLocaleString();
+}
+
+function campaignFlowSelectedVideos(videos, flowState) {
+  return videos.filter((video) => {
+    const format = getVideoPublishFormat(video);
+    return flowState.publishFormat === 'short' ? format === 'short' : format === 'standard';
+  });
+}
+
+async function loadCampaignFlowContext() {
+  const [mediaResult, destinationsResult, playlistsResult, planResult] = await Promise.all([
+    api.media(),
+    loadConnectedPublishDestinations(),
+    api.playlists(),
+    api.accountPlanSummary(),
+  ]);
+
+  if (!mediaResult.ok || !destinationsResult.ok) {
+    const failing = !mediaResult.ok ? mediaResult : destinationsResult;
+    return { ok: false, status: failing.status, error: failing.error };
+  }
+
+  if (planResult.ok && planResult.body?.account) {
+    state.account = planResult.body.account;
+  }
+
+  const assets = Array.isArray(mediaResult.body?.assets) ? mediaResult.body.assets : [];
+  return {
+    ok: true,
+    assets,
+    videos: assets.filter((asset) => asset.asset_type === 'video' || asset.asset_type === undefined),
+    thumbnails: assets.filter((asset) => asset.asset_type === 'thumbnail'),
+    playlists: Array.isArray(playlistsResult.body?.playlists) ? playlistsResult.body.playlists : [],
+    destinations: Array.isArray(destinationsResult.destinations) ? destinationsResult.destinations : [],
+    account: planResult.ok ? planResult.body?.account : state.account,
+  };
+}
+
+function renderCampaignFlowStepper(activeStep) {
+  return `
+    <nav class="campaign-flow-stepper" aria-label="Etapas da campanha">
+      ${CAMPAIGN_FLOW_STEPS.map((step) => {
+        const stateAttr = step.number === activeStep ? 'active' : step.number < activeStep ? 'done' : 'next';
+        return `
+          <a class="campaign-flow-step" data-state="${stateAttr}" data-link href="${step.path}">
+            <span>${step.number}</span>
+            <strong>${escapeHtml(step.label)}</strong>
+          </a>
+        `;
+      }).join('')}
+    </nav>
+  `;
+}
+
+function renderCampaignFlowSummary(context, flowState) {
+  const selectedDestinations = flowState.selectedDestinationRefs
+    .map((ref) => campaignFlowFindDestination(context.destinations, ref))
+    .filter(Boolean);
+  const selectedVideo = context.videos.find((video) => video.id === flowState.videoAssetId);
+  const selectedPlaylist = context.playlists.find((playlist) => playlist.id === flowState.playlistId);
+  const selectedPlatformLabels = flowState.selectedPlatforms.map(getCampaignFlowPlatformLabel);
+  return `
+    <aside class="campaign-flow-summary" aria-label="Resumo da campanha">
+      <div class="campaign-flow-summary-head">
+        <span class="campaign-flow-eyebrow">Resumo vivo</span>
+        <strong>${escapeHtml(flowState.title || 'Nova campanha')}</strong>
+      </div>
+      <div class="campaign-flow-summary-grid">
+        <div><span>Plano</span><strong>${escapeHtml(context.account?.planLabel ?? context.account?.plan ?? 'Free')}</strong></div>
+        <div><span>Tokens</span><strong>${formatNumber(context.account?.tokens ?? 0)}</strong></div>
+        <div><span>Plataformas</span><strong>${selectedPlatformLabels.length ? escapeHtml(selectedPlatformLabels.join(', ')) : 'Nenhuma'}</strong></div>
+        <div><span>Origem</span><strong>${flowState.sourceType === 'playlist' ? 'Playlist' : 'Midia'}</strong></div>
+        <div><span>Formato</span><strong>${escapeHtml(getVideoPublishFormatLabel(flowState.publishFormat))}</strong></div>
+        <div><span>Selecionado</span><strong>${escapeHtml(selectedPlaylist?.name ?? selectedVideo?.original_name ?? '-')}</strong></div>
+        <div><span>Destinos</span><strong>${formatNumber(selectedDestinations.length)}</strong></div>
+        <div><span>Agendamento</span><strong>${flowState.schedulePatternEnabled ? 'Aleatorio' : (flowState.scheduledAt ? 'Data fixa' : 'Manual')}</strong></div>
+      </div>
+    </aside>
+  `;
+}
+
+function renderCampaignFlowLayout(context, flowState, activeStep, bodyHtml) {
+  return `
+    <section class="campaign-flow">
+      <header class="campaign-flow-header">
+        <div>
+          <span class="campaign-flow-eyebrow">Campanhas</span>
+          <h1>Crie uma campanha em etapas claras</h1>
+          <p>Plataformas primeiro, depois midia, destinos, agenda, metadados e revisao. O fluxo fica salvo no navegador enquanto voce ajusta.</p>
+        </div>
+        <a class="button button-secondary" data-link href="/workspace/campanhas">Voltar para campanhas</a>
+      </header>
+      ${renderCampaignFlowStepper(activeStep)}
+      <div class="campaign-flow-body">
+        <main class="campaign-flow-main">${bodyHtml}</main>
+        ${renderCampaignFlowSummary(context, flowState)}
+      </div>
+    </section>
+  `;
+}
+
+function renderCampaignFlowFooter({ backHref, nextHref, nextDisabled = false, nextLabel = 'Proxima etapa', submit = false }) {
+  return `
+    <div class="campaign-flow-footer">
+      <a class="button button-secondary" data-link href="${escapeHtml(backHref)}">Voltar</a>
+      ${submit
+        ? `<button class="button button-primary" type="button" data-action="campaign-flow-submit" ${nextDisabled ? 'disabled' : ''}>${escapeHtml(nextLabel)}</button>`
+        : `<button class="button button-primary" type="button" data-next-href="${escapeHtml(nextHref)}" ${nextDisabled ? 'disabled' : ''}>${escapeHtml(nextLabel)}</button>`}
+    </div>
+  `;
+}
+
+function attachCampaignFlowNextHandlers(validate) {
+  document.querySelectorAll('[data-next-href]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (button.disabled) return;
+      const result = validate?.();
+      if (result && result.ok === false) {
+        setUiNotice('warning', result.title ?? 'Revise esta etapa', result.message ?? 'Complete os campos obrigatorios antes de continuar.');
+        return;
+      }
+      navigate(button.getAttribute('data-next-href'));
+    });
+  });
+}
+
+function renderCampaignFlowPlatformStep(context, flowState) {
+  const byPlatform = Object.fromEntries(CAMPAIGN_FLOW_PLATFORMS.map((platform) => [
+    platform,
+    context.destinations.filter((destination) => destination.platform === platform),
+  ]));
+  const selectedSet = new Set(flowState.selectedPlatforms);
+  const cards = CAMPAIGN_FLOW_PLATFORMS.map((platform) => {
+    const meta = getCampaignFlowPlatformMeta(platform);
+    const count = byPlatform[platform]?.length ?? 0;
+    const disabled = count === 0;
+    const selected = selectedSet.has(platform) && !disabled;
+    return `
+      <label class="campaign-platform-card" data-tone="${meta.tone}" data-disabled="${disabled ? 'true' : 'false'}" data-selected="${selected ? 'true' : 'false'}">
+        <input type="checkbox" data-platform-input="${platform}" value="${platform}" ${selected ? 'checked' : ''} ${disabled ? 'disabled' : ''} />
+        <span class="campaign-platform-card-top">
+          ${renderAnimatedLogoByPlatform(platform, 36)}
+          <span class="campaign-platform-status">${disabled ? 'Sem conta conectada' : `${formatNumber(count)} destino${count === 1 ? '' : 's'}`}</span>
+        </span>
+        <strong>${escapeHtml(meta.title)}</strong>
+        <span>${escapeHtml(meta.body)}</span>
+        <small>${escapeHtml(disabled ? 'Conecte uma conta para habilitar esta opcao.' : meta.helper)}</small>
+      </label>
+    `;
+  }).join('');
+
+  return renderCampaignFlowLayout(context, flowState, 1, `
+    <section class="campaign-flow-panel">
+      <div class="campaign-flow-panel-head">
+        <span class="campaign-flow-eyebrow">Etapa 1</span>
+        <h2>Criando nova campanha</h2>
+        <p>Escolha uma ou mais plataformas. As plataformas sem conta conectada ficam visiveis, mas bloqueadas.</p>
+      </div>
+      <div class="campaign-platform-grid">${cards}</div>
+      ${renderCampaignFlowFooter({
+        backHref: '/workspace/campanhas',
+        nextHref: '/workspace/campanhas/Etapa2',
+        nextDisabled: flowState.selectedPlatforms.length === 0,
+      })}
+    </section>
+  `);
+}
+
+function attachCampaignFlowPlatformStep(flowState) {
+  const selected = new Set(flowState.selectedPlatforms);
+  const nextButton = document.querySelector('[data-next-href]');
+  const sync = () => {
+    document.querySelectorAll('[data-platform-input]').forEach((input) => {
+      const platform = input.getAttribute('data-platform-input');
+      const card = input.closest('.campaign-platform-card');
+      if (input.checked) selected.add(platform);
+      else selected.delete(platform);
+      card?.setAttribute('data-selected', input.checked ? 'true' : 'false');
+    });
+    const selectedPlatforms = Array.from(selected).filter((platform) => CAMPAIGN_FLOW_PLATFORMS.includes(platform));
+    patchCampaignFlowState({
+      selectedPlatforms,
+      selectedDestinationRefs: flowState.selectedDestinationRefs.filter((ref) => selectedPlatforms.includes(campaignFlowParseDestinationRef(ref).platform)),
+    });
+    if (nextButton) nextButton.disabled = selectedPlatforms.length === 0;
+  };
+  document.querySelectorAll('[data-platform-input]').forEach((input) => input.addEventListener('change', sync));
+  attachCampaignFlowNextHandlers(() => {
+    const next = readCampaignFlowState();
+    return next.selectedPlatforms.length === 0
+      ? { ok: false, title: 'Escolha uma plataforma', message: 'Selecione pelo menos uma plataforma para liberar a proxima etapa.' }
+      : { ok: true };
+  });
+  sync();
+}
+
+function renderCampaignFlowMediaStep(context, flowState) {
+  const paidPlan = isPaidCampaignPlan(context.account);
+  const sourceType = flowState.sourceType === 'playlist' && paidPlan ? 'playlist' : 'media';
+  const videos = campaignFlowSelectedVideos(context.videos, { ...flowState, sourceType });
+  const videoCards = videos.length === 0
+    ? `<div class="campaign-flow-empty-inline">Nenhum video encontrado para ${escapeHtml(getVideoPublishFormatLabel(flowState.publishFormat))}.</div>`
+    : videos.map((video) => `
+      <label class="campaign-video-card" data-selected="${flowState.videoAssetId === video.id ? 'true' : 'false'}">
+        <input type="radio" name="campaignFlowVideo" value="${escapeHtml(video.id)}" ${flowState.videoAssetId === video.id ? 'checked' : ''} />
+        <strong>${escapeHtml(video.original_name)}</strong>
+        <span>${escapeHtml(formatDurationSeconds(video.duration_seconds))}</span>
+        <small>${escapeHtml(getVideoPublishFormatLabel(getVideoPublishFormat(video)))}</small>
+      </label>
+    `).join('');
+  const playlistOptions = context.playlists.map((playlist) => `
+    <option value="${escapeHtml(playlist.id)}" ${flowState.playlistId === playlist.id ? 'selected' : ''}>${escapeHtml(playlist.name)} (${formatNumber(playlist.items?.length ?? 0)} videos)</option>
+  `).join('');
+
+  return renderCampaignFlowLayout(context, flowState, 2, `
+    <section class="campaign-flow-panel">
+      <div class="campaign-flow-panel-head">
+        <span class="campaign-flow-eyebrow">Etapa 2</span>
+        <h2>Selecionar video</h2>
+        <p>Defina se a campanha usa uma midia especifica ou uma playlist automatizada, e se o formato e video longo ou curto.</p>
+      </div>
+      <div class="campaign-segment-grid">
+        <label class="campaign-segment" data-selected="${sourceType === 'media' ? 'true' : 'false'}">
+          <input type="radio" name="campaignFlowSource" value="media" ${sourceType === 'media' ? 'checked' : ''} />
+          <strong>Midia</strong><span>Escolher um video manualmente.</span>
+        </label>
+        <label class="campaign-segment" data-selected="${sourceType === 'playlist' ? 'true' : 'false'}" data-disabled="${paidPlan ? 'false' : 'true'}">
+          <input type="radio" name="campaignFlowSource" value="playlist" ${sourceType === 'playlist' ? 'checked' : ''} ${paidPlan ? '' : 'disabled'} />
+          <strong>Playlist</strong><span>${paidPlan ? 'Escolha automatica a partir de uma playlist.' : 'Liberado somente para planos pagos.'}</span>
+        </label>
+      </div>
+      <div class="campaign-format-row" role="radiogroup" aria-label="Formato do video">
+        <label data-selected="${flowState.publishFormat === 'standard' ? 'true' : 'false'}"><input type="radio" name="campaignFlowFormat" value="standard" ${flowState.publishFormat === 'standard' ? 'checked' : ''} />Video longo</label>
+        <label data-selected="${flowState.publishFormat === 'short' ? 'true' : 'false'}"><input type="radio" name="campaignFlowFormat" value="short" ${flowState.publishFormat === 'short' ? 'checked' : ''} />Video curto</label>
+      </div>
+      ${sourceType === 'media' ? `<div class="campaign-video-grid">${videoCards}</div>` : `
+        <div class="campaign-flow-field-grid">
+          <label class="campaign-flow-field">
+            <span>Playlist</span>
+            <select id="campaign-flow-playlist-select" ${paidPlan ? '' : 'disabled'}>
+              <option value="">Selecionar playlist</option>
+              ${playlistOptions}
+            </select>
+          </label>
+        </div>
+        <section class="campaign-random-panel">
+          <div>
+            <span class="campaign-flow-eyebrow">Padrao de agendamento aleatorio</span>
+            <h3>Regras de escolha dos videos</h3>
+            <p>Este painel fica limitado ao comportamento da playlist. Horarios entram na Etapa 3 e titulos entram na Etapa 4.</p>
+          </div>
+          <div class="campaign-flow-field-grid">
+            <label class="campaign-flow-field">
+              <span>Ordem dos videos</span>
+              <select id="campaign-flow-playlist-sequence">
+                <option value="random" ${flowState.playlistSequenceMode === 'random' ? 'selected' : ''}>Aleatorio</option>
+                <option value="sequential" ${flowState.playlistSequenceMode === 'sequential' ? 'selected' : ''}>Sequencial</option>
+                <option value="fresh-first" ${flowState.playlistSequenceMode === 'fresh-first' ? 'selected' : ''}>Nao usados primeiro</option>
+              </select>
+            </label>
+            <label class="campaign-flow-field">
+              <span>Quando a playlist acabar</span>
+              <select id="campaign-flow-playlist-repeat">
+                <option value="no-repeat" ${flowState.playlistRepeatPolicy === 'no-repeat' ? 'selected' : ''}>Nao repetir ate todos sairem</option>
+                <option value="allow-repeat" ${flowState.playlistRepeatPolicy === 'allow-repeat' ? 'selected' : ''}>Permitir repeticao</option>
+                <option value="stop" ${flowState.playlistRepeatPolicy === 'stop' ? 'selected' : ''}>Pausar campanha</option>
+              </select>
+            </label>
+            <label class="campaign-check-row">
+              <input id="campaign-flow-playlist-strict-format" type="checkbox" ${flowState.playlistStrictFormat ? 'checked' : ''} />
+              <span>Usar apenas videos compativeis com o formato escolhido.</span>
+            </label>
+          </div>
+        </section>
+      `}
+      ${renderCampaignFlowFooter({
+        backHref: '/workspace/campanhas/Etapa1',
+        nextHref: '/workspace/campanhas/Etapa3',
+        nextDisabled: sourceType === 'playlist' ? (!flowState.playlistId || !paidPlan) : !flowState.videoAssetId,
+      })}
+    </section>
+  `);
+}
+
+function attachCampaignFlowMediaStep(context) {
+  const collect = () => {
+    const current = readCampaignFlowState();
+    const sourceType = document.querySelector('input[name="campaignFlowSource"]:checked')?.value ?? current.sourceType;
+    const publishFormat = document.querySelector('input[name="campaignFlowFormat"]:checked')?.value ?? current.publishFormat;
+    const candidateVideoAssetId = document.querySelector('input[name="campaignFlowVideo"]:checked')?.value ?? (sourceType === 'media' ? current.videoAssetId : '');
+    const candidateVideo = context.videos.find((video) => video.id === candidateVideoAssetId);
+    const videoAssetId = sourceType === 'media' && candidateVideo && getVideoPublishFormat(candidateVideo) === publishFormat
+      ? candidateVideoAssetId
+      : '';
+    const next = patchCampaignFlowState({
+      sourceType,
+      publishFormat,
+      videoAssetId,
+      playlistId: document.querySelector('#campaign-flow-playlist-select')?.value ?? current.playlistId,
+      playlistSequenceMode: document.querySelector('#campaign-flow-playlist-sequence')?.value ?? current.playlistSequenceMode,
+      playlistRepeatPolicy: document.querySelector('#campaign-flow-playlist-repeat')?.value ?? current.playlistRepeatPolicy,
+      playlistStrictFormat: Boolean(document.querySelector('#campaign-flow-playlist-strict-format')?.checked ?? current.playlistStrictFormat),
+    });
+    const nextButton = document.querySelector('[data-next-href]');
+    if (nextButton) nextButton.disabled = next.sourceType === 'playlist' ? (!next.playlistId || !isPaidCampaignPlan(context.account)) : !next.videoAssetId;
+  };
+  document.querySelectorAll('input[name="campaignFlowSource"], input[name="campaignFlowFormat"], input[name="campaignFlowVideo"]').forEach((input) => {
+    input.addEventListener('change', () => {
+      collect();
+      void renderCampaignFlowPage(2);
+    });
+  });
+  document.querySelectorAll('#campaign-flow-playlist-select, #campaign-flow-playlist-sequence, #campaign-flow-playlist-repeat, #campaign-flow-playlist-strict-format').forEach((input) => {
+    input.addEventListener('change', collect);
+  });
+  attachCampaignFlowNextHandlers(() => {
+    const next = readCampaignFlowState();
+    if (next.sourceType === 'playlist') {
+      if (!isPaidCampaignPlan(context.account)) return { ok: false, title: 'Playlist bloqueada', message: 'Selecao por playlist esta liberada somente para planos pagos.' };
+      if (!next.playlistId) return { ok: false, title: 'Escolha uma playlist', message: 'Selecione uma playlist antes de avancar.' };
+      return { ok: true };
+    }
+    return next.videoAssetId ? { ok: true } : { ok: false, title: 'Escolha uma midia', message: 'Selecione um video compativel com o formato escolhido.' };
+  });
+  collect();
+}
+
+function renderCampaignFlowDestinationStep(context, flowState) {
+  const selectedPlatforms = new Set(flowState.selectedPlatforms);
+  const destinations = context.destinations.filter((destination) => selectedPlatforms.has(destination.platform));
+  const selectedRefs = new Set(flowState.selectedDestinationRefs);
+  const destinationCards = destinations.length === 0
+    ? '<div class="campaign-flow-empty-inline">Nenhum destino ativo encontrado para as plataformas escolhidas.</div>'
+    : destinations.map((destination) => {
+      const ref = campaignFlowDestinationRef(destination);
+      const selected = selectedRefs.has(ref);
+      return `
+        <article class="campaign-destination-card" data-platform="${escapeHtml(destination.platform)}" data-selected="${selected ? 'true' : 'false'}">
+          <label>
+            <input type="checkbox" data-destination-input="${escapeHtml(ref)}" ${selected ? 'checked' : ''} />
+            <span>
+              ${renderAnimatedLogoByPlatform(destination.platform, 28)}
+              <strong>${escapeHtml(destination.destinationLabel ?? destination.title ?? destination.destinationId)}</strong>
+              <small>${escapeHtml(getProviderLabel(destination.platform))} - ${escapeHtml(destination.handle ?? destination.email ?? destination.youtubeChannelId ?? destination.destinationId)}</small>
+            </span>
+          </label>
+          <div class="campaign-destination-schedule">
+            <span>Horario deste destino</span>
+            <input type="datetime-local" data-target-publish-at="${escapeHtml(ref)}" value="${escapeHtml(flowState.perTargetPublishAt?.[ref] ?? '')}" />
+          </div>
+        </article>
+      `;
+    }).join('');
+  const playlistMode = flowState.sourceType === 'playlist';
+  const schedulePanel = playlistMode && flowState.schedulePatternEnabled ? `
+    <section class="campaign-random-panel">
+      <div>
+        <span class="campaign-flow-eyebrow">Padrao de agendamento aleatorio</span>
+        <h3>Horarios e dias de disparo</h3>
+        <p>Use este bloco para transformar uma playlist em varios disparos. Titulos entram na etapa de metadados.</p>
+      </div>
+      <div class="campaign-flow-field-grid">
+        <label class="campaign-flow-field"><span>Disparos por dia</span><input id="campaign-flow-times-per-day" type="number" min="1" max="48" value="${escapeHtml(flowState.scheduleTimesPerDay)}" /></label>
+        <label class="campaign-check-row"><input id="campaign-flow-hour-auto" type="checkbox" ${flowState.scheduleHourAuto ? 'checked' : ''} /><span>Distribuir horarios automaticamente dentro do dia.</span></label>
+      </div>
+      <div id="campaign-flow-hours-container" class="campaign-hours-container"></div>
+      <div class="campaign-flow-date-editor">
+        <div id="campaign-flow-date-list" class="campaign-date-list"></div>
+        <div class="inline-actions">
+          <input id="campaign-flow-date-input" type="date" />
+          <button class="button button-secondary" type="button" id="campaign-flow-date-add">Adicionar dia</button>
+        </div>
+      </div>
+    </section>
+  ` : '';
+
+  return renderCampaignFlowLayout(context, flowState, 3, `
+    <section class="campaign-flow-panel">
+      <div class="campaign-flow-panel-head">
+        <span class="campaign-flow-eyebrow">Etapa 3</span>
+        <h2>Selecionar destinos e agendamentos</h2>
+        <p>Agora aparecem somente os canais e contas das plataformas escolhidas na Etapa 1.</p>
+      </div>
+      <div class="campaign-destination-grid">${destinationCards}</div>
+      <section class="campaign-flow-subpanel">
+        <div class="campaign-flow-panel-head compact">
+          <h3>Entrada na fila</h3>
+          <p>Use um horario geral para a campanha e, se precisar, sobrescreva por destino.</p>
+        </div>
+        <div class="campaign-flow-field-grid">
+          <label class="campaign-flow-field"><span>Horario geral da campanha</span><input id="campaign-flow-scheduled-at" type="datetime-local" value="${escapeHtml(flowState.scheduledAt)}" /></label>
+          <label class="campaign-check-row" data-disabled="${playlistMode ? 'false' : 'true'}">
+            <input id="campaign-flow-schedule-random" type="checkbox" ${flowState.schedulePatternEnabled ? 'checked' : ''} ${playlistMode ? '' : 'disabled'} />
+            <span>Usar padrao aleatorio de dias e horarios para playlist.</span>
+          </label>
+        </div>
+      </section>
+      ${schedulePanel}
+      ${renderCampaignFlowFooter({
+        backHref: '/workspace/campanhas/Etapa2',
+        nextHref: '/workspace/campanhas/Etapa4',
+        nextDisabled: flowState.selectedDestinationRefs.length === 0,
+      })}
+    </section>
+  `);
+}
+
+function attachCampaignFlowDestinationStep(flowState) {
+  const selectedRefs = new Set(flowState.selectedDestinationRefs);
+  const selectedDates = new Set(flowState.scheduleDays);
+  const collect = () => {
+    document.querySelectorAll('[data-destination-input]').forEach((input) => {
+      const ref = input.getAttribute('data-destination-input');
+      const card = input.closest('.campaign-destination-card');
+      if (input.checked) selectedRefs.add(ref);
+      else selectedRefs.delete(ref);
+      card?.setAttribute('data-selected', input.checked ? 'true' : 'false');
+    });
+    const perTargetPublishAt = {};
+    document.querySelectorAll('[data-target-publish-at]').forEach((input) => {
+      const ref = input.getAttribute('data-target-publish-at');
+      if (ref && input.value) perTargetPublishAt[ref] = input.value;
+    });
+    const hours = Array.from(document.querySelectorAll('input[name="campaignFlowScheduleHour"]')).map((input) => input.value).filter(Boolean);
+    const next = patchCampaignFlowState({
+      selectedDestinationRefs: Array.from(selectedRefs),
+      scheduledAt: document.querySelector('#campaign-flow-scheduled-at')?.value ?? '',
+      perTargetPublishAt,
+      schedulePatternEnabled: Boolean(document.querySelector('#campaign-flow-schedule-random')?.checked),
+      scheduleTimesPerDay: Math.max(1, parseInteger(document.querySelector('#campaign-flow-times-per-day')?.value, 1, 1, 48)),
+      scheduleHourAuto: Boolean(document.querySelector('#campaign-flow-hour-auto')?.checked ?? true),
+      scheduleHours: hours,
+      scheduleDays: Array.from(selectedDates).sort(),
+    });
+    const nextButton = document.querySelector('[data-next-href]');
+    if (nextButton) nextButton.disabled = next.selectedDestinationRefs.length === 0;
+  };
+  const renderDates = () => {
+    const datesList = document.querySelector('#campaign-flow-date-list');
+    if (!datesList) return;
+    const dates = Array.from(selectedDates).sort();
+    datesList.innerHTML = dates.length === 0
+      ? '<small class="muted">Nenhum dia selecionado.</small>'
+      : dates.map((date) => `<span class="campaign-date-chip">${escapeHtml(date)}<button type="button" data-remove-date="${escapeHtml(date)}">x</button></span>`).join('');
+    datesList.querySelectorAll('[data-remove-date]').forEach((button) => {
+      button.addEventListener('click', () => {
+        selectedDates.delete(button.getAttribute('data-remove-date'));
+        collect();
+        renderDates();
+      });
+    });
+  };
+  const renderHours = () => {
+    const hoursContainer = document.querySelector('#campaign-flow-hours-container');
+    if (!hoursContainer) return;
+    const randomOn = Boolean(document.querySelector('#campaign-flow-schedule-random')?.checked);
+    const hourAuto = Boolean(document.querySelector('#campaign-flow-hour-auto')?.checked ?? true);
+    if (!randomOn || hourAuto) {
+      hoursContainer.innerHTML = `<small class="muted">${hourAuto ? 'Horarios serao distribuidos automaticamente.' : 'Ative o padrao aleatorio para configurar horarios.'}</small>`;
+      return;
+    }
+    const count = Math.max(1, parseInteger(document.querySelector('#campaign-flow-times-per-day')?.value, 1, 1, 48));
+    const stored = readCampaignFlowState().scheduleHours;
+    hoursContainer.innerHTML = Array.from({ length: count }, (_, index) => `
+      <label class="campaign-hour-input"><span>#${index + 1}</span><input type="time" name="campaignFlowScheduleHour" value="${escapeHtml(stored[index] ?? (index === 0 ? '18:00' : ''))}" /></label>
+    `).join('');
+    hoursContainer.querySelectorAll('input').forEach((input) => input.addEventListener('change', collect));
+  };
+  document.querySelectorAll('[data-destination-input], [data-target-publish-at], #campaign-flow-scheduled-at').forEach((input) => input.addEventListener('change', collect));
+  document.querySelector('#campaign-flow-schedule-random')?.addEventListener('change', () => {
+    collect();
+    void renderCampaignFlowPage(3);
+  });
+  document.querySelector('#campaign-flow-times-per-day')?.addEventListener('input', () => {
+    collect();
+    renderHours();
+  });
+  document.querySelector('#campaign-flow-hour-auto')?.addEventListener('change', () => {
+    collect();
+    renderHours();
+  });
+  document.querySelector('#campaign-flow-date-add')?.addEventListener('click', () => {
+    const input = document.querySelector('#campaign-flow-date-input');
+    const value = String(input?.value ?? '').trim();
+    if (!value) return;
+    selectedDates.add(value);
+    if (input) input.value = '';
+    collect();
+    renderDates();
+  });
+  attachCampaignFlowNextHandlers(() => {
+    const next = readCampaignFlowState();
+    return next.selectedDestinationRefs.length === 0
+      ? { ok: false, title: 'Selecione destinos', message: 'Escolha pelo menos um canal ou conta para continuar.' }
+      : { ok: true };
+  });
+  renderDates();
+  renderHours();
+  collect();
+}
+
+function renderCampaignFlowMetadataStep(context, flowState) {
+  const selectedPlatforms = new Set(flowState.selectedPlatforms);
+  const thumbnailOptions = context.thumbnails.map((asset) => `
+    <option value="${escapeHtml(asset.id)}" ${flowState.thumbnailAssetId === asset.id ? 'selected' : ''}>${escapeHtml(asset.original_name)}</option>
+  `).join('');
+  const randomTitleAvailable = flowState.sourceType === 'playlist' && flowState.schedulePatternEnabled;
+  const randomTitleOn = randomTitleAvailable && flowState.randomTitleEnabled;
+
+  return renderCampaignFlowLayout(context, flowState, 4, `
+    <section class="campaign-flow-panel">
+      <div class="campaign-flow-panel-head">
+        <span class="campaign-flow-eyebrow">Etapa 4</span>
+        <h2>Preencher metadados</h2>
+        <p>Metadados comuns ficam no topo. Campos especificos aparecem apenas para plataformas selecionadas.</p>
+      </div>
+      <div class="campaign-flow-field-grid">
+        <label class="campaign-flow-field"><span>Titulo da campanha</span><input id="campaign-flow-title" data-campaign-flow-meta value="${escapeHtml(flowState.title)}" placeholder="Ex: Lancamento Shorts Abril" ${randomTitleOn ? 'disabled' : ''} /></label>
+        <label class="campaign-check-row" data-disabled="${randomTitleAvailable ? 'false' : 'true'}"><input id="campaign-flow-random-title" data-campaign-flow-meta type="checkbox" ${randomTitleOn ? 'checked' : ''} ${randomTitleAvailable ? '' : 'disabled'} /><span>Gerar titulo da campanha por disparo da playlist.</span></label>
+        ${randomTitleOn ? `<label class="campaign-flow-field campaign-flow-field-wide"><span>Base para titulo aleatorio</span><input id="campaign-flow-title-seed" data-campaign-flow-meta value="${escapeHtml(flowState.titleSeed)}" placeholder="Ex: Bastidores do canal" /></label>` : ''}
+        <label class="campaign-flow-field"><span>Titulo do video</span><input id="campaign-flow-video-title" data-campaign-flow-meta value="${escapeHtml(flowState.videoTitle)}" placeholder="Titulo publicado nas plataformas" /></label>
+        <label class="campaign-flow-field">
+          <span>Privacidade</span>
+          <select id="campaign-flow-privacy" data-campaign-flow-meta>
+            <option value="" ${flowState.privacy === '' ? 'selected' : ''}>Padrao da plataforma</option>
+            <option value="public" ${flowState.privacy === 'public' ? 'selected' : ''}>public</option>
+            <option value="unlisted" ${flowState.privacy === 'unlisted' ? 'selected' : ''}>unlisted</option>
+            <option value="private" ${flowState.privacy === 'private' ? 'selected' : ''}>private</option>
+          </select>
+        </label>
+        <label class="campaign-flow-field campaign-flow-field-wide"><span>Descricao do video</span><textarea id="campaign-flow-video-description" data-campaign-flow-meta rows="5" placeholder="Descricao base">${escapeHtml(flowState.videoDescription)}</textarea></label>
+        <label class="campaign-flow-field"><span>Tags</span><input id="campaign-flow-tags" data-campaign-flow-meta value="${escapeHtml(flowState.tags)}" placeholder="tag1, tag2, tag3" /></label>
+        ${selectedPlatforms.has('youtube') ? `
+          <label class="campaign-flow-field"><span>Playlist ID do YouTube</span><input id="campaign-flow-youtube-playlist-id" data-campaign-flow-meta value="${escapeHtml(flowState.youtubePlaylistId)}" placeholder="PL..." /></label>
+          <label class="campaign-flow-field"><span>Thumbnail</span><select id="campaign-flow-thumbnail-asset-id" data-campaign-flow-meta><option value="">Sem thumbnail</option>${thumbnailOptions}</select></label>
+        ` : ''}
+        ${selectedPlatforms.has('instagram') ? `
+          <label class="campaign-flow-field campaign-flow-field-wide"><span>Caption do Instagram</span><textarea id="campaign-flow-instagram-caption" data-campaign-flow-meta rows="4" maxlength="2200" placeholder="Se vazio, usa a descricao">${escapeHtml(flowState.instagramCaption)}</textarea></label>
+          <label class="campaign-check-row"><input id="campaign-flow-instagram-share" data-campaign-flow-meta type="checkbox" ${flowState.instagramShareToFeed ? 'checked' : ''} /><span>Compartilhar Reel no feed.</span></label>
+        ` : ''}
+      </div>
+      ${renderCampaignFlowFooter({ backHref: '/workspace/campanhas/Etapa3', nextHref: '/workspace/campanhas/Etapa5' })}
+    </section>
+  `);
+}
+
+function attachCampaignFlowMetadataStep() {
+  const collect = () => {
+    patchCampaignFlowState({
+      title: document.querySelector('#campaign-flow-title')?.value ?? '',
+      randomTitleEnabled: Boolean(document.querySelector('#campaign-flow-random-title')?.checked),
+      titleSeed: document.querySelector('#campaign-flow-title-seed')?.value ?? '',
+      videoTitle: document.querySelector('#campaign-flow-video-title')?.value ?? '',
+      videoDescription: document.querySelector('#campaign-flow-video-description')?.value ?? '',
+      tags: document.querySelector('#campaign-flow-tags')?.value ?? '',
+      privacy: document.querySelector('#campaign-flow-privacy')?.value ?? '',
+      youtubePlaylistId: document.querySelector('#campaign-flow-youtube-playlist-id')?.value ?? '',
+      thumbnailAssetId: document.querySelector('#campaign-flow-thumbnail-asset-id')?.value ?? '',
+      instagramCaption: document.querySelector('#campaign-flow-instagram-caption')?.value ?? '',
+      instagramShareToFeed: Boolean(document.querySelector('#campaign-flow-instagram-share')?.checked ?? true),
+    });
+  };
+  document.querySelectorAll('[data-campaign-flow-meta]').forEach((input) => {
+    input.addEventListener('input', collect);
+    input.addEventListener('change', () => {
+      collect();
+      if (input.id === 'campaign-flow-random-title') void renderCampaignFlowPage(4);
+    });
+  });
+  attachCampaignFlowNextHandlers(() => {
+    const next = readCampaignFlowState();
+    const hasCampaignTitle = (next.randomTitleEnabled && next.titleSeed.trim()) || next.title.trim();
+    if (!hasCampaignTitle) return { ok: false, title: 'Titulo da campanha', message: 'Informe um titulo fixo ou ative o titulo aleatorio com uma base.' };
+    if (!next.videoTitle.trim() || !next.videoDescription.trim()) return { ok: false, title: 'Metadados obrigatorios', message: 'Titulo e descricao do video sao obrigatorios.' };
+    return { ok: true };
+  });
+}
+
+function campaignFlowBuildScheduledLaunches(flowState) {
+  if (flowState.sourceType !== 'playlist' || !flowState.schedulePatternEnabled) return [];
+  const days = Array.isArray(flowState.scheduleDays) && flowState.scheduleDays.length > 0 ? flowState.scheduleDays : [new Date().toLocaleDateString('sv-SE')];
+  const count = Math.max(1, parseInteger(flowState.scheduleTimesPerDay, 1, 1, 48));
+  const launches = [];
+  for (const day of days) {
+    const hours = flowState.scheduleHourAuto ? generateSpacedHoursForDay(day, count) : (flowState.scheduleHours.length > 0 ? flowState.scheduleHours : ['18:00']);
+    for (const hour of hours.slice(0, count)) {
+      const iso = campaignFlowToIso(`${day}T${hour}:00`);
+      if (iso) launches.push(iso);
+    }
+  }
+  return launches;
+}
+
+function validateCampaignFlowReadyToSave(flowState, context) {
+  if (!flowState.selectedPlatforms.length) {
+    return { ok: false, title: 'Escolha plataformas', message: 'Selecione pelo menos uma plataforma na Etapa 1.' };
+  }
+  if (flowState.sourceType === 'playlist') {
+    if (!isPaidCampaignPlan(context?.account)) {
+      return { ok: false, title: 'Playlist bloqueada', message: 'A selecao por playlist fica disponivel apenas em plano pago.' };
+    }
+    if (!flowState.playlistId) {
+      return { ok: false, title: 'Escolha a playlist', message: 'Selecione uma playlist na Etapa 2.' };
+    }
+  } else if (!flowState.videoAssetId) {
+    return { ok: false, title: 'Escolha o video', message: 'Selecione uma midia na Etapa 2.' };
+  }
+  if (!flowState.selectedDestinationRefs.length) {
+    return { ok: false, title: 'Selecione destinos', message: 'Escolha pelo menos um canal ou conta na Etapa 3.' };
+  }
+  const randomTitleUsable = flowState.sourceType === 'playlist' && flowState.schedulePatternEnabled && flowState.randomTitleEnabled;
+  const hasCampaignTitle = (randomTitleUsable && flowState.titleSeed.trim()) || flowState.title.trim();
+  if (!hasCampaignTitle) {
+    return { ok: false, title: 'Titulo da campanha', message: 'Informe um titulo fixo ou uma base para titulo aleatorio na Etapa 4.' };
+  }
+  if (!flowState.videoTitle.trim() || !flowState.videoDescription.trim()) {
+    return { ok: false, title: 'Metadados obrigatorios', message: 'Titulo e descricao do video sao obrigatorios na Etapa 4.' };
+  }
+  return { ok: true };
+}
+
+function renderCampaignFlowReviewStep(context, flowState) {
+  const selectedDestinations = flowState.selectedDestinationRefs
+    .map((ref) => ({ ref, destination: campaignFlowFindDestination(context.destinations, ref) }))
+    .filter((entry) => entry.destination);
+  const selectedVideo = context.videos.find((video) => video.id === flowState.videoAssetId);
+  const selectedPlaylist = context.playlists.find((playlist) => playlist.id === flowState.playlistId);
+  const scheduledLaunches = campaignFlowBuildScheduledLaunches(flowState);
+  const blockedPlatforms = flowState.selectedPlatforms.filter((platform) => !isCampaignFlowPlatformAllowedByPlan(platform, context.account));
+  const reviewRows = [
+    {
+      label: 'Origem',
+      value: flowState.sourceType === 'playlist' ? `Playlist: ${selectedPlaylist?.name ?? '-'}` : `Midia: ${selectedVideo?.original_name ?? '-'}`,
+      editHref: '/workspace/campanhas/Etapa2',
+    },
+    {
+      label: 'Formato',
+      value: getVideoPublishFormatLabel(flowState.publishFormat),
+      editHref: '/workspace/campanhas/Etapa2',
+    },
+    {
+      label: 'Plataformas',
+      value: flowState.selectedPlatforms.map(getCampaignFlowPlatformLabel).join(', ') || '-',
+      editHref: '/workspace/campanhas/Etapa1',
+    },
+    {
+      label: 'Destinos',
+      value: `${selectedDestinations.length} selecionado${selectedDestinations.length === 1 ? '' : 's'}`,
+      editHref: '/workspace/campanhas/Etapa3',
+    },
+    {
+      label: 'Horario geral',
+      value: flowState.scheduledAt ? campaignFlowFormatLocalDate(flowState.scheduledAt) : 'Sem horario geral',
+      editHref: '/workspace/campanhas/Etapa3',
+    },
+    {
+      label: 'Disparos gerados',
+      value: scheduledLaunches.length > 0 ? `${scheduledLaunches.length} campanhas agendadas` : '1 campanha',
+      editHref: '/workspace/campanhas/Etapa3',
+    },
+  ];
+
+  return renderCampaignFlowLayout(context, flowState, 5, `
+    <section class="campaign-flow-panel">
+      <div class="campaign-flow-panel-head">
+        <span class="campaign-flow-eyebrow">Etapa 5</span>
+        <h2>Revisar campanha</h2>
+        <p>Confira o pacote antes de salvar. O rascunho sera criado no backend e podera ser marcado como pronto na tela de detalhes.</p>
+      </div>
+      ${blockedPlatforms.length > 0 ? `<div class="notice warning">Seu plano atual pode bloquear: ${escapeHtml(blockedPlatforms.map(getCampaignFlowPlatformLabel).join(', '))}. Se o backend negar, ajuste o plano ou remova estes destinos.</div>` : ''}
+      <div class="campaign-review-grid">
+        ${reviewRows.map((row) => `
+          <div class="campaign-review-item">
+            <span>${escapeHtml(row.label)}</span>
+            <strong>${escapeHtml(row.value)}</strong>
+            <a class="campaign-review-edit" data-link href="${escapeHtml(row.editHref)}">Editar</a>
+          </div>
+        `).join('')}
+      </div>
+      <section class="campaign-review-destinations">
+        <div class="campaign-review-section-head">
+          <h3>Destinos</h3>
+          <a class="campaign-review-edit" data-link href="/workspace/campanhas/Etapa3">Editar</a>
+        </div>
+        ${selectedDestinations.map(({ ref, destination }) => `
+          <div class="campaign-review-destination">
+            <span>${renderAnimatedLogoByPlatform(destination.platform, 24)}</span>
+            <strong>${escapeHtml(destination.destinationLabel ?? destination.title ?? destination.destinationId)}</strong>
+            <small>${escapeHtml(flowState.perTargetPublishAt?.[ref] ? campaignFlowFormatLocalDate(flowState.perTargetPublishAt[ref]) : 'Usa horario geral ou imediato')}</small>
+          </div>
+        `).join('') || '<p class="muted">Nenhum destino selecionado.</p>'}
+      </section>
+      <section class="campaign-review-metadata">
+        <div class="campaign-review-section-head">
+          <h3>Metadados</h3>
+          <a class="campaign-review-edit" data-link href="/workspace/campanhas/Etapa4">Editar</a>
+        </div>
+        <p><strong>${escapeHtml(flowState.videoTitle || '-')}</strong></p>
+        <p class="muted">${escapeHtml(flowState.videoDescription || '-')}</p>
+        <p class="muted">Tags: ${escapeHtml(flowState.tags || 'sem tags')}</p>
+      </section>
+      ${renderCampaignFlowFooter({
+        backHref: '/workspace/campanhas/Etapa4',
+        nextHref: '/workspace/campanhas/Etapa6',
+        nextDisabled: selectedDestinations.length === 0,
+        nextLabel: 'Continuar para salvar',
+      })}
+    </section>
+  `);
+}
+
+function renderCampaignFlowSaveStep(context, flowState) {
+  const selectedDestinations = flowState.selectedDestinationRefs
+    .map((ref) => campaignFlowFindDestination(context.destinations, ref))
+    .filter(Boolean);
+  const selectedVideo = context.videos.find((video) => video.id === flowState.videoAssetId);
+  const selectedPlaylist = context.playlists.find((playlist) => playlist.id === flowState.playlistId);
+  const scheduledLaunches = campaignFlowBuildScheduledLaunches(flowState);
+  const campaignCount = Math.max(1, scheduledLaunches.length);
+  const sourceLabel = flowState.sourceType === 'playlist'
+    ? `Playlist: ${selectedPlaylist?.name ?? 'playlist selecionada'}`
+    : `Midia: ${selectedVideo?.original_name ?? 'video selecionado'}`;
+  const targetCount = selectedDestinations.length * campaignCount;
+  const validation = validateCampaignFlowReadyToSave(flowState, context);
+
+  return renderCampaignFlowLayout(context, flowState, 6, `
+    <section class="campaign-flow-panel">
+      <div class="campaign-flow-panel-head">
+        <span class="campaign-flow-eyebrow">Etapa 6</span>
+        <h2>Salvar rascunho</h2>
+        <p>Esta etapa grava a campanha e seus destinos sem iniciar a publicacao. Depois disso, a preparacao, o lancamento e o acompanhamento ficam na tela da campanha.</p>
+      </div>
+      <div class="notice info">Salvar rascunho nao consome o lancamento agora. A campanha ainda precisa ser marcada como pronta antes de publicar.</div>
+      ${validation.ok ? '' : `<div class="notice warning">${escapeHtml(validation.message)}</div>`}
+      <div class="campaign-save-grid">
+        <div>
+          <span>Campanhas a criar</span>
+          <strong>${formatNumber(campaignCount)}</strong>
+          <small>${escapeHtml(scheduledLaunches.length > 0 ? 'Geradas pelo padrao aleatorio da playlist.' : 'Um rascunho unico sera criado.')}</small>
+        </div>
+        <div>
+          <span>Destinos vinculados</span>
+          <strong>${formatNumber(selectedDestinations.length)}</strong>
+          <small>${escapeHtml(`${formatNumber(targetCount)} destino${targetCount === 1 ? '' : 's'} no total considerando todos os disparos.`)}</small>
+        </div>
+        <div>
+          <span>Origem do video</span>
+          <strong>${escapeHtml(sourceLabel)}</strong>
+          <small>${escapeHtml(getVideoPublishFormatLabel(flowState.publishFormat))}</small>
+        </div>
+      </div>
+      <section class="campaign-save-progress" aria-live="polite">
+        <div class="campaign-save-progress-row" data-save-progress-step="create_campaign" data-state="waiting">
+          <span>1</span>
+          <div><strong>Criar campanha</strong><small>Preparando o rascunho principal.</small></div>
+        </div>
+        <div class="campaign-save-progress-row" data-save-progress-step="add_targets" data-state="waiting">
+          <span>2</span>
+          <div><strong>Adicionar destinos</strong><small>Vinculando canais e contas selecionadas.</small></div>
+        </div>
+        <div class="campaign-save-progress-row" data-save-progress-step="finish" data-state="waiting">
+          <span>3</span>
+          <div><strong>Finalizar</strong><small>Abrindo a campanha salva para revisao operacional.</small></div>
+        </div>
+      </section>
+      ${renderCampaignFlowFooter({
+        backHref: '/workspace/campanhas/Etapa5',
+        nextHref: '#',
+        nextDisabled: !validation.ok,
+        nextLabel: 'Salvar rascunho',
+        submit: true,
+      })}
+    </section>
+  `);
+}
+
+function setCampaignFlowSaveProgress(stepKey, state, message) {
+  const row = document.querySelector(`[data-save-progress-step="${stepKey}"]`);
+  if (!row) return;
+  row.setAttribute('data-state', state);
+  const small = row.querySelector('small');
+  if (small && message) small.textContent = message;
+}
+
+async function submitCampaignFlow(context) {
+  const flowState = readCampaignFlowState();
+  const submitButton = document.querySelector('[data-action="campaign-flow-submit"]');
+  const validation = validateCampaignFlowReadyToSave(flowState, context);
+  if (!validation.ok) {
+    setUiNotice('warning', validation.title, validation.message);
+    return;
+  }
+  setButtonBusy(submitButton, true, 'Salvando...');
+  setCampaignFlowSaveProgress('create_campaign', 'active', 'Criando rascunho 1.');
+  setCampaignFlowSaveProgress('add_targets', 'waiting', 'Aguardando criacao da campanha.');
+  setCampaignFlowSaveProgress('finish', 'waiting', 'Aguardando finalizacao.');
+  const tags = String(flowState.tags ?? '').split(',').map((tag) => tag.trim()).filter(Boolean);
+  const scheduledLaunches = campaignFlowBuildScheduledLaunches(flowState);
+  const launchDates = scheduledLaunches.length > 0 ? scheduledLaunches : [campaignFlowToIso(flowState.scheduledAt)];
+  let firstCampaignId = null;
+  let activeSaveStep = 'create_campaign';
+
+  async function resolveVideoAssetId() {
+    if (flowState.sourceType === 'media') return flowState.videoAssetId;
+    const nextVideo = await api.nextPlaylistVideo(flowState.playlistId);
+    if (!nextVideo.ok || !nextVideo.body?.videoAssetId) {
+      throw new Error(nextVideo.error || 'Nao foi possivel selecionar um video da playlist.');
+    }
+    return nextVideo.body.videoAssetId;
+  }
+
+  try {
+    for (let index = 0; index < launchDates.length; index += 1) {
+      const scheduledAt = launchDates[index];
+      const videoAssetId = await resolveVideoAssetId();
+      const assetForTitle = context.videos.find((video) => video.id === videoAssetId);
+      const shouldGenerateRandomTitle = flowState.sourceType === 'playlist' && flowState.schedulePatternEnabled && flowState.randomTitleEnabled && flowState.titleSeed;
+      const campaignTitle = shouldGenerateRandomTitle
+        ? generateRandomTitle(flowState.titleSeed, assetForTitle)
+        : (flowState.title || `Campanha ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`);
+      const created = await api.createCampaign({
+        title: `${campaignTitle}${launchDates.length > 1 ? ` #${index + 1}/${launchDates.length}` : ''}`,
+        videoAssetId,
+        scheduledAt,
+        playlistId: flowState.sourceType === 'playlist' ? flowState.playlistId : undefined,
+        autoMode: flowState.sourceType === 'playlist',
+        schedulePattern: flowState.schedulePatternEnabled ? `random:${JSON.stringify({
+          timesPerDay: flowState.scheduleTimesPerDay,
+          sequence: flowState.playlistSequenceMode,
+          repeat: flowState.playlistRepeatPolicy,
+          strictFormat: flowState.playlistStrictFormat,
+          days: flowState.scheduleDays,
+          hours: flowState.scheduleHourAuto ? 'auto' : flowState.scheduleHours,
+        })}` : undefined,
+      });
+      if (!created.ok) throw new Error(created.error);
+      const campaignId = created.body?.campaign?.id;
+      if (!campaignId) throw new Error('Campaign id ausente na resposta.');
+      if (!firstCampaignId) firstCampaignId = campaignId;
+      setCampaignFlowSaveProgress('create_campaign', 'done', `Rascunho ${index + 1}/${launchDates.length} criado.`);
+      activeSaveStep = 'add_targets';
+      setCampaignFlowSaveProgress('add_targets', 'active', `Adicionando destinos do rascunho ${index + 1}/${launchDates.length}.`);
+      const targets = flowState.selectedDestinationRefs.map((ref) => {
+        const destination = campaignFlowFindDestination(context.destinations, ref) ?? campaignFlowParseDestinationRef(ref);
+        return buildCampaignTargetPayloadForDestination(destination, {
+          videoTitle: flowState.videoTitle,
+          videoDescription: flowState.videoDescription,
+          tags: tags.length > 0 ? tags : undefined,
+          publishAt: campaignFlowToIso(flowState.perTargetPublishAt?.[ref]) ?? scheduledAt,
+          playlistId: flowState.youtubePlaylistId || undefined,
+          privacy: flowState.privacy || undefined,
+          thumbnailAssetId: flowState.thumbnailAssetId || undefined,
+        }, {
+          instagramCaption: flowState.instagramCaption,
+          instagramShareToFeed: flowState.instagramShareToFeed,
+        });
+      });
+      const added = await api.addTargetsBulk(campaignId, targets);
+      if (!added.ok) throw new Error(added.error || 'Falha ao salvar destinos.');
+      setCampaignFlowSaveProgress('add_targets', 'done', `Destinos adicionados ao rascunho ${index + 1}/${launchDates.length}.`);
+      if (index + 1 < launchDates.length) {
+        activeSaveStep = 'create_campaign';
+        setCampaignFlowSaveProgress('create_campaign', 'active', `Criando rascunho ${index + 2}/${launchDates.length}.`);
+      }
+    }
+    activeSaveStep = 'finish';
+    setCampaignFlowSaveProgress('finish', 'done', 'Campanha salva. Abrindo revisao operacional.');
+    setButtonBusy(submitButton, false);
+    resetCampaignFlowState();
+    setUiNotice('success', launchDates.length > 1 ? 'Campanhas criadas' : 'Campanha salva', launchDates.length > 1
+      ? `${launchDates.length} rascunhos foram criados com os disparos definidos.`
+      : 'O rascunho foi salvo e esta pronto para revisao.');
+    navigate(firstCampaignId ? `/workspace/campanhas/${encodeURIComponent(firstCampaignId)}` : '/workspace/campanhas');
+  } catch (error) {
+    setCampaignFlowSaveProgress(activeSaveStep, 'error', error instanceof Error ? error.message : 'Erro inesperado.');
+    setButtonBusy(submitButton, false);
+    setUiNotice('error', 'Falha ao salvar campanha', error instanceof Error ? error.message : 'Erro inesperado.');
+  }
+}
+
+async function renderCampaignFlowPage(step = 1) {
+  const context = await loadCampaignFlowContext();
+  if (!context.ok) {
+    if (context.status === 401) {
+      unauthorizedRedirect();
+      return;
+    }
+    renderWorkspaceShell({
+      title: 'Nova campanha',
+      subtitle: 'Fluxo de criacao por etapas.',
+      noticeHtml: `<div class="notice error">${escapeHtml(context.error)}</div>`,
+      contentHtml: '<section class="card">Nao foi possivel carregar as dependencias da campanha.</section>',
+    });
+    return;
+  }
+
+  injectLogoStyles();
+  const flowState = readCampaignFlowState();
+  flowState.selectedPlatforms = flowState.selectedPlatforms.filter((platform) => CAMPAIGN_FLOW_PLATFORMS.includes(platform));
+  flowState.selectedDestinationRefs = flowState.selectedDestinationRefs.filter((ref) =>
+    flowState.selectedPlatforms.includes(campaignFlowParseDestinationRef(ref).platform));
+  writeCampaignFlowState(flowState);
+
+  const currentStep = Math.min(Math.max(Number(step) || 1, 1), 6);
+  const contentHtml = currentStep === 1
+    ? renderCampaignFlowPlatformStep(context, flowState)
+    : currentStep === 2
+      ? renderCampaignFlowMediaStep(context, flowState)
+      : currentStep === 3
+        ? renderCampaignFlowDestinationStep(context, flowState)
+        : currentStep === 4
+          ? renderCampaignFlowMetadataStep(context, flowState)
+          : currentStep === 5
+            ? renderCampaignFlowReviewStep(context, flowState)
+            : renderCampaignFlowSaveStep(context, flowState);
+
+  renderWorkspaceShell({
+    title: `Nova campanha - Etapa ${currentStep}`,
+    subtitle: 'Criacao guiada para YouTube, TikTok e Instagram.',
+    contentHtml,
+  });
+
+  if (currentStep === 1) attachCampaignFlowPlatformStep(flowState);
+  else if (currentStep === 2) attachCampaignFlowMediaStep(context);
+  else if (currentStep === 3) attachCampaignFlowDestinationStep(flowState);
+  else if (currentStep === 4) attachCampaignFlowMetadataStep();
+  else if (currentStep === 5) {
+    attachCampaignFlowNextHandlers(() => {
+      return validateCampaignFlowReadyToSave(readCampaignFlowState(), context);
+    });
+  } else {
+    const validation = validateCampaignFlowReadyToSave(readCampaignFlowState(), context);
+    setCampaignFlowSaveProgress('create_campaign', validation.ok ? 'active' : 'waiting', validation.ok ? 'Pronto para criar o rascunho.' : 'Corrija as etapas anteriores antes de salvar.');
+    document.querySelector('[data-action="campaign-flow-submit"]')?.addEventListener('click', () => { void submitCampaignFlow(context); });
+  }
+}
+
 async function renderCampaignComposerPage() {
+  await renderCampaignFlowPage(1);
+  return;
+
   const [mediaResult, destinationsResult, playlistsResult] = await Promise.all([api.media(), loadConnectedPublishDestinations(), api.playlists()]);
   if (!mediaResult.ok || !destinationsResult.ok) {
     const failing = !mediaResult.ok ? mediaResult : destinationsResult;
@@ -8436,6 +10005,145 @@ function applyTimelineFilters(timeline, activityFilter, targetFilter) {
   });
 }
 
+function renderCampaignLifecyclePanel(campaign, status, jobsByTarget) {
+  const targets = Array.isArray(campaign.targets) ? campaign.targets : [];
+  const jobs = Object.values(jobsByTarget ?? {}).flatMap((entries) => Array.isArray(entries) ? entries : []);
+  const campaignStatus = String(status?.campaignStatus ?? campaign.status ?? 'draft');
+  const totalTargets = targets.length;
+  const publishedTargets = targets.filter((target) => target.status === 'publicado').length;
+  const failedTargets = targets.filter((target) => target.status === 'erro').length;
+  const waitingTargets = targets.filter((target) => target.status === 'aguardando').length;
+  const sendingTargets = targets.filter((target) => target.status === 'enviando').length;
+  const queuedJobs = jobs.filter((job) => job.status === 'queued').length;
+  const processingJobs = jobs.filter((job) => job.status === 'processing').length;
+  const completedJobs = jobs.filter((job) => job.status === 'completed').length;
+  const failedJobs = jobs.filter((job) => job.status === 'failed').length;
+  const terminal = campaignStatus === 'completed' || campaignStatus === 'failed';
+  const canEdit = campaignStatus === 'draft' || campaignStatus === 'ready';
+
+  const steps = [
+    {
+      number: 7,
+      title: 'Editar antes do lancamento',
+      body: canEdit ? 'Campanha e destinos ainda podem ser ajustados.' : 'Edicao fica bloqueada depois que a campanha entra em publicacao.',
+      state: canEdit ? 'active' : 'done',
+      badge: canEdit ? 'editavel' : 'bloqueado',
+      metric: `${formatNumber(totalTargets)} destino${totalTargets === 1 ? '' : 's'}`,
+    },
+    {
+      number: 8,
+      title: 'Marcar como pronta',
+      body: campaignStatus === 'draft'
+        ? (totalTargets > 0 ? 'Valide o rascunho e marque como pronto para liberar o lancamento.' : 'Adicione pelo menos um destino antes de marcar como pronta.')
+        : 'Validacao de rascunho ja passou ou a campanha seguiu para publicacao.',
+      state: campaignStatus === 'draft' ? (totalTargets > 0 ? 'active' : 'blocked') : 'done',
+      badge: campaignStatus === 'draft' ? 'pendente' : 'ok',
+      metric: campaignStatus,
+    },
+    {
+      number: 9,
+      title: 'Lancar campanha',
+      body: campaignStatus === 'ready'
+        ? 'Lancamento disponivel. Confirme antes de consumir autorizacoes ou tokens.'
+        : campaignStatus === 'launching'
+          ? 'A publicacao ja foi iniciada.'
+          : terminal
+            ? 'Lancamento finalizado.'
+            : 'Aguarda a campanha ficar pronta.',
+      state: campaignStatus === 'ready' || campaignStatus === 'launching' ? 'active' : terminal ? 'done' : 'next',
+      badge: campaignStatus === 'ready' ? 'acao' : campaignStatus,
+      metric: campaign.scheduledAt ? `Geral: ${formatDate(campaign.scheduledAt)}` : 'Sem horario geral',
+    },
+    {
+      number: 10,
+      title: 'Criar jobs de publicacao',
+      body: jobs.length > 0
+        ? 'Jobs existem para os destinos elegiveis.'
+        : campaignStatus === 'launching'
+          ? 'Destinos podem estar aguardando horario futuro.'
+          : 'Jobs nascem quando a campanha entra em lancamento.',
+      state: queuedJobs > 0 || processingJobs > 0 ? 'active' : jobs.length > 0 ? 'done' : 'next',
+      badge: `${formatNumber(jobs.length)} job${jobs.length === 1 ? '' : 's'}`,
+      metric: `${formatNumber(queuedJobs)} fila / ${formatNumber(processingJobs)} proc.`,
+    },
+    {
+      number: 11,
+      title: 'Processar por plataforma',
+      body: processingJobs > 0 || sendingTargets > 0
+        ? 'Workers estao enviando conteudo para as plataformas.'
+        : 'Cada destino segue para o worker da sua plataforma.',
+      state: processingJobs > 0 || sendingTargets > 0 ? 'active' : completedJobs + failedJobs > 0 || terminal ? 'done' : 'next',
+      badge: `${formatNumber(sendingTargets)} enviando`,
+      metric: `${formatNumber(completedJobs)} ok / ${formatNumber(failedJobs)} falha`,
+    },
+    {
+      number: 13,
+      title: 'Acompanhar status',
+      body: status?.shouldPoll
+        ? 'A tela continua atualizando enquanto houver trabalho em andamento.'
+        : 'Status, progresso e historico ficam visiveis nesta pagina.',
+      state: status?.shouldPoll || campaignStatus === 'launching' ? 'active' : terminal ? 'done' : 'next',
+      badge: status?.shouldPoll ? 'polling' : 'manual',
+      metric: `${formatNumber(status?.progress?.completed ?? publishedTargets)}/${formatNumber(status?.progress?.total ?? totalTargets)} concluidos`,
+    },
+    {
+      number: 14,
+      title: 'Erros e retentativas',
+      body: failedTargets > 0 || failedJobs > 0
+        ? 'Ha falhas que podem exigir retry, reautenticacao ou ajuste de metadados.'
+        : 'Retentativas aparecem quando algum destino falha.',
+      state: failedTargets > 0 || failedJobs > 0 ? 'active' : terminal ? 'done' : 'next',
+      badge: failedTargets > 0 || failedJobs > 0 ? 'atencao' : 'sem erros',
+      metric: `${formatNumber(failedTargets)} destino${failedTargets === 1 ? '' : 's'} com erro`,
+    },
+    {
+      number: 15,
+      title: 'Finalizar campanha',
+      body: terminal
+        ? 'A campanha chegou a um estado final.'
+        : 'Finaliza quando todos os destinos chegam a publicado ou erro.',
+      state: terminal ? 'done' : campaignStatus === 'launching' ? 'active' : 'next',
+      badge: terminal ? campaignStatus : 'aguardando',
+      metric: `${formatNumber(waitingTargets)} pendente${waitingTargets === 1 ? '' : 's'}`,
+    },
+    {
+      number: 16,
+      title: 'Pos-publicacao',
+      body: terminal
+        ? 'Agora da para clonar, reaproveitar e revisar links ou erros finais.'
+        : 'Acoes de reaproveitamento entram depois da finalizacao.',
+      state: terminal ? 'active' : 'next',
+      badge: terminal ? 'disponivel' : 'futuro',
+      metric: `${formatNumber(publishedTargets)} publicado${publishedTargets === 1 ? '' : 's'}`,
+    },
+  ];
+
+  return `
+    <section class="campaign-lifecycle-panel">
+      <div class="campaign-flow-panel-head compact">
+        <span class="campaign-flow-eyebrow">Etapas 7-16</span>
+        <h3>Ciclo operacional da campanha</h3>
+        <p>Depois do rascunho, a campanha passa por edicao, validacao, lancamento, jobs, processamento, acompanhamento, retentativas e pos-publicacao.</p>
+      </div>
+      <div class="campaign-lifecycle-grid">
+        ${steps.map((step) => `
+          <article class="campaign-lifecycle-step" data-state="${step.state}">
+            <div class="campaign-lifecycle-step-head">
+              <span>${step.number}</span>
+              <strong>${escapeHtml(step.title)}</strong>
+            </div>
+            <p>${escapeHtml(step.body)}</p>
+            <div class="campaign-lifecycle-step-foot">
+              <small>${typeof step.badge === 'string' ? escapeHtml(step.badge) : step.badge}</small>
+              <em>${typeof step.metric === 'string' ? escapeHtml(step.metric) : step.metric}</em>
+            </div>
+          </article>
+        `).join('')}
+      </div>
+    </section>
+  `;
+}
+
 function formatConnectedChannelOptionLabel(channel) {
   const title = String(channel?.title ?? channel?.id ?? 'Unknown channel');
   const secondary = channel?.handle
@@ -8791,6 +10499,7 @@ async function renderCampaignDetailPage(campaignId) {
         <article class="card"><div class="summary-value">${formatNumber((auditEvents ?? []).length)}</div><div class="summary-label">Audit events</div></article>
         <article class="card"><div class="summary-value">${formatNumber(timeline.length)}</div><div class="summary-label">Total activity entries</div></article>
       </section>
+      ${renderCampaignLifecyclePanel(campaign, status, jobsByTarget)}
       ${canEditCampaign ? `
       <section class="card stack">
         <h3>Campaign settings</h3>
@@ -9330,6 +11039,12 @@ async function renderRoute() {
 
       if (path === '/workspace/campanhas/nova') {
         await renderCampaignComposerPage();
+        return;
+      }
+
+      const campaignFlowMatch = path.match(/^\/workspace\/campanhas\/Etapa([1-6])$/);
+      if (campaignFlowMatch) {
+        await renderCampaignFlowPage(Number(campaignFlowMatch[1]));
         return;
       }
 

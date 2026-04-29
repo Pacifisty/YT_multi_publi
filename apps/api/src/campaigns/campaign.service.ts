@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import type { EmailService } from '../integrations/email/email-service';
 
-export type CampaignTargetPlatform = 'youtube' | 'tiktok';
+export type CampaignTargetPlatform = 'youtube' | 'tiktok' | 'instagram';
 
 export interface CampaignTargetRecord {
   id: string;
@@ -27,6 +28,9 @@ export interface CampaignTargetRecord {
   tiktokDisableComment?: boolean | null;
   tiktokDisableDuet?: boolean | null;
   tiktokDisableStitch?: boolean | null;
+  // Instagram-specific fields
+  instagramCaption?: string | null;
+  instagramShareToFeed?: boolean | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -69,6 +73,8 @@ export interface AddTargetInput {
   playlistId?: string;
   privacy?: string;
   thumbnailAssetId?: string;
+  instagramCaption?: string;
+  instagramShareToFeed?: boolean;
 }
 
 export interface CreateTikTokTargetInput {
@@ -78,6 +84,12 @@ export interface CreateTikTokTargetInput {
   disableComment?: boolean;
   disableDuet?: boolean;
   disableStitch?: boolean;
+}
+
+export interface CreateInstagramTargetInput {
+  connectedAccountId: string;
+  caption: string;
+  shareToFeed?: boolean;
 }
 
 export interface ConnectedAccountRecord {
@@ -164,6 +176,8 @@ export class InMemoryCampaignRepository implements CampaignRepository {
 export interface CampaignServiceOptions {
   repository?: CampaignRepository;
   accountService?: AccountServiceProvider;
+  emailService?: EmailService;
+  logger?: any;
   now?: () => Date;
 }
 
@@ -173,11 +187,15 @@ export const DUPLICATE_CAMPAIGN_TARGET_DESTINATION_ERROR = DUPLICATE_CAMPAIGN_TA
 export class CampaignService {
   private readonly repository: CampaignRepository;
   private readonly accountService?: AccountServiceProvider;
+  private readonly emailService?: EmailService;
+  private readonly logger?: any;
   private readonly now: () => Date;
 
   constructor(options: CampaignServiceOptions = {}) {
     this.repository = options.repository ?? new InMemoryCampaignRepository();
     this.accountService = options.accountService;
+    this.emailService = options.emailService;
+    this.logger = options.logger;
     this.now = options.now ?? (() => new Date());
   }
 
@@ -271,6 +289,10 @@ export class CampaignService {
     }
 
     const nowIso = this.now().toISOString();
+    const instagramCaption = platform === 'instagram'
+      ? (input.instagramCaption ?? input.videoDescription ?? input.videoTitle).slice(0, 2200)
+      : null;
+
     const target: CampaignTargetRecord = {
       id: randomUUID(),
       campaignId,
@@ -284,7 +306,7 @@ export class CampaignService {
       tags: input.tags ?? [],
       publishAt: input.publishAt ?? null,
       playlistId: input.playlistId ?? null,
-      privacy: input.privacy ?? 'private',
+      privacy: input.privacy ?? (platform === 'instagram' ? 'public' : 'private'),
       thumbnailAssetId: input.thumbnailAssetId ?? null,
       status: 'aguardando',
       externalPublishId: null,
@@ -296,6 +318,8 @@ export class CampaignService {
       tiktokDisableComment: null,
       tiktokDisableDuet: null,
       tiktokDisableStitch: null,
+      instagramCaption,
+      instagramShareToFeed: platform === 'instagram' ? input.instagramShareToFeed ?? true : null,
       createdAt: nowIso,
       updatedAt: nowIso,
     };
@@ -415,6 +439,8 @@ export class CampaignService {
       tiktokDisableComment: t.tiktokDisableComment ?? null,
       tiktokDisableDuet: t.tiktokDisableDuet ?? null,
       tiktokDisableStitch: t.tiktokDisableStitch ?? null,
+      instagramCaption: t.instagramCaption ?? null,
+      instagramShareToFeed: t.instagramShareToFeed ?? null,
       createdAt: nowIso,
       updatedAt: nowIso,
     }));
@@ -468,6 +494,70 @@ export class CampaignService {
     });
 
     return { campaign: updated! };
+  }
+
+  private async notifyCampaignCompletion(campaign: CampaignRecord, newStatus: 'completed' | 'failed'): Promise<void> {
+    if (!this.emailService || !campaign.ownerEmail) {
+      return;
+    }
+
+    try {
+      const { buildCampaignPublishedEmail, buildCampaignFailedEmail } = await import('../integrations/email/email-templates');
+
+      const publishedTargets = campaign.targets.filter(t => t.status === 'publicado' && (t.youtubeVideoId || t.externalPublishId));
+      const failedTargets = campaign.targets.filter(t => t.status === 'erro' && t.errorMessage);
+      const platforms = [...new Set(publishedTargets.map(t => {
+        if (t.platform === 'youtube') return 'YouTube';
+        if (t.platform === 'tiktok') return 'TikTok';
+        if (t.platform === 'instagram') return 'Instagram';
+        return t.platform;
+      }))];
+
+      const dashboardUrl = (process.env.APP_URL || 'https://app.example.com') + '/dashboard';
+
+      if (newStatus === 'completed') {
+        const emailData = buildCampaignPublishedEmail(campaign.ownerEmail, {
+          campaignTitle: campaign.title,
+          platforms,
+          destinationCount: publishedTargets.length,
+          dashboardUrl,
+          userEmail: campaign.ownerEmail,
+        });
+        await this.emailService.send(emailData);
+      } else if (newStatus === 'failed') {
+        const suggestedActions = failedTargets.map(t => {
+          const msg = t.errorMessage || '';
+          if (msg === 'REAUTH_REQUIRED') return { action: 'reauth' as const, count: 1 };
+          if (msg.includes('quota') || msg === 'quotaExceeded') return { action: 'retry' as const, count: 1 };
+          return { action: 'review' as const, count: 1 };
+        });
+
+        const actionCounts = suggestedActions.reduce((acc, item) => {
+          const existing = acc.find(a => a.action === item.action);
+          if (existing) {
+            existing.count++;
+          } else {
+            acc.push({ action: item.action, count: 1 });
+          }
+          return acc;
+        }, [] as Array<{ action: 'retry' | 'reauth' | 'review'; count: number }>);
+
+        const emailData = buildCampaignFailedEmail(campaign.ownerEmail, {
+          campaignTitle: campaign.title,
+          failedCount: failedTargets.length,
+          suggestedActions: actionCounts,
+          dashboardUrl,
+          userEmail: campaign.ownerEmail,
+        });
+        await this.emailService.send(emailData);
+      }
+    } catch (error) {
+      this.logger?.warn('Failed to send campaign notification email', {
+        campaignId: campaign.id,
+        status: newStatus,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   async updateTargetStatus(
@@ -546,10 +636,13 @@ export class CampaignService {
         const anySuccess = refreshedCampaign.targets.some((t) => (
           t.status === 'publicado' && Boolean(t.externalPublishId ?? t.youtubeVideoId)
         ));
+        const newStatus = anySuccess ? 'completed' : 'failed';
         await this.repository.update(campaignId, {
-          status: anySuccess ? 'completed' : 'failed',
+          status: newStatus,
           updatedAt: this.now().toISOString(),
         });
+        // Send email notification for campaign completion/failure
+        await this.notifyCampaignCompletion(refreshedCampaign, newStatus);
       } else {
         const shouldBeLaunching = refreshedCampaign.status !== 'launching' &&
           (refreshedCampaign.status === 'completed' || refreshedCampaign.status === 'failed' || status !== 'aguardando');
@@ -718,6 +811,127 @@ export class CampaignService {
       tiktokDisableComment: input.disableComment ?? false,
       tiktokDisableDuet: input.disableDuet ?? false,
       tiktokDisableStitch: input.disableStitch ?? false,
+      instagramCaption: null,
+      instagramShareToFeed: null,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    const result = await this.repository.addTarget(campaignId, target);
+    if (!result) {
+      throw new Error(`Campaign ${campaignId} not found`);
+    }
+
+    return { target: result };
+  }
+
+  async validateInstagramAccount(
+    connectedAccountId: string,
+    ownerEmail: string,
+  ): Promise<{ valid: boolean; displayName?: string }> {
+    if (!this.accountService) {
+      throw new Error('Account service not configured');
+    }
+
+    const account = await this.accountService.getConnectedAccount(connectedAccountId);
+    if (!account) {
+      return { valid: false };
+    }
+
+    if (account.provider !== 'instagram') {
+      throw new Error('Account is not an Instagram account');
+    }
+
+    if (account.ownerEmail && account.ownerEmail.toLowerCase() !== ownerEmail.toLowerCase()) {
+      return { valid: false };
+    }
+
+    return { valid: true, displayName: account.displayName ?? undefined };
+  }
+
+  async listConnectedInstagramAccounts(ownerEmail: string): Promise<ConnectedAccountRecord[]> {
+    if (!this.accountService) {
+      throw new Error('Account service not configured');
+    }
+
+    return this.accountService.listConnectedAccounts(ownerEmail, 'instagram');
+  }
+
+  async getInstagramTargetsForCampaign(
+    campaignId: string,
+    ownerEmail?: string,
+  ): Promise<CampaignTargetRecord[]> {
+    const campaign = await this.resolveCampaign(campaignId, ownerEmail);
+    if (!campaign) {
+      return [];
+    }
+
+    return campaign.targets.filter((target) => target.platform === 'instagram');
+  }
+
+  async createInstagramTarget(
+    campaignId: string,
+    input: CreateInstagramTargetInput,
+    ownerEmail?: string,
+  ): Promise<{ target: CampaignTargetRecord }> {
+    const campaign = await this.resolveCampaign(campaignId, ownerEmail);
+    if (!campaign) {
+      throw new Error(`Campaign ${campaignId} not found`);
+    }
+
+    if (!this.canMutateTargets(campaign.status)) {
+      throw new Error('Cannot add targets to an active campaign');
+    }
+
+    const validationResult = await this.validateInstagramAccount(
+      input.connectedAccountId,
+      ownerEmail || '',
+    );
+    if (!validationResult.valid) {
+      throw new Error('Account not found or not accessible');
+    }
+
+    const MAX_CAPTION_LENGTH = 2200;
+    const caption = input.caption.length > MAX_CAPTION_LENGTH
+      ? input.caption.substring(0, MAX_CAPTION_LENGTH)
+      : input.caption;
+
+    if (
+      campaign.targets.some(
+        (target) =>
+          target.platform === 'instagram' && target.connectedAccountId === input.connectedAccountId,
+      )
+    ) {
+      throw new Error('Target for this Instagram account already exists in the campaign');
+    }
+
+    const nowIso = this.now().toISOString();
+    const target: CampaignTargetRecord = {
+      id: randomUUID(),
+      campaignId,
+      platform: 'instagram',
+      destinationId: input.connectedAccountId,
+      destinationLabel: validationResult.displayName ?? null,
+      connectedAccountId: input.connectedAccountId,
+      channelId: null,
+      videoTitle: caption.substring(0, 80) || 'Instagram Reel',
+      videoDescription: caption,
+      tags: [],
+      publishAt: null,
+      playlistId: null,
+      privacy: 'public',
+      thumbnailAssetId: null,
+      status: 'aguardando',
+      externalPublishId: null,
+      youtubeVideoId: null,
+      errorMessage: null,
+      retryCount: 0,
+      tiktokPrivacyLevel: null,
+      tiktokDisableComment: null,
+      tiktokDisableDuet: null,
+      tiktokDisableStitch: null,
+      instagramCaption: caption,
+      instagramShareToFeed: input.shareToFeed ?? true,
       createdAt: nowIso,
       updatedAt: nowIso,
     };

@@ -266,7 +266,7 @@ describe('campanhas page integration with API shapes', () => {
     expect(view.page?.list.rows).toHaveLength(1);
   });
 
-  test('buildCampaignComposerRoute loads available videos and active channels for the wizard', async () => {
+  test('buildCampaignComposerRoute loads available videos and active destinations for the wizard', async () => {
     const fetcher = mockFetcher({
       'GET /api/media': {
         status: 200,
@@ -340,7 +340,7 @@ describe('campanhas page integration with API shapes', () => {
     expect(view.statusKind).toBe('ready');
     expect(view.statusTone).toBe('neutral');
     expect(view.statusMessage).toBe('Campaign composer is ready');
-    expect(view.statusDetail).toBe('Videos and active channels are available.');
+    expect(view.statusDetail).toBe('Videos and active destinations are available.');
     expect(view.ctaLayout).toBe('primary_secondary');
     expect(view.primaryCta).toEqual({
       kind: 'save_draft',
@@ -367,6 +367,8 @@ describe('campanhas page integration with API shapes', () => {
       availableVideoCount: 2,
       availableChannelCount: 3,
       activeChannelCount: 2,
+      availableDestinationCount: 3,
+      activeDestinationCount: 2,
     });
     expect(view.page?.actions).toEqual({
       cancelHref: '/workspace/campanhas',
@@ -377,13 +379,82 @@ describe('campanhas page integration with API shapes', () => {
       { id: 'video-2', original_name: 'launch.mp4', duration_seconds: 45 },
     ]);
     expect(view.page?.wizard.steps[1].channels).toEqual([
-      { id: 'ch-1', title: 'Main Channel', thumbnailUrl: 'https://img.test/main.jpg', isActive: true },
-      { id: 'ch-3', title: 'Backup Channel', thumbnailUrl: null, isActive: true },
+      {
+        id: 'ch-1',
+        title: 'Main Channel',
+        thumbnailUrl: 'https://img.test/main.jpg',
+        isActive: true,
+        platform: 'youtube',
+        destinationId: 'ch-1',
+        destinationLabel: 'Main Channel',
+      },
+      {
+        id: 'ch-3',
+        title: 'Backup Channel',
+        thumbnailUrl: null,
+        isActive: true,
+        platform: 'youtube',
+        destinationId: 'ch-3',
+        destinationLabel: 'Backup Channel',
+      },
     ]);
     expect(view.page?.emptyState).toBeUndefined();
   });
 
-  test('buildCampaignComposerRoute disables submit action when no active channels are available', async () => {
+  test('buildCampaignComposerRoute exposes connected Instagram accounts as campaign destinations', async () => {
+    const fetcher = mockFetcher({
+      'GET /api/media': {
+        status: 200,
+        body: {
+          assets: [
+            {
+              id: 'video-1',
+              asset_type: 'video',
+              original_name: 'reel.mp4',
+              duration_seconds: 30,
+            },
+          ],
+        },
+      },
+      'GET /api/accounts': {
+        status: 200,
+        body: {
+          accounts: [
+            {
+              id: 'ig-1',
+              provider: 'instagram',
+              displayName: '@studio',
+              status: 'connected',
+            },
+          ],
+        },
+      },
+    });
+
+    const view = await buildCampaignComposerRoute({ fetcher });
+
+    expect(view.loadState).toBe('ready');
+    expect(view.page?.summary).toMatchObject({
+      availableChannelCount: 1,
+      activeChannelCount: 1,
+      availableDestinationCount: 1,
+      activeDestinationCount: 1,
+    });
+    expect(view.page?.wizard.steps[1].channels).toEqual([
+      {
+        id: 'ig-1',
+        title: '@studio',
+        thumbnailUrl: null,
+        isActive: true,
+        platform: 'instagram',
+        destinationId: 'ig-1',
+        destinationLabel: '@studio',
+        connectedAccountId: 'ig-1',
+      },
+    ]);
+  });
+
+  test('buildCampaignComposerRoute disables submit action when no active destinations are available', async () => {
     const fetcher = mockFetcher({
       'GET /api/media': {
         status: 200,
@@ -425,15 +496,15 @@ describe('campanhas page integration with API shapes', () => {
 
     expect(view.loadState).toBe('blocked');
     expect(view.blockingReason).toBe('missing_active_channels');
-    expect(view.loadMessage).toBe('No active channels available');
+    expect(view.loadMessage).toBe('No active destinations available');
     expect(view.statusKind).toBe('blocked');
     expect(view.statusTone).toBe('warning');
-    expect(view.statusMessage).toBe('No active channels available');
-    expect(view.statusDetail).toBe('Activate at least one YouTube channel before creating a campaign.');
+    expect(view.statusMessage).toBe('No active destinations available');
+    expect(view.statusDetail).toBe('Connect or activate at least one YouTube, TikTok, or Instagram destination before creating a campaign.');
     expect(view.ctaLayout).toBe('primary_secondary');
     expect(view.primaryCta).toEqual({
       kind: 'manage_channels',
-      label: 'Manage channels',
+      label: 'Manage accounts',
       href: '/workspace/accounts',
     });
     expect(view.secondaryCta).toEqual({
@@ -449,13 +520,13 @@ describe('campanhas page integration with API shapes', () => {
         pendingLabel: 'Saving draft...',
         successRedirectPattern: '/workspace/campanhas/:campaignId',
         disabledState: 'missing_active_channels',
-        disabledReason: 'No active channels available',
+        disabledReason: 'No active destinations available',
       },
     });
     expect(view.page?.emptyState).toEqual({
-      heading: 'No active channels available',
-      body: 'Activate at least one YouTube channel before creating a campaign.',
-      cta: 'Manage channels',
+      heading: 'No active destinations available',
+      body: 'Connect or activate at least one YouTube, TikTok, or Instagram destination before creating a campaign.',
+      cta: 'Manage accounts',
       ctaHref: '/workspace/accounts',
     });
   });
@@ -572,6 +643,8 @@ describe('campanhas page integration with API shapes', () => {
           availableVideoCount: 2,
           availableChannelCount: 3,
           activeChannelCount: 2,
+          availableDestinationCount: 3,
+          activeDestinationCount: 2,
         },
         actions: {
           cancelHref: '/workspace/campanhas',
@@ -585,7 +658,7 @@ describe('campanhas page integration with API shapes', () => {
       statusKind: 'ready',
       statusTone: 'neutral',
       statusMessage: 'Campaign composer is ready',
-      statusDetail: 'Videos and active channels are available.',
+      statusDetail: 'Videos and active destinations are available.',
       ctaLayout: 'primary_secondary',
       primaryCta: {
         kind: 'save_draft',
@@ -608,30 +681,32 @@ describe('campanhas page integration with API shapes', () => {
           availableVideoCount: 1,
           availableChannelCount: 1,
           activeChannelCount: 0,
+          availableDestinationCount: 1,
+          activeDestinationCount: 0,
         },
         actions: {
           cancelHref: '/workspace/campanhas',
           saveDraftLabel: 'Save draft',
         },
         emptyState: {
-          heading: 'No active channels available',
-          body: 'Activate at least one YouTube channel before creating a campaign.',
-          cta: 'Manage channels',
+          heading: 'No active destinations available',
+          body: 'Connect or activate at least one YouTube, TikTok, or Instagram destination before creating a campaign.',
+          cta: 'Manage accounts',
           ctaHref: '/workspace/accounts',
         },
       },
     })).toEqual({
       loadState: 'blocked',
       blockingReason: 'missing_active_channels',
-      loadMessage: 'No active channels available',
+      loadMessage: 'No active destinations available',
       statusKind: 'blocked',
       statusTone: 'warning',
-      statusMessage: 'No active channels available',
-      statusDetail: 'Activate at least one YouTube channel before creating a campaign.',
+      statusMessage: 'No active destinations available',
+      statusDetail: 'Connect or activate at least one YouTube, TikTok, or Instagram destination before creating a campaign.',
       ctaLayout: 'primary_secondary',
       primaryCta: {
         kind: 'manage_channels',
-        label: 'Manage channels',
+        label: 'Manage accounts',
         href: '/workspace/accounts',
       },
       secondaryCta: {
@@ -671,6 +746,8 @@ describe('campanhas page integration with API shapes', () => {
           availableVideoCount: 2,
           availableChannelCount: 3,
           activeChannelCount: 2,
+          availableDestinationCount: 3,
+          activeDestinationCount: 2,
         },
         actions: {
           cancelHref: '/workspace/campanhas',
@@ -698,15 +775,17 @@ describe('campanhas page integration with API shapes', () => {
           availableVideoCount: 1,
           availableChannelCount: 1,
           activeChannelCount: 0,
+          availableDestinationCount: 1,
+          activeDestinationCount: 0,
         },
         actions: {
           cancelHref: '/workspace/campanhas',
           saveDraftLabel: 'Save draft',
         },
         emptyState: {
-          heading: 'No active channels available',
-          body: 'Activate at least one YouTube channel before creating a campaign.',
-          cta: 'Manage channels',
+          heading: 'No active destinations available',
+          body: 'Connect or activate at least one YouTube, TikTok, or Instagram destination before creating a campaign.',
+          cta: 'Manage accounts',
           ctaHref: '/workspace/accounts',
         },
       },
@@ -718,7 +797,7 @@ describe('campanhas page integration with API shapes', () => {
         pendingLabel: 'Saving draft...',
         successRedirectPattern: '/workspace/campanhas/:campaignId',
         disabledState: 'missing_active_channels',
-        disabledReason: 'No active channels available',
+        disabledReason: 'No active destinations available',
       },
     });
   });
@@ -756,6 +835,8 @@ describe('campanhas page integration with API shapes', () => {
           availableVideoCount: 2,
           availableChannelCount: 3,
           activeChannelCount: 2,
+          availableDestinationCount: 3,
+          activeDestinationCount: 2,
         },
         actions: {
           cancelHref: '/workspace/campanhas',
@@ -771,7 +852,7 @@ describe('campanhas page integration with API shapes', () => {
       statusKind: 'ready',
       statusTone: 'neutral',
       statusMessage: 'Campaign composer is ready',
-      statusDetail: 'Videos and active channels are available.',
+      statusDetail: 'Videos and active destinations are available.',
       ctaLayout: 'primary_secondary',
       primaryCta: {
         kind: 'save_draft',
@@ -800,6 +881,8 @@ describe('campanhas page integration with API shapes', () => {
           availableVideoCount: 2,
           availableChannelCount: 3,
           activeChannelCount: 2,
+          availableDestinationCount: 3,
+          activeDestinationCount: 2,
         },
         actions: {
           cancelHref: '/workspace/campanhas',

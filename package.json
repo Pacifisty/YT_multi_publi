@@ -57,6 +57,7 @@
     "db:deploy": "node_modules\\.bin\\prisma.cmd migrate deploy",
     "db:push": "node_modules\\.bin\\prisma.cmd db push",
     "db:studio": "node_modules\\.bin\\prisma.cmd studio",
+    "seed:dashboard-demo": "node --env-file-if-exists=.env scripts/seed-dashboard-demo.cjs",
     "verify:prisma-startup": "node --env-file-if-exists=.env scripts/verify-prisma-startup.cjs",
     "build:hooks": "node scripts/build-hooks.js",
     "prepublishOnly": "npm run build:hooks",

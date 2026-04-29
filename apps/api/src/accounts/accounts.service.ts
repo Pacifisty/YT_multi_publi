@@ -8,6 +8,8 @@ import {
   type GoogleOauthSession,
   type GoogleTokenResult,
 } from '../integrations/google/google-oauth.service';
+import type { InstagramOauthSession, InstagramTokenResult } from '../integrations/instagram/instagram-oauth.service';
+import { InstagramOauthService } from '../integrations/instagram/instagram-oauth.service';
 import type { TikTokOauthSession, TikTokTokenResult } from '../integrations/tiktok/tiktok-oauth.service';
 import { TikTokOauthService } from '../integrations/tiktok/tiktok-oauth.service';
 import {
@@ -70,7 +72,7 @@ interface OAuthCallbackInput {
   session?: Record<string, unknown> | null;
 }
 
-export type SupportedOauthProvider = 'google' | 'youtube' | 'tiktok';
+export type SupportedOauthProvider = 'google' | 'youtube' | 'tiktok' | 'instagram';
 
 type OAuthCallbackResult =
   | {
@@ -98,12 +100,14 @@ export interface AccountsServiceOptions {
   tokenCryptoService?: TokenCryptoService;
   googleOauthService?: GoogleOauthService;
   tikTokOauthService?: TikTokOauthService;
+  instagramOauthService?: InstagramOauthService;
   connectedAccountStore?: ConnectedAccountStore;
   createConnectedAccount?: (record: ConnectedAccountRecord) => Promise<ConnectedAccountRecord>;
   createAuthorizationRedirect?: (session?: GoogleOauthSession | null) => string | Promise<string>;
   handleOauthCallback?: (input: OAuthCallbackInput) => Promise<OAuthCallbackResult>;
   refreshGoogleAccessToken?: (refreshToken: string) => Promise<RefreshTokenResult>;
   refreshTikTokAccessToken?: (refreshToken: string) => Promise<RefreshTokenResult>;
+  refreshInstagramAccessToken?: (refreshToken: string) => Promise<RefreshTokenResult>;
   updateConnectedAccount?: (id: string, updates: Partial<ConnectedAccountRecord>) => Promise<ConnectedAccountRecord>;
   deleteConnectedAccount?: (id: string) => Promise<boolean>;
   youtubeChannelsService?: YouTubeChannelsService;
@@ -155,6 +159,7 @@ export class AccountsService {
   private tokenCryptoService?: TokenCryptoService;
   private googleOauthService?: GoogleOauthService;
   private tikTokOauthService?: TikTokOauthService;
+  private instagramOauthService?: InstagramOauthService;
   private readonly connectedAccountStore: ConnectedAccountStore;
   private readonly channelStore: ChannelStore;
   private readonly now: () => Date;
@@ -164,13 +169,14 @@ export class AccountsService {
     this.tokenCryptoService = options.tokenCryptoService;
     this.googleOauthService = options.googleOauthService;
     this.tikTokOauthService = options.tikTokOauthService;
+    this.instagramOauthService = options.instagramOauthService;
     this.connectedAccountStore = options.connectedAccountStore ?? new InMemoryConnectedAccountStore();
     this.channelStore = options.channelStore ?? new InMemoryChannelStore();
     this.now = options.now ?? (() => new Date());
   }
 
   async createAuthorizationRedirect(session?: GoogleOauthSession | null): Promise<string> {
-    return this.createAuthorizationRedirectForProvider('google', session);
+    return this.createAuthorizationRedirectForProvider('google', session as Record<string, unknown> | null | undefined);
   }
 
   async createAuthorizationRedirectForProvider(
@@ -179,6 +185,18 @@ export class AccountsService {
   ): Promise<string> {
     if (provider === 'tiktok') {
       const redirectUrl = await this.getTikTokOauthService().createAuthorizationRedirect(session as TikTokOauthSession | null | undefined);
+      const state = extractStateFromAuthorizationRedirect(redirectUrl);
+      if (state) {
+        this.rememberOauthState(
+          state,
+          (session as { adminUser?: { email?: string } } | null | undefined)?.adminUser?.email,
+        );
+      }
+      return redirectUrl;
+    }
+
+    if (provider === 'instagram') {
+      const redirectUrl = await this.getInstagramOauthService().createAuthorizationRedirect(session as InstagramOauthSession | null | undefined);
       const state = extractStateFromAuthorizationRedirect(redirectUrl);
       if (state) {
         this.rememberOauthState(
@@ -227,11 +245,14 @@ export class AccountsService {
     }
 
     const tokenResult = await this.exchangeProviderCode(canonicalProvider, input.code, input.session);
+    this.clearProviderSessionState(canonicalProvider, input.session);
+    const googleSubject = 'googleSubject' in tokenResult.profile ? tokenResult.profile.googleSubject : undefined;
+    const providerSubject = tokenResult.profile.providerSubject ?? googleSubject;
     const record = this.createPersistenceRecord({
       ownerEmail: adminEmail,
       provider: canonicalProvider,
-      googleSubject: tokenResult.profile.providerSubject ?? tokenResult.profile.googleSubject,
-      providerSubject: tokenResult.profile.providerSubject ?? tokenResult.profile.googleSubject,
+      googleSubject: providerSubject,
+      providerSubject,
       email: tokenResult.profile.email,
       displayName: tokenResult.profile.displayName,
       accessToken: tokenResult.accessToken,
@@ -362,6 +383,23 @@ export class AccountsService {
     return false;
   }
 
+  private clearProviderSessionState(
+    provider: 'google' | 'tiktok' | 'instagram',
+    session: OAuthCallbackInput['session'],
+  ): void {
+    if (!session || typeof session !== 'object') {
+      return;
+    }
+
+    delete session.oauthStateNonce;
+    if (provider === 'tiktok') {
+      delete session.tiktokCodeVerifier;
+    }
+    if (provider === 'instagram') {
+      delete session.instagramCodeVerifier;
+    }
+  }
+
   private async defaultRefreshGoogleAccessToken(refreshToken: string): Promise<RefreshTokenResult> {
     const googleService = this.getGoogleOauthService();
     return googleService.refreshAccessToken(refreshToken);
@@ -377,9 +415,23 @@ export class AccountsService {
     };
   }
 
+  private async defaultRefreshInstagramAccessToken(refreshToken: string): Promise<RefreshTokenResult> {
+    const instagramService = this.getInstagramOauthService();
+    const refreshed = await instagramService.refreshAccessToken(refreshToken);
+    return {
+      accessToken: refreshed.accessToken,
+      refreshToken: refreshed.refreshToken,
+      expiresAt: refreshed.tokenExpiresAt ?? this.now().toISOString(),
+    };
+  }
+
   private getRefreshFnForProvider(provider: string): (refreshToken: string) => Promise<RefreshTokenResult> {
     if (provider === 'tiktok') {
       return this.options.refreshTikTokAccessToken ?? this.defaultRefreshTikTokAccessToken.bind(this);
+    }
+
+    if (provider === 'instagram') {
+      return this.options.refreshInstagramAccessToken ?? this.defaultRefreshInstagramAccessToken.bind(this);
     }
 
     return this.options.refreshGoogleAccessToken ?? this.defaultRefreshGoogleAccessToken.bind(this);
@@ -635,8 +687,13 @@ export class AccountsService {
     return this.tikTokOauthService;
   }
 
+  private getInstagramOauthService(): InstagramOauthService {
+    this.instagramOauthService = this.instagramOauthService ?? new InstagramOauthService();
+    return this.instagramOauthService;
+  }
+
   private validateProviderCallbackState(
-    provider: 'google' | 'tiktok',
+    provider: 'google' | 'tiktok' | 'instagram',
     session: OAuthCallbackInput['session'],
     state: string,
   ): boolean {
@@ -647,17 +704,29 @@ export class AccountsService {
       );
     }
 
+    if (provider === 'instagram') {
+      return this.getInstagramOauthService().validateCallbackState(
+        session as InstagramOauthSession | null | undefined,
+        state,
+      );
+    }
+
     return this.getGoogleOauthService().validateCallbackState(session, state);
   }
 
   private async exchangeProviderCode(
-    provider: 'google' | 'tiktok',
+    provider: 'google' | 'tiktok' | 'instagram',
     code: string,
     session?: OAuthCallbackInput['session'],
-  ): Promise<GoogleTokenResult | TikTokTokenResult> {
+  ): Promise<GoogleTokenResult | TikTokTokenResult | InstagramTokenResult> {
     if (provider === 'tiktok') {
       const codeVerifier = typeof session?.tiktokCodeVerifier === 'string' ? session.tiktokCodeVerifier : undefined;
       return this.getTikTokOauthService().exchangeCodeForTokens(code, codeVerifier);
+    }
+
+    if (provider === 'instagram') {
+      const codeVerifier = typeof session?.instagramCodeVerifier === 'string' ? session.instagramCodeVerifier : undefined;
+      return this.getInstagramOauthService().exchangeCodeForTokens(code, codeVerifier);
     }
 
     return this.getGoogleOauthService().exchangeCodeForTokens(code);

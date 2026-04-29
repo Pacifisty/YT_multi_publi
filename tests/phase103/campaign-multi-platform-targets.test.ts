@@ -298,6 +298,119 @@ describe('tiktok upload worker', () => {
     });
     expect(updated!.campaign.status).toBe('completed');
   });
+
+  test('uses stored TikTok privacy and moderation flags when publishing', async () => {
+    const campaignService = new CampaignService();
+    const jobService = new PublishJobService();
+    const launchService = new LaunchService({ campaignService, jobService });
+
+    const { campaign } = await campaignService.createCampaign({
+      title: 'TikTok settings campaign',
+      videoAssetId: 'video-tt-worker-4',
+    });
+
+    const { target } = await campaignService.addTarget(campaign.id, {
+      platform: 'tiktok',
+      destinationId: 'tt-user-settings',
+      destinationLabel: 'TikTok Creator',
+      connectedAccountId: 'connected-tiktok-settings',
+      videoTitle: 'Launch clip',
+      videoDescription: 'Description for TikTok',
+      privacy: 'private',
+    });
+    target.tiktokPrivacyLevel = 'PUBLIC_TO_EVERYONE';
+    target.tiktokDisableComment = true;
+    target.tiktokDisableDuet = true;
+    target.tiktokDisableStitch = false;
+
+    await campaignService.markReady(campaign.id);
+    await launchService.launchCampaign(campaign.id);
+    const [job] = await jobService.getJobsForTarget(target.id);
+
+    const publishFn = vi.fn(async () => ({ publishId: 'tt-publish-settings' }));
+    const worker = new TikTokUploadWorker({
+      jobService,
+      campaignService,
+      getAccessToken: vi.fn(async () => 'tt-access-token'),
+      getPublicVideoUrl: vi.fn(async () => 'https://example.com/video.mp4'),
+      queryCreatorInfoFn: vi.fn(async () => ({
+        privacyLevelOptions: ['SELF_ONLY', 'PUBLIC_TO_EVERYONE'],
+      })),
+      publishFn,
+      fetchStatusFn: vi.fn(async () => ({
+        status: 'PUBLISH_COMPLETE',
+        publiclyAvailablePostId: 'tt-post-settings',
+      })),
+      sleepMs: vi.fn(async () => undefined),
+    });
+
+    await worker.processPickedJob(job, target, campaign.videoAssetId);
+
+    expect(publishFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        privacy: 'PUBLIC_TO_EVERYONE',
+        disableComment: true,
+        disableDuet: true,
+        disableStitch: false,
+      }),
+    );
+  });
+
+  test('backs off and retries when TikTok rate limits publish initialization', async () => {
+    const campaignService = new CampaignService();
+    const jobService = new PublishJobService();
+    const launchService = new LaunchService({ campaignService, jobService });
+
+    const { campaign } = await campaignService.createCampaign({
+      title: 'TikTok rate limited campaign',
+      videoAssetId: 'video-tt-worker-5',
+    });
+
+    const { target } = await campaignService.addTarget(campaign.id, {
+      platform: 'tiktok',
+      destinationId: 'tt-user-rate-limit',
+      destinationLabel: 'TikTok Creator',
+      connectedAccountId: 'connected-tiktok-rate-limit',
+      videoTitle: 'Launch clip',
+      videoDescription: 'Description for TikTok',
+    });
+
+    await campaignService.markReady(campaign.id);
+    await launchService.launchCampaign(campaign.id);
+    const [job] = await jobService.getJobsForTarget(target.id);
+
+    const rateLimitError = Object.assign(new Error('Too many requests'), {
+      statusCode: 429,
+      errorCode: 'rate_limit_exceeded',
+    });
+    const publishFn = vi
+      .fn()
+      .mockRejectedValueOnce(rateLimitError)
+      .mockResolvedValueOnce({ publishId: 'tt-publish-after-backoff' });
+    const sleepMs = vi.fn(async () => undefined);
+
+    const worker = new TikTokUploadWorker({
+      jobService,
+      campaignService,
+      getAccessToken: vi.fn(async () => 'tt-access-token'),
+      getPublicVideoUrl: vi.fn(async () => 'https://example.com/video.mp4'),
+      queryCreatorInfoFn: vi.fn(async () => ({
+        privacyLevelOptions: ['SELF_ONLY'],
+      })),
+      publishFn,
+      fetchStatusFn: vi.fn(async () => ({
+        status: 'PUBLISH_COMPLETE',
+        publiclyAvailablePostId: 'tt-post-after-backoff',
+      })),
+      sleepMs,
+    });
+
+    const result = await worker.processPickedJob(job, target, campaign.videoAssetId);
+
+    expect(result?.status).toBe('completed');
+    expect(publishFn).toHaveBeenCalledTimes(2);
+    expect(sleepMs).toHaveBeenCalledWith(1000);
+  });
 });
 
 describe('public media route', () => {

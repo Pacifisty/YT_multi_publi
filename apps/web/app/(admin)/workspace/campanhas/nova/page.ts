@@ -31,7 +31,7 @@ export interface CampaignComposerRouteView {
     }
     | {
       kind: 'manage_channels';
-      label: 'Manage channels';
+      label: 'Manage accounts';
       href: '/workspace/accounts';
     }
     | {
@@ -91,7 +91,10 @@ function getCampaignComposerSubmitDisabledState(
     return 'missing_videos';
   }
 
-  if (page.emptyState.heading === 'No active channels available') {
+  if (
+    page.emptyState.heading === 'No active channels available' ||
+    page.emptyState.heading === 'No active destinations available'
+  ) {
     return 'missing_active_channels';
   }
 
@@ -169,15 +172,15 @@ export function buildCampaignComposerRouteStatus(options: {
     return {
       loadState: 'blocked',
       blockingReason,
-      loadMessage: 'No active channels available',
+      loadMessage: 'No active destinations available',
       statusKind: 'blocked',
       statusTone: 'warning',
-      statusMessage: 'No active channels available',
-      statusDetail: page.emptyState?.body ?? 'Activate at least one YouTube channel before creating a campaign.',
+      statusMessage: 'No active destinations available',
+      statusDetail: page.emptyState?.body ?? 'Connect or activate at least one YouTube, TikTok, or Instagram destination before creating a campaign.',
       ctaLayout: 'primary_secondary',
       primaryCta: {
         kind: 'manage_channels',
-        label: 'Manage channels',
+        label: 'Manage accounts',
         href: '/workspace/accounts',
       },
       secondaryCta: {
@@ -195,7 +198,7 @@ export function buildCampaignComposerRouteStatus(options: {
     statusKind: 'ready',
     statusTone: 'neutral',
     statusMessage: 'Campaign composer is ready',
-    statusDetail: 'Videos and active channels are available.',
+    statusDetail: 'Videos and active destinations are available.',
     ctaLayout: 'primary_secondary',
     primaryCta: {
       kind: 'save_draft',

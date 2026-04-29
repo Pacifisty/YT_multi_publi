@@ -325,6 +325,12 @@ export function createApiRouter(options: {
       },
       {
         method: 'GET',
+        pattern: /^\/api\/accounts\/oauth\/instagram\/start$/,
+        paramNames: [],
+        handler: (req: AccountsRequest) => accountsController.startInstagramOauth(req),
+      },
+      {
+        method: 'GET',
         pattern: /^\/api\/accounts\/oauth\/google\/callback$/,
         paramNames: [],
         handler: (req: AccountsRequest) => accountsController.handleGoogleOauthCallback(req),
@@ -340,6 +346,19 @@ export function createApiRouter(options: {
           }
           const errorMsg = encodeURIComponent((result.body as any)?.error ?? 'TikTok OAuth failed.');
           return { ...result, redirect: `/workspace/accounts?oauth=error&provider=tiktok&oauthMessage=${errorMsg}` };
+        },
+      },
+      {
+        method: 'GET',
+        pattern: /^\/api\/accounts\/oauth\/instagram\/callback$/,
+        paramNames: [],
+        handler: async (req: AccountsRequest) => {
+          const result = await accountsController.handleInstagramOauthCallback(req);
+          if (result.status === 200) {
+            return { ...result, redirect: '/workspace/accounts?oauth=success&provider=instagram' };
+          }
+          const errorMsg = encodeURIComponent((result.body as any)?.error ?? 'Instagram OAuth failed.');
+          return { ...result, redirect: `/workspace/accounts?oauth=error&provider=instagram&oauthMessage=${errorMsg}` };
         },
       },
       {

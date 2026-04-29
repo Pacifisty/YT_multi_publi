@@ -1,5 +1,7 @@
 import type { CampaignTargetData, CampaignsApiClient } from '../../lib/campaigns-client';
 
+export type WizardDestinationPlatform = 'youtube' | 'tiktok' | 'instagram';
+
 export interface WizardVideoOption {
   id: string;
   original_name: string;
@@ -11,6 +13,10 @@ export interface WizardChannelOption {
   title: string;
   thumbnailUrl: string | null;
   isActive: boolean;
+  platform?: WizardDestinationPlatform;
+  destinationId?: string;
+  destinationLabel?: string | null;
+  connectedAccountId?: string | null;
 }
 
 export interface MetadataFieldDef {
@@ -22,6 +28,7 @@ export interface WizardChannelMetadataSection {
   channelId: string;
   channelTitle: string;
   thumbnailUrl: string | null;
+  platform: WizardDestinationPlatform;
   metadataFields: Record<string, MetadataFieldDef>;
 }
 
@@ -71,7 +78,14 @@ export interface CampaignWizardDraftSubmissionInput {
   title: string;
   videoAssetId: string;
   scheduledAt?: string;
-  selectedChannelIds: string[];
+  selectedChannelIds?: string[];
+  selectedDestinations?: Array<{
+    id: string;
+    platform?: WizardDestinationPlatform;
+    destinationId?: string;
+    destinationLabel?: string | null;
+    connectedAccountId?: string | null;
+  }>;
   targetTemplate: {
     videoTitle: string;
     videoDescription: string;
@@ -80,6 +94,8 @@ export interface CampaignWizardDraftSubmissionInput {
     playlistId?: string;
     privacy?: string;
     thumbnailAssetId?: string;
+    instagramCaption?: string;
+    instagramShareToFeed?: boolean;
   };
 }
 
@@ -120,8 +136,8 @@ function buildPreflightChecklist(review: CampaignWizardReviewSummary | undefined
   ];
 }
 
-function buildMetadataFields(): Record<string, MetadataFieldDef> {
-  return {
+function buildMetadataFields(platform: WizardDestinationPlatform = 'youtube'): Record<string, MetadataFieldDef> {
+  const fields: Record<string, MetadataFieldDef> = {
     videoTitle: { required: true },
     videoDescription: { required: true },
     tags: { required: false },
@@ -130,18 +146,38 @@ function buildMetadataFields(): Record<string, MetadataFieldDef> {
     thumbnailAssetId: { required: false },
     privacy: { required: false, options: ['public', 'unlisted', 'private'] },
   };
+
+  if (platform === 'instagram') {
+    fields.instagramCaption = { required: false };
+    fields.instagramShareToFeed = { required: false, options: ['true', 'false'] };
+  }
+
+  return fields;
+}
+
+function mergeMetadataFieldsForDestinations(destinations: WizardChannelOption[]): Record<string, MetadataFieldDef> {
+  return destinations.reduce<Record<string, MetadataFieldDef>>(
+    (fields, destination) => ({
+      ...fields,
+      ...buildMetadataFields(destination.platform ?? 'youtube'),
+    }),
+    buildMetadataFields(),
+  );
 }
 
 export function buildCampaignWizardView(data: CampaignWizardData): CampaignWizardView {
-  const metadataFields = buildMetadataFields();
-  const channelMetadataSections = (data.selectedChannelIds ?? [])
+  const selectedDestinationIds = data.selectedChannelIds ?? [];
+  const selectedDestinations = selectedDestinationIds
     .map((channelId) => data.availableChannels.find((channel) => channel.id === channelId))
-    .filter((channel): channel is WizardChannelOption => Boolean(channel))
+    .filter((channel): channel is WizardChannelOption => Boolean(channel));
+  const metadataFields = mergeMetadataFieldsForDestinations(selectedDestinations);
+  const channelMetadataSections = selectedDestinations
     .map((channel) => ({
       channelId: channel.id,
       channelTitle: channel.title,
       thumbnailUrl: channel.thumbnailUrl,
-      metadataFields,
+      platform: channel.platform ?? 'youtube',
+      metadataFields: buildMetadataFields(channel.platform ?? 'youtube'),
     }));
   const steps: WizardStep[] = [
     {
@@ -150,7 +186,7 @@ export function buildCampaignWizardView(data: CampaignWizardData): CampaignWizar
       videos: data.availableVideos,
     },
     {
-      label: 'Select channels',
+      label: 'Select destinations',
       clickable: true,
       channels: data.availableChannels.filter((ch) => ch.isActive),
     },
@@ -163,7 +199,7 @@ export function buildCampaignWizardView(data: CampaignWizardData): CampaignWizar
     {
       label: 'Review & launch',
       clickable: true,
-      confirmationMessage: 'Tem certeza? Isso vai iniciar o upload para o YouTube.',
+      confirmationMessage: 'Tem certeza? Isso vai iniciar a publicacao nas plataformas selecionadas.',
       reviewSummary: data.review,
       preflightChecklist: buildPreflightChecklist(data.review),
     },
@@ -194,7 +230,8 @@ export async function submitCampaignWizardDraft(
     };
   }
 
-  if (input.selectedChannelIds.length === 0) {
+  const selectedTargets = buildDraftTargetPayloads(input);
+  if (selectedTargets.length === 0) {
     return {
       ok: true,
       campaign: createResult.campaign,
@@ -204,10 +241,7 @@ export async function submitCampaignWizardDraft(
 
   const addTargetsResult = await client.addTargets(
     createResult.campaign.id,
-    input.selectedChannelIds.map((channelId) => ({
-      channelId,
-      ...input.targetTemplate,
-    })),
+    selectedTargets,
   );
 
   if (!addTargetsResult.ok) {
@@ -223,4 +257,46 @@ export async function submitCampaignWizardDraft(
     campaign: createResult.campaign,
     targets: addTargetsResult.targets,
   };
+}
+
+function buildDraftTargetPayloads(
+  input: CampaignWizardDraftSubmissionInput,
+): Parameters<CampaignsApiClient['addTargets']>[1] {
+  if (input.selectedDestinations && input.selectedDestinations.length > 0) {
+    const { instagramCaption, instagramShareToFeed, ...sharedTemplate } = input.targetTemplate;
+
+    return input.selectedDestinations.map((destination) => {
+      const platform = destination.platform ?? 'youtube';
+      const destinationId = destination.destinationId ?? destination.id;
+      const baseTarget = {
+        ...sharedTemplate,
+        platform,
+        destinationId,
+        destinationLabel: destination.destinationLabel ?? undefined,
+        connectedAccountId: destination.connectedAccountId ?? undefined,
+      };
+
+      if (platform === 'youtube') {
+        return {
+          ...sharedTemplate,
+          channelId: destinationId,
+        };
+      }
+
+      if (platform === 'instagram') {
+        return {
+          ...baseTarget,
+          instagramCaption: instagramCaption ?? input.targetTemplate.videoDescription,
+          instagramShareToFeed: instagramShareToFeed ?? true,
+        };
+      }
+
+      return baseTarget;
+    });
+  }
+
+  return (input.selectedChannelIds ?? []).map((channelId) => ({
+    channelId,
+    ...input.targetTemplate,
+  }));
 }

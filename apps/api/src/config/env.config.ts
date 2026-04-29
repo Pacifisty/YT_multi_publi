@@ -10,6 +10,9 @@ export interface EnvConfig {
   tiktokClientKey: string | undefined;
   tiktokClientSecret: string | undefined;
   tiktokRedirectUri: string | undefined;
+  instagramClientId: string | undefined;
+  instagramClientSecret: string | undefined;
+  instagramRedirectUri: string | undefined;
   oauthTokenKey: string | undefined;
   adminEmail: string | undefined;
   adminPasswordHash: string | undefined;
@@ -50,6 +53,9 @@ export function loadEnvConfig(env: Record<string, string | undefined>): EnvConfi
     tiktokClientKey: env.TIKTOK_CLIENT_KEY,
     tiktokClientSecret: env.TIKTOK_CLIENT_SECRET,
     tiktokRedirectUri: env.TIKTOK_REDIRECT_URI,
+    instagramClientId: env.INSTAGRAM_CLIENT_ID,
+    instagramClientSecret: env.INSTAGRAM_CLIENT_SECRET,
+    instagramRedirectUri: env.INSTAGRAM_REDIRECT_URI,
     oauthTokenKey: env.OAUTH_TOKEN_KEY,
     adminEmail: env.ADMIN_EMAIL,
     adminPasswordHash: env.ADMIN_PASSWORD_HASH,

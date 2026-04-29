@@ -3,12 +3,15 @@ import type { PublishJobService } from './publish-job.service';
 
 export interface TargetStatusView {
   targetId: string;
-  channelId: string;
+  platform: string;
+  channelId: string | null;
+  connectedAccountId: string | null;
   videoTitle: string;
   status: string;
   publishAt: string | null;
   scheduledPending: boolean;
   youtubeVideoId: string | null;
+  externalPublishId: string | null;
   errorMessage: string | null;
   latestJobStatus: string | null;
   reauthRequired: boolean;
@@ -35,8 +38,8 @@ export interface CampaignStatusServiceOptions {
   now?: () => Date;
 }
 
-function isTerminalTarget(target: Pick<TargetStatusView, 'status' | 'youtubeVideoId' | 'errorMessage'>): boolean {
-  return (target.status === 'erro' && Boolean(target.errorMessage)) || (target.status === 'publicado' && Boolean(target.youtubeVideoId));
+function isTerminalTarget(target: Pick<TargetStatusView, 'status' | 'youtubeVideoId' | 'externalPublishId' | 'errorMessage'>): boolean {
+  return (target.status === 'erro' && Boolean(target.errorMessage)) || (target.status === 'publicado' && (Boolean(target.youtubeVideoId) || Boolean(target.externalPublishId)));
 }
 
 function hasPostUploadWarning(target: Pick<TargetStatusView, 'status' | 'youtubeVideoId' | 'errorMessage'>): boolean {
@@ -88,12 +91,15 @@ export class CampaignStatusService {
 
       return {
         targetId: t.id,
+        platform: t.platform,
         channelId: t.channelId,
+        connectedAccountId: t.connectedAccountId,
         videoTitle: t.videoTitle,
         status: t.status,
         publishAt: t.publishAt,
         scheduledPending,
         youtubeVideoId: t.youtubeVideoId,
+        externalPublishId: t.externalPublishId,
         errorMessage: t.errorMessage,
         latestJobStatus: latestJob?.status ?? null,
         reauthRequired: isReauthRequired(t),
@@ -105,7 +111,7 @@ export class CampaignStatusService {
     }));
 
     const allTerminal = targets.length > 0 && targets.every((t) => isTerminalTarget(t));
-    const completed = targets.filter((t) => t.status === 'publicado' && t.youtubeVideoId).length;
+    const completed = targets.filter((t) => t.status === 'publicado' && (t.youtubeVideoId || t.externalPublishId)).length;
     const failed = targets.filter((t) => t.status === 'erro' && t.errorMessage).length;
     const hasActivePendingTargets = targets.some((target) =>
       target.status === 'enviando' || (target.status === 'aguardando' && !target.scheduledPending));

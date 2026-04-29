@@ -16,6 +16,24 @@ export interface CampaignStatusBreakdown {
   count: number;
 }
 
+export type DashboardFailedJobSuggestedAction = 'retry' | 'reauth' | 'review';
+
+export interface DashboardFailedJobData {
+  jobId: string | null;
+  campaignId: string;
+  campaignTitle: string;
+  targetId: string;
+  platform: 'youtube' | 'tiktok' | 'instagram';
+  destinationId: string;
+  destinationLabel: string | null;
+  videoTitle: string;
+  errorMessage: string;
+  errorClass: 'transient' | 'permanent' | null;
+  attempt: number | null;
+  failedAt: string | null;
+  suggestedAction: DashboardFailedJobSuggestedAction;
+}
+
 export interface DashboardData {
   campaigns: {
     total: number;
@@ -50,6 +68,7 @@ export interface DashboardData {
       count: number;
     }>;
   };
+  failedJobs?: DashboardFailedJobData[];
   retries: {
     retriedTargets: number;
     highestAttempt: number;
@@ -153,6 +172,33 @@ export interface DashboardView {
     }>;
     primaryAction: {
       kind: 'review_campaigns';
+      href: '/workspace/campanhas';
+    };
+  };
+  failedJobQueue?: {
+    total: number;
+    retryableCount: number;
+    reauthCount: number;
+    reviewCount: number;
+    rows: Array<DashboardFailedJobData & {
+      campaignHref: string;
+      historyHref: string;
+      primaryAction:
+        | { kind: 'retry_target'; label: 'Retry'; href: string }
+        | { kind: 'reauth_accounts'; label: 'Reconnect account'; href: '/workspace/accounts' }
+        | { kind: 'review_campaign'; label: 'Review campaign'; href: string };
+    }>;
+  };
+  failedJobBanner?: {
+    tone: 'warning';
+    title: string;
+    body: string;
+    total: number;
+    retryableCount: number;
+    reauthCount: number;
+    reviewCount: number;
+    primaryAction: {
+      kind: 'review_failed_jobs';
       href: '/workspace/campanhas';
     };
   };
@@ -361,6 +407,62 @@ export function buildDashboardView(data: DashboardData): DashboardView {
       topReasonLabel,
       reasons,
       primaryAction,
+    };
+  }
+
+  const failedJobRows = (data.failedJobs ?? []).map((item) => {
+    const campaignHref = `/workspace/campanhas/${item.campaignId}`;
+    const historyHref = `/api/campaigns/${item.campaignId}/targets/${item.targetId}/jobs`;
+    const primaryAction = item.suggestedAction === 'retry'
+      ? {
+          kind: 'retry_target' as const,
+          label: 'Retry' as const,
+          href: `/api/campaigns/${item.campaignId}/targets/${item.targetId}/retry`,
+        }
+      : item.suggestedAction === 'reauth'
+        ? {
+            kind: 'reauth_accounts' as const,
+            label: 'Reconnect account' as const,
+            href: '/workspace/accounts' as const,
+          }
+        : {
+            kind: 'review_campaign' as const,
+            label: 'Review campaign' as const,
+            href: campaignHref,
+          };
+
+    return {
+      ...item,
+      campaignHref,
+      historyHref,
+      primaryAction,
+    };
+  });
+
+  if (failedJobRows.length > 0) {
+    const retryableCount = failedJobRows.filter((row) => row.suggestedAction === 'retry').length;
+    const reauthCount = failedJobRows.filter((row) => row.suggestedAction === 'reauth').length;
+    const reviewCount = failedJobRows.filter((row) => row.suggestedAction === 'review').length;
+
+    view.failedJobQueue = {
+      total: failedJobRows.length,
+      retryableCount,
+      reauthCount,
+      reviewCount,
+      rows: failedJobRows,
+    };
+    view.failedJobBanner = {
+      tone: 'warning',
+      title: 'Failed publishing work needs attention',
+      body: `${failedJobRows.length} failed target${failedJobRows.length === 1 ? '' : 's'}: ${retryableCount} retryable, ${reauthCount} need reconnect, ${reviewCount} need review.`,
+      total: failedJobRows.length,
+      retryableCount,
+      reauthCount,
+      reviewCount,
+      primaryAction: {
+        kind: 'review_failed_jobs',
+        href: '/workspace/campanhas',
+      },
     };
   }
 

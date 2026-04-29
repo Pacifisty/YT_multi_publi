@@ -86,6 +86,8 @@ export interface CampaignTargetData {
   youtubeVideoId: string | null;
   errorMessage: string | null;
   retryCount: number;
+  instagramCaption?: string | null;
+  instagramShareToFeed?: boolean | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -101,7 +103,11 @@ export interface CampaignsApiClient {
   getCampaign(id: string): Promise<{ ok: true; campaign: any } | { ok: false; error: string }>;
   updateCampaign(id: string, data: { title?: string; scheduledAt?: string }): Promise<{ ok: true; campaign: any } | { ok: false; error: string }>;
   addTarget(campaignId: string, data: {
-    channelId: string;
+    platform?: string;
+    destinationId?: string;
+    destinationLabel?: string;
+    connectedAccountId?: string;
+    channelId?: string;
     videoTitle: string;
     videoDescription: string;
     tags?: string[];
@@ -109,9 +115,15 @@ export interface CampaignsApiClient {
     playlistId?: string;
     privacy?: string;
     thumbnailAssetId?: string;
+    instagramCaption?: string;
+    instagramShareToFeed?: boolean;
   }): Promise<{ ok: true; target: CampaignTargetData } | { ok: false; error: string }>;
   addTargets(campaignId: string, targets: Array<{
-    channelId: string;
+    platform?: string;
+    destinationId?: string;
+    destinationLabel?: string;
+    connectedAccountId?: string;
+    channelId?: string;
     videoTitle: string;
     videoDescription: string;
     tags?: string[];
@@ -119,6 +131,8 @@ export interface CampaignsApiClient {
     playlistId?: string;
     privacy?: string;
     thumbnailAssetId?: string;
+    instagramCaption?: string;
+    instagramShareToFeed?: boolean;
   }>): Promise<{ ok: true; targets: CampaignTargetData[] } | { ok: false; error: string }>;
   updateTarget(campaignId: string, targetId: string, data: {
     videoTitle?: string;

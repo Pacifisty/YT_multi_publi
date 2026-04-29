@@ -1,15 +1,19 @@
 import type { AuditEventService } from './audit-event.service';
 import type { CampaignService, CampaignTargetRecord } from './campaign.service';
 import type { PublishJobRecord, PublishJobService } from './publish-job.service';
-import { classifyPublishError } from './error-classifier';
+import { classifyTikTokError, isTikTokRateLimited } from './error-classifier';
+import type { TikTokPublishQuotaTracker } from '../integrations/tiktok/tiktok-publish-quota';
 
 const SYSTEM_AUDIT_ACTOR_EMAIL = 'system@internal';
+const TIKTOK_MAX_STATUS_POLLS = 6;
+const TIKTOK_STATUS_POLL_DELAY_MS = 5_000;
+const TIKTOK_RATE_LIMIT_BACKOFF_MS = [1_000, 2_000, 4_000];
 
 export interface TikTokCreatorInfo {
   privacyLevelOptions: string[];
-  commentDisabled: boolean;
-  duetDisabled: boolean;
-  stitchDisabled: boolean;
+  commentDisabled?: boolean;
+  duetDisabled?: boolean;
+  stitchDisabled?: boolean;
 }
 
 export interface TikTokPublishContext {
@@ -17,6 +21,9 @@ export interface TikTokPublishContext {
   videoUrl: string;
   title: string;
   privacy: string;
+  disableComment: boolean;
+  disableDuet: boolean;
+  disableStitch: boolean;
 }
 
 export interface TikTokPublishResult {
@@ -40,6 +47,7 @@ export interface TikTokUploadWorkerOptions {
   fetchStatusFn?: TikTokFetchStatusFn;
   getAccessToken: (connectedAccountId: string) => Promise<string>;
   getPublicVideoUrl: (videoAssetId: string) => Promise<string>;
+  quotaTracker?: TikTokPublishQuotaTracker;
   sleepMs?: (ms: number) => Promise<void>;
 }
 
@@ -55,6 +63,18 @@ function normalizePublishErrorMessage(error: unknown): string {
   return 'Unknown error';
 }
 
+export class TikTokPublishApiError extends Error {
+  readonly statusCode: number;
+  readonly errorCode: string | null;
+
+  constructor(message: string, options: { statusCode: number; errorCode?: string | null }) {
+    super(message);
+    this.name = 'TikTokPublishApiError';
+    this.statusCode = options.statusCode;
+    this.errorCode = options.errorCode ?? null;
+  }
+}
+
 export class TikTokUploadWorker {
   private readonly jobService: PublishJobService;
   private readonly campaignService: CampaignService;
@@ -64,6 +84,7 @@ export class TikTokUploadWorker {
   private readonly fetchStatusFn: TikTokFetchStatusFn;
   private readonly getAccessToken: (connectedAccountId: string) => Promise<string>;
   private readonly getPublicVideoUrl: (videoAssetId: string) => Promise<string>;
+  private readonly quotaTracker?: TikTokPublishQuotaTracker;
   private readonly sleepMs: (ms: number) => Promise<void>;
 
   constructor(options: TikTokUploadWorkerOptions) {
@@ -75,6 +96,7 @@ export class TikTokUploadWorker {
     this.fetchStatusFn = options.fetchStatusFn ?? tiktokFetchPublishStatus;
     this.getAccessToken = options.getAccessToken;
     this.getPublicVideoUrl = options.getPublicVideoUrl;
+    this.quotaTracker = options.quotaTracker;
     this.sleepMs = options.sleepMs ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   }
 
@@ -93,22 +115,36 @@ export class TikTokUploadWorker {
       return failedJob;
     }
 
+    const quotaDecision = this.quotaTracker?.canPublish(target.connectedAccountId);
+    if (quotaDecision && !quotaDecision.allowed) {
+      const errorMessage = quotaDecision.message ?? 'TikTok publish quota reached.';
+      const failedJob = await this.jobService.markFailed(job.id, errorMessage, {
+        errorClass: 'transient',
+      });
+      await this.campaignService.updateTargetStatus(target.campaignId, target.id, 'aguardando');
+      return failedJob;
+    }
+
     try {
       const accessToken = await this.getAccessToken(target.connectedAccountId);
-      const creatorInfo = await this.queryCreatorInfoFn(accessToken);
+      const creatorInfo = await this.withRateLimitBackoff(() => this.queryCreatorInfoFn(accessToken));
       const videoUrl = await this.getPublicVideoUrl(campaignVideoAssetId);
-      const publishResponse = await this.publishFn({
+      const publishResponse = await this.withRateLimitBackoff(() => this.publishFn({
         accessToken,
         videoUrl,
         title: buildTikTokTitle(target.videoTitle, target.videoDescription, target.tags),
-        privacy: selectTikTokPrivacyLevel(target.privacy, creatorInfo.privacyLevelOptions),
-      });
+        privacy: selectTikTokPrivacyLevel(target.tiktokPrivacyLevel ?? target.privacy, creatorInfo.privacyLevelOptions),
+        disableComment: target.tiktokDisableComment ?? false,
+        disableDuet: target.tiktokDisableDuet ?? false,
+        disableStitch: target.tiktokDisableStitch ?? false,
+      }));
 
       const completion = await this.waitForPublishCompletion(accessToken, publishResponse.publishId);
       const completedJob = await this.jobService.markCompleted(job.id, completion.publiclyAvailablePostId ?? publishResponse.publishId);
       await this.campaignService.updateTargetStatus(target.campaignId, target.id, 'publicado', {
         externalPublishId: completion.publiclyAvailablePostId ?? publishResponse.publishId,
       });
+      this.quotaTracker?.recordPublish(target.connectedAccountId);
 
       if (this.auditService) {
         await this.auditService.record({
@@ -123,7 +159,7 @@ export class TikTokUploadWorker {
     } catch (error) {
       const errorMessage = normalizePublishErrorMessage(error);
       const failedJob = await this.jobService.markFailed(job.id, errorMessage, {
-        errorClass: classifyPublishError(error),
+        errorClass: classifyTikTokError(error),
       });
       await this.campaignService.updateTargetStatus(target.campaignId, target.id, 'erro', {
         errorMessage,
@@ -143,8 +179,8 @@ export class TikTokUploadWorker {
   }
 
   private async waitForPublishCompletion(accessToken: string, publishId: string): Promise<TikTokPublishResult> {
-    for (let attempt = 0; attempt < 6; attempt += 1) {
-      const status = await this.fetchStatusFn(accessToken, publishId);
+    for (let attempt = 0; attempt < TIKTOK_MAX_STATUS_POLLS; attempt += 1) {
+      const status = await this.withRateLimitBackoff(() => this.fetchStatusFn(accessToken, publishId));
       if (status.status === 'PUBLISH_COMPLETE') {
         return {
           publishId,
@@ -156,12 +192,29 @@ export class TikTokUploadWorker {
         throw new Error(status.failReason?.trim() || 'TikTok publish failed.');
       }
 
-      if (attempt < 5) {
-        await this.sleepMs(5_000);
+      if (attempt < TIKTOK_MAX_STATUS_POLLS - 1) {
+        await this.sleepMs(TIKTOK_STATUS_POLL_DELAY_MS);
       }
     }
 
     return { publishId };
+  }
+
+  private async withRateLimitBackoff<T>(operation: () => Promise<T>): Promise<T> {
+    for (let attempt = 0; attempt <= TIKTOK_RATE_LIMIT_BACKOFF_MS.length; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        const hasRetry = attempt < TIKTOK_RATE_LIMIT_BACKOFF_MS.length;
+        if (!hasRetry || !isTikTokRateLimited(error)) {
+          throw error;
+        }
+
+        await this.sleepMs(TIKTOK_RATE_LIMIT_BACKOFF_MS[attempt]);
+      }
+    }
+
+    return operation();
   }
 }
 
@@ -183,13 +236,12 @@ function selectTikTokPrivacyLevel(
   campaignPrivacy: string,
   availableOptions: string[],
 ): string {
-  const normalized = campaignPrivacy.trim().toLowerCase();
   const options = new Set(availableOptions);
-  const preferred = normalized === 'public'
-    ? 'PUBLIC_TO_EVERYONE'
-    : normalized === 'unlisted'
-      ? 'FOLLOWER_OF_CREATOR'
-      : 'SELF_ONLY';
+  const preferred = mapCampaignPrivacyToTikTok(campaignPrivacy);
+
+  if (availableOptions.length === 0) {
+    return 'SELF_ONLY';
+  }
 
   if (options.has(preferred)) {
     return preferred;
@@ -205,6 +257,27 @@ function selectTikTokPrivacyLevel(
   }
 
   return fallback;
+}
+
+function mapCampaignPrivacyToTikTok(campaignPrivacy: string): string {
+  const rawPrivacy = campaignPrivacy.trim();
+  if (
+    rawPrivacy === 'PUBLIC_TO_EVERYONE' ||
+    rawPrivacy === 'FOLLOWER_OF_CREATOR' ||
+    rawPrivacy === 'SELF_ONLY'
+  ) {
+    return rawPrivacy;
+  }
+
+  const normalized = rawPrivacy.toLowerCase();
+  if (normalized === 'public') {
+    return 'PUBLIC_TO_EVERYONE';
+  }
+  if (normalized === 'unlisted') {
+    return 'FOLLOWER_OF_CREATOR';
+  }
+
+  return 'SELF_ONLY';
 }
 
 export async function tiktokQueryCreatorInfo(accessToken: string): Promise<TikTokCreatorInfo> {
@@ -238,9 +311,9 @@ export async function tiktokDirectPostFromUrl(context: TikTokPublishContext): Pr
       post_info: {
         title: context.title,
         privacy_level: context.privacy,
-        disable_duet: false,
-        disable_comment: false,
-        disable_stitch: false,
+        disable_duet: context.disableDuet,
+        disable_comment: context.disableComment,
+        disable_stitch: context.disableStitch,
       },
       source_info: {
         source: 'PULL_FROM_URL',
@@ -281,8 +354,8 @@ export async function tiktokFetchPublishStatus(
     throw new Error('TikTok publish status lookup did not return a status.');
   }
 
-  const postData = readObjectField(data, 'post.publish.publicly_available');
-  const publiclyAvailablePostId = readStringField(postData, 'post_id')
+  const publiclyAvailablePostId = readStringField(data, 'publicly_available_post_id')
+    ?? readFirstStringFromArray(data?.publicly_available_post_id)
     ?? readFirstStringFromArray(data?.publicaly_available_post_id)
     ?? null;
 
@@ -306,7 +379,10 @@ async function readTikTokJson(response: Response, fallbackMessage: string): Prom
     ?? readStringField(payload, 'message')
     ?? fallbackMessage;
 
-  throw new Error(message);
+  throw new TikTokPublishApiError(message, {
+    statusCode: response.status,
+    errorCode: code ?? readStringField(payload, 'code'),
+  });
 }
 
 function readObjectField(value: Record<string, unknown> | null | undefined, key: string): Record<string, unknown> | null {

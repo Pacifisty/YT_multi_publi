@@ -72,6 +72,10 @@ export class AccountsController {
     return this.startOauthForProvider('tiktok', request);
   }
 
+  async startInstagramOauth(request: SessionRequestLike): Promise<AccountsControllerResponse<{ error?: string; redirectUrl?: string }>> {
+    return this.startOauthForProvider('instagram', request);
+  }
+
   private async startOauthForProvider(
     provider: SupportedOauthProvider,
     request: SessionRequestLike,
@@ -100,7 +104,7 @@ export class AccountsController {
         },
       };
     } catch (error) {
-      const label = provider === 'tiktok' ? 'TikTok' : provider === 'youtube' ? 'YouTube' : 'Google';
+      const label = getProviderLabel(provider);
       const message = error instanceof Error ? error.message : `${label} OAuth start failed.`;
       return {
         status: 500,
@@ -125,6 +129,12 @@ export class AccountsController {
     request: AccountsRequest,
   ): Promise<AccountsControllerResponse<{ error?: string; account?: ConnectedAccountRecord; sync?: ChannelSyncSummary }>> {
     return this.handleOauthCallbackForProvider('tiktok', request);
+  }
+
+  async handleInstagramOauthCallback(
+    request: AccountsRequest,
+  ): Promise<AccountsControllerResponse<{ error?: string; account?: ConnectedAccountRecord; sync?: ChannelSyncSummary }>> {
+    return this.handleOauthCallbackForProvider('instagram', request);
   }
 
   private async handleOauthCallbackForProvider(
@@ -162,7 +172,7 @@ export class AccountsController {
         session: request.session as unknown as Record<string, unknown> | null | undefined,
       });
     } catch (error) {
-      const label = provider === 'tiktok' ? 'TikTok' : provider === 'youtube' ? 'YouTube' : 'Google';
+      const label = getProviderLabel(provider);
       const message = error instanceof Error ? error.message : `${label} OAuth callback failed.`;
       return {
         status: 500,
@@ -365,4 +375,18 @@ function buildChannelSyncSummary(channelCount: number): ChannelSyncSummary {
     channelCount: 0,
     message: 'No YouTube channels were returned. If you use Brand Accounts, sign in with the Google profile that owns them and try Sync channels again.',
   };
+}
+
+function getProviderLabel(provider: SupportedOauthProvider): string {
+  switch (provider) {
+    case 'youtube':
+      return 'YouTube';
+    case 'tiktok':
+      return 'TikTok';
+    case 'instagram':
+      return 'Instagram';
+    case 'google':
+    default:
+      return 'Google';
+  }
 }

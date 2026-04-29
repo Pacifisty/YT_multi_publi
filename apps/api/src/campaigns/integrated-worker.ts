@@ -3,6 +3,7 @@ import type { PublishJobService } from './publish-job.service';
 import type { AuditEventService } from './audit-event.service';
 import { YouTubeUploadWorker, type YouTubeUploadFn } from './youtube-upload.worker';
 import { TikTokUploadWorker } from './tiktok-upload.worker';
+import { InstagramUploadWorker } from './instagram-upload.worker';
 import { PlatformDispatchWorker } from './platform-dispatch.worker';
 import { JobRunner } from './job-runner';
 import {
@@ -30,6 +31,7 @@ export interface IntegratedWorkerInstance {
   uploadService: YouTubeUploadService;
   youtubeWorker: YouTubeUploadWorker;
   tiktokWorker: TikTokUploadWorker;
+  instagramWorker: InstagramUploadWorker;
 }
 
 export function createIntegratedWorker(options: IntegratedWorkerOptions): IntegratedWorkerInstance {
@@ -64,14 +66,27 @@ export function createIntegratedWorker(options: IntegratedWorkerOptions): Integr
     }),
   });
 
+  const instagramWorker = new InstagramUploadWorker({
+    jobService: options.jobService,
+    campaignService: options.campaignService,
+    auditService: options.auditService,
+    getAccessToken: options.getAccessTokenForConnectedAccount ?? (async () => {
+      throw new Error('Instagram publishing is not configured.');
+    }),
+    getPublicVideoUrl: options.getPublicVideoUrl ?? (async () => {
+      throw new Error('Public media URLs are not configured.');
+    }),
+  });
+
   const worker = new PlatformDispatchWorker({
     jobService: options.jobService,
     campaignService: options.campaignService,
     youtubeWorker,
     tiktokWorker,
+    instagramWorker,
   });
 
   const runner = new JobRunner({ worker });
 
-  return { worker, runner, uploadService, youtubeWorker, tiktokWorker };
+  return { worker, runner, uploadService, youtubeWorker, tiktokWorker, instagramWorker };
 }

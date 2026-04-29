@@ -2,12 +2,14 @@ import type { PublishJobRecord, PublishJobService } from './publish-job.service'
 import type { CampaignService, CampaignTargetRecord } from './campaign.service';
 import type { YouTubeUploadWorker } from './youtube-upload.worker';
 import type { TikTokUploadWorker } from './tiktok-upload.worker';
+import type { InstagramUploadWorker } from './instagram-upload.worker';
 
 export interface PlatformDispatchWorkerOptions {
   jobService: PublishJobService;
   campaignService: CampaignService;
   youtubeWorker: YouTubeUploadWorker;
   tiktokWorker: TikTokUploadWorker;
+  instagramWorker?: InstagramUploadWorker;
 }
 
 export class PlatformDispatchWorker {
@@ -15,12 +17,14 @@ export class PlatformDispatchWorker {
   private readonly campaignService: CampaignService;
   private readonly youtubeWorker: YouTubeUploadWorker;
   private readonly tiktokWorker: TikTokUploadWorker;
+  private readonly instagramWorker?: InstagramUploadWorker;
 
   constructor(options: PlatformDispatchWorkerOptions) {
     this.jobService = options.jobService;
     this.campaignService = options.campaignService;
     this.youtubeWorker = options.youtubeWorker;
     this.tiktokWorker = options.tiktokWorker;
+    this.instagramWorker = options.instagramWorker;
   }
 
   async processNext(): Promise<PublishJobRecord | null> {
@@ -45,6 +49,10 @@ export class PlatformDispatchWorker {
 
     if (target.platform === 'tiktok') {
       return this.tiktokWorker.processPickedJob(job, target, campaignResult.campaign.videoAssetId);
+    }
+
+    if (target.platform === 'instagram' && this.instagramWorker) {
+      return this.instagramWorker.processPickedJob(job, target, campaignResult.campaign.videoAssetId);
     }
 
     const failedJob = await this.jobService.markFailed(job.id, `Publishing for platform ${target.platform} is not implemented yet.`);

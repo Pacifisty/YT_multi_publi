@@ -184,7 +184,7 @@ describe('campaign wizard view', () => {
     expect(view.steps).toHaveLength(4);
     expect(view.steps.map((s) => s.label)).toEqual([
       'Select video',
-      'Select channels',
+      'Select destinations',
       'Metadata',
       'Review & launch',
     ]);
@@ -233,6 +233,7 @@ describe('campaign wizard view', () => {
         channelId: 'ch-1',
         channelTitle: 'Main Channel',
         thumbnailUrl: null,
+        platform: 'youtube',
         metadataFields: {
           videoTitle: { required: true },
           videoDescription: { required: true },
@@ -247,6 +248,7 @@ describe('campaign wizard view', () => {
         channelId: 'ch-2',
         channelTitle: 'Second Channel',
         thumbnailUrl: null,
+        platform: 'youtube',
         metadataFields: {
           videoTitle: { required: true },
           videoDescription: { required: true },
@@ -266,8 +268,49 @@ describe('campaign wizard view', () => {
 
     expect(reviewStep.label).toBe('Review & launch');
     expect(reviewStep.confirmationMessage).toBe(
-      'Tem certeza? Isso vai iniciar o upload para o YouTube.',
+      'Tem certeza? Isso vai iniciar a publicacao nas plataformas selecionadas.',
     );
+  });
+
+  test('metadata step exposes Instagram Reels controls for selected Instagram destinations', () => {
+    const view = buildCampaignWizardView({
+      availableVideos: wizardData.availableVideos,
+      availableChannels: [
+        ...wizardData.availableChannels,
+        {
+          id: 'ig-1',
+          title: '@studio',
+          thumbnailUrl: null,
+          isActive: true,
+          platform: 'instagram',
+          destinationId: 'ig-1',
+          destinationLabel: '@studio',
+          connectedAccountId: 'ig-1',
+        },
+      ],
+      selectedChannelIds: ['ig-1'],
+    });
+
+    const metadataStep = view.steps[2];
+
+    expect(metadataStep.metadataFields).toMatchObject({
+      instagramCaption: { required: false },
+      instagramShareToFeed: { required: false, options: ['true', 'false'] },
+    });
+    expect(metadataStep.channelMetadataSections).toEqual([
+      {
+        channelId: 'ig-1',
+        channelTitle: '@studio',
+        thumbnailUrl: null,
+        platform: 'instagram',
+        metadataFields: expect.objectContaining({
+          videoTitle: { required: true },
+          videoDescription: { required: true },
+          instagramCaption: { required: false },
+          instagramShareToFeed: { required: false, options: ['true', 'false'] },
+        }),
+      },
+    ]);
   });
 
   test('step 4 includes a preflight summary when draft selections are available', () => {
@@ -405,6 +448,69 @@ describe('campaign wizard view', () => {
       targets: [
         { id: 't1', campaignId: 'c1', channelId: 'ch-1' },
         { id: 't2', campaignId: 'c1', channelId: 'ch-2' },
+      ],
+    });
+  });
+
+  test('submits selected platform destinations with Instagram-specific metadata', async () => {
+    const client = {
+      createCampaign: vi.fn().mockResolvedValue({
+        ok: true,
+        campaign: { id: 'c1', title: 'Multi-platform campaign', status: 'draft' },
+      }),
+      addTargets: vi.fn().mockResolvedValue({
+        ok: true,
+        targets: [
+          { id: 't-yt', campaignId: 'c1', channelId: 'ch-1', platform: 'youtube' },
+          { id: 't-ig', campaignId: 'c1', destinationId: 'ig-1', platform: 'instagram' },
+        ],
+      }),
+    };
+
+    const result = await submitCampaignWizardDraft(client as any, {
+      title: 'Multi-platform campaign',
+      videoAssetId: 'video-1',
+      selectedDestinations: [
+        { id: 'ch-1', platform: 'youtube', destinationId: 'ch-1', destinationLabel: 'Main Channel' },
+        {
+          id: 'ig-1',
+          platform: 'instagram',
+          destinationId: 'ig-1',
+          destinationLabel: '@studio',
+          connectedAccountId: 'ig-1',
+        },
+      ],
+      targetTemplate: {
+        videoTitle: 'Upload Title',
+        videoDescription: 'Upload Description',
+        instagramCaption: 'Reels caption',
+        instagramShareToFeed: false,
+      },
+    });
+
+    expect(client.addTargets).toHaveBeenCalledWith('c1', [
+      {
+        channelId: 'ch-1',
+        videoTitle: 'Upload Title',
+        videoDescription: 'Upload Description',
+      },
+      {
+        platform: 'instagram',
+        destinationId: 'ig-1',
+        destinationLabel: '@studio',
+        connectedAccountId: 'ig-1',
+        videoTitle: 'Upload Title',
+        videoDescription: 'Upload Description',
+        instagramCaption: 'Reels caption',
+        instagramShareToFeed: false,
+      },
+    ]);
+    expect(result).toEqual({
+      ok: true,
+      campaign: { id: 'c1', title: 'Multi-platform campaign', status: 'draft' },
+      targets: [
+        { id: 't-yt', campaignId: 'c1', channelId: 'ch-1', platform: 'youtube' },
+        { id: 't-ig', campaignId: 'c1', destinationId: 'ig-1', platform: 'instagram' },
       ],
     });
   });

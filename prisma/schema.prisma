@@ -191,6 +191,7 @@ enum TargetStatus {
 /// Platform-specific campaign target
 /// - YouTube: channelId + playlistId
 /// - TikTok: connectedAccountId + privacyLevel + moderation settings
+/// - Instagram: connectedAccountId + caption/share-to-feed settings
 model CampaignTarget {
   id                   String       @id @default(cuid())
   campaignId           String       @map("campaign_id")
@@ -220,6 +221,10 @@ model CampaignTarget {
   tiktokDisableComment    Boolean?     @map("tiktok_disable_comment")   // Disable comments
   tiktokDisableDuet       Boolean?     @map("tiktok_disable_duet")      // Disable duets
   tiktokDisableStitch     Boolean?     @map("tiktok_disable_stitch")    // Disable stitches
+
+  // Instagram-specific fields (optional, null for other targets)
+  instagramCaption        String?      @map("instagram_caption")
+  instagramShareToFeed    Boolean?     @map("instagram_share_to_feed")
 
   createdAt            DateTime     @default(now()) @map("created_at")
   updatedAt            DateTime     @updatedAt @map("updated_at")

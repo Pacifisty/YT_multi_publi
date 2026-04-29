@@ -3,6 +3,7 @@ import {
   submitCampaignWizardDraft,
   type CampaignWizardDraftSubmissionInput,
   type CampaignWizardView,
+  type WizardDestinationPlatform,
 } from '../../../../components/campaigns/campaign-wizard';
 import type { AuthFetch } from '../../../../lib/auth-client';
 import { campaignsApiClient, type CampaignTargetData } from '../../../../lib/campaigns-client';
@@ -16,6 +17,10 @@ interface ComposerMediaAsset {
 
 interface ComposerAccount {
   id: string;
+  provider?: string;
+  email?: string;
+  displayName?: string;
+  status?: string;
 }
 
 interface ComposerChannel {
@@ -23,6 +28,10 @@ interface ComposerChannel {
   title: string;
   thumbnailUrl?: string | null;
   isActive: boolean;
+  platform?: WizardDestinationPlatform;
+  destinationId?: string;
+  destinationLabel?: string | null;
+  connectedAccountId?: string | null;
 }
 
 export interface CampaignComposerPageView {
@@ -31,6 +40,8 @@ export interface CampaignComposerPageView {
     availableVideoCount: number;
     availableChannelCount: number;
     activeChannelCount: number;
+    availableDestinationCount: number;
+    activeDestinationCount: number;
   };
   actions: {
     cancelHref: '/workspace/campanhas';
@@ -105,13 +116,20 @@ export async function buildCampaignComposerPage(options?: {
     ? accountsResult.body.accounts as ComposerAccount[]
     : [];
 
+  const channelAccounts = accounts.filter((account) => {
+    const provider = normalizeProvider(account.provider) ?? 'google';
+    return provider === 'youtube' || provider === 'google';
+  });
   const channelResults = await Promise.all(
-    accounts.map((account) => loadJson(fetcher, `/api/accounts/${account.id}/channels`)),
+    channelAccounts.map(async (account) => ({
+      account,
+      result: await loadJson(fetcher, `/api/accounts/${account.id}/channels`),
+    })),
   );
 
-  const failedChannelResult = channelResults.find((result) => !result.ok);
-  if (failedChannelResult && !failedChannelResult.ok) {
-    return { error: failedChannelResult.error };
+  const failedChannelResult = channelResults.find((entry) => !entry.result.ok);
+  if (failedChannelResult && !failedChannelResult.result.ok) {
+    return { error: failedChannelResult.result.error };
   }
 
   const availableVideos = (Array.isArray(mediaResult.body.assets) ? mediaResult.body.assets : [])
@@ -123,24 +141,33 @@ export async function buildCampaignComposerPage(options?: {
     }));
 
   const availableChannels = channelResults
-    .flatMap((result) => result.ok && Array.isArray(result.body.channels) ? result.body.channels as ComposerChannel[] : [])
+    .flatMap((entry) => entry.result.ok && Array.isArray(entry.result.body.channels) ? entry.result.body.channels as ComposerChannel[] : [])
     .map((channel) => ({
       id: channel.id,
       title: channel.title,
       thumbnailUrl: channel.thumbnailUrl ?? null,
       isActive: channel.isActive,
+      platform: 'youtube' as const,
+      destinationId: channel.id,
+      destinationLabel: channel.title,
     }));
 
-  const activeChannelCount = availableChannels.filter((channel) => channel.isActive).length;
+  const platformDestinations = accounts
+    .map(buildPlatformDestinationFromAccount)
+    .filter((destination): destination is NonNullable<ReturnType<typeof buildPlatformDestinationFromAccount>> => Boolean(destination));
+  const availableDestinations = [...availableChannels, ...platformDestinations];
+  const activeChannelCount = availableDestinations.filter((channel) => channel.isActive).length;
   const page: CampaignComposerPageView = {
     wizard: buildCampaignWizardView({
       availableVideos,
-      availableChannels,
+      availableChannels: availableDestinations,
     }),
     summary: {
       availableVideoCount: availableVideos.length,
-      availableChannelCount: availableChannels.length,
+      availableChannelCount: availableDestinations.length,
       activeChannelCount,
+      availableDestinationCount: availableDestinations.length,
+      activeDestinationCount: activeChannelCount,
     },
     actions: {
       cancelHref: '/workspace/campanhas',
@@ -157,14 +184,48 @@ export async function buildCampaignComposerPage(options?: {
     };
   } else if (activeChannelCount === 0) {
     page.emptyState = {
-      heading: 'No active channels available',
-      body: 'Activate at least one YouTube channel before creating a campaign.',
-      cta: 'Manage channels',
+      heading: 'No active destinations available',
+      body: 'Connect or activate at least one YouTube, TikTok, or Instagram destination before creating a campaign.',
+      cta: 'Manage accounts',
       ctaHref: '/workspace/accounts',
     };
   }
 
   return { page };
+}
+
+function normalizeProvider(provider?: string): WizardDestinationPlatform | 'google' | null {
+  const normalized = (provider ?? '').trim().toLowerCase();
+  if (normalized === 'youtube' || normalized === 'tiktok' || normalized === 'instagram' || normalized === 'google') {
+    return normalized;
+  }
+
+  return null;
+}
+
+function getPlatformLabel(platform: WizardDestinationPlatform): string {
+  if (platform === 'tiktok') return 'TikTok';
+  if (platform === 'instagram') return 'Instagram';
+  return 'YouTube';
+}
+
+function buildPlatformDestinationFromAccount(account: ComposerAccount): ComposerChannel | null {
+  const platform = normalizeProvider(account.provider);
+  if (platform !== 'tiktok' && platform !== 'instagram') {
+    return null;
+  }
+
+  const displayName = account.displayName?.trim() || account.email?.trim() || `${getPlatformLabel(platform)} account`;
+  return {
+    id: account.id,
+    title: displayName,
+    thumbnailUrl: null,
+    isActive: account.status !== 'reauth_required' && account.status !== 'disconnected',
+    platform,
+    destinationId: account.id,
+    destinationLabel: displayName,
+    connectedAccountId: account.id,
+  };
 }
 
 export async function submitCampaignComposerDraft(options: {

@@ -1,82 +1,84 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import axios from 'axios';
+
 import { TikTokApiClient, TikTokApiError } from './tiktok-api.client';
 
-vi.mock('axios');
-
 describe('TikTokApiClient', () => {
+  let fetchImpl: ReturnType<typeof vi.fn>;
   let client: TikTokApiClient;
-  let mockAxiosInstance: any;
 
   beforeEach(() => {
-    mockAxiosInstance = {
-      post: vi.fn(),
-    };
-    vi.mocked(axios.create).mockReturnValue(mockAxiosInstance);
-    client = new TikTokApiClient('test_token_123');
+    fetchImpl = vi.fn();
+    client = new TikTokApiClient('test_token_123', 'https://open.tiktokapis.com/v2', {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
   });
 
-  describe('constructor', () => {
-    it('should create axios instance with correct config', () => {
-      expect(axios.create).toHaveBeenCalledWith({
-        baseURL: 'https://open.tiktokapis.com/v1',
-        timeout: 30000,
+  it('posts with bearer auth and JSON headers', async () => {
+    fetchImpl.mockResolvedValueOnce(jsonResponse({
+      data: {
+        privacy_level_options: ['SELF_ONLY'],
+      },
+    }));
+
+    await client.queryCreatorInfo();
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://open.tiktokapis.com/v2/post/publish/creator_info/query/',
+      expect.objectContaining({
+        method: 'POST',
         headers: {
           Authorization: 'Bearer test_token_123',
           'Content-Type': 'application/json',
         },
-      });
+        body: '{}',
+      }),
+    );
+  });
+
+  it('accepts a custom base URL without duplicate slashes', async () => {
+    fetchImpl.mockResolvedValueOnce(jsonResponse({ data: { privacy_level_options: ['SELF_ONLY'] } }));
+    const customClient = new TikTokApiClient('token', 'https://custom.example.com/v2/', {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
     });
 
-    it('should accept custom baseURL', () => {
-      vi.mocked(axios.create).mockClear();
-      new TikTokApiClient('token', 'https://custom.com/v2');
-      const call = vi.mocked(axios.create).mock.calls[0][0];
-      expect(call.baseURL).toBe('https://custom.com/v2');
-    });
+    await customClient.queryCreatorInfo();
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://custom.example.com/v2/post/publish/creator_info/query/',
+      expect.any(Object),
+    );
   });
 
   describe('queryCreatorInfo', () => {
-    it('should query creator info and return privacy levels', async () => {
-      const mockResponse = {
+    it('returns privacy and interaction settings', async () => {
+      fetchImpl.mockResolvedValueOnce(jsonResponse({
         data: {
-          privacyLevelOptions: ['PUBLIC_TO_EVERYONE', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'],
+          privacy_level_options: ['PUBLIC_TO_EVERYONE', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'],
+          comment_disabled: true,
+          duet_disabled: false,
+          stitch_disabled: true,
         },
-      };
-      mockAxiosInstance.post.mockResolvedValue(mockResponse);
+      }));
 
-      const result = await client.queryCreatorInfo();
-
-      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/post/publish/creator_info/query/', {});
-      expect(result.privacyLevelOptions).toEqual([
-        'PUBLIC_TO_EVERYONE',
-        'FOLLOWER_OF_CREATOR',
-        'SELF_ONLY',
-      ]);
+      await expect(client.queryCreatorInfo()).resolves.toEqual({
+        privacyLevelOptions: ['PUBLIC_TO_EVERYONE', 'FOLLOWER_OF_CREATOR', 'SELF_ONLY'],
+        commentDisabled: true,
+        duetDisabled: false,
+        stitchDisabled: true,
+      });
     });
 
-    it('should return default privacy levels on empty response', async () => {
-      mockAxiosInstance.post.mockResolvedValue({ data: {} });
+    it('returns default privacy levels on empty response', async () => {
+      fetchImpl.mockResolvedValueOnce(jsonResponse({ data: {} }));
 
-      const result = await client.queryCreatorInfo();
-
-      expect(result.privacyLevelOptions).toEqual(['SELF_ONLY']);
-    });
-
-    it('should throw TikTokApiError on failure', async () => {
-      const error = new Error('API Error');
-      (error as any).response = {
-        status: 401,
-        data: { error: 'INVALID_TOKEN', message: 'Token expired' },
-      };
-      mockAxiosInstance.post.mockRejectedValue(error);
-
-      await expect(client.queryCreatorInfo()).rejects.toThrow(TikTokApiError);
+      await expect(client.queryCreatorInfo()).resolves.toMatchObject({
+        privacyLevelOptions: ['SELF_ONLY'],
+      });
     });
   });
 
   describe('initPublish', () => {
-    it('should initialize publish with URL source', async () => {
+    it('initializes publish with URL source', async () => {
       const params = {
         source: 'PULL_FROM_URL' as const,
         media_source_url: 'https://media.r2.com/video.mp4',
@@ -86,120 +88,103 @@ describe('TikTokApiClient', () => {
           disable_comment: false,
         },
       };
-      const mockResponse = {
+      fetchImpl.mockResolvedValueOnce(jsonResponse({
         data: {
           publish_id: 'publish-123',
           upload_url: 'https://upload.tiktok.com/video',
         },
-      };
-      mockAxiosInstance.post.mockResolvedValue(mockResponse);
+      }));
 
-      const result = await client.initPublish(params);
-
-      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/post/publish/video/init/', {
-        data: params,
+      await expect(client.initPublish(params)).resolves.toEqual({
+        publish_id: 'publish-123',
+        upload_url: 'https://upload.tiktok.com/video',
       });
-      expect(result.publish_id).toBe('publish-123');
-      expect(result.upload_url).toBe('https://upload.tiktok.com/video');
+      expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({ data: params });
     });
 
-    it('should return empty publish_id on null response', async () => {
-      mockAxiosInstance.post.mockResolvedValue({ data: {} });
+    it('returns empty publish_id on null response', async () => {
+      fetchImpl.mockResolvedValueOnce(jsonResponse({ data: {} }));
 
-      const result = await client.initPublish({
+      await expect(client.initPublish({
         source: 'PULL_FROM_URL',
         media_source_url: 'https://media.r2.com/video.mp4',
         post_info: { title: 'Test', privacy_level: 'PUBLIC_TO_EVERYONE' },
-      });
-
-      expect(result.publish_id).toBe('');
+      })).resolves.toMatchObject({ publish_id: '' });
     });
   });
 
   describe('fetchPublishStatus', () => {
-    it('should fetch publish status', async () => {
-      const mockResponse = {
+    it('fetches publish status', async () => {
+      fetchImpl.mockResolvedValueOnce(jsonResponse({
         data: {
           status: 'PUBLISH_COMPLETE',
           publicly_available_post_id: 'post-456',
         },
-      };
-      mockAxiosInstance.post.mockResolvedValue(mockResponse);
+      }));
 
-      const result = await client.fetchPublishStatus('publish-123');
-
-      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/post/publish/status/fetch/', {
+      await expect(client.fetchPublishStatus('publish-123')).resolves.toEqual({
+        status: 'PUBLISH_COMPLETE',
+        publicly_available_post_id: 'post-456',
+        fail_reason: undefined,
+      });
+      expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
         data: { publish_id: 'publish-123' },
       });
-      expect(result.status).toBe('PUBLISH_COMPLETE');
-      expect(result.publicly_available_post_id).toBe('post-456');
     });
 
-    it('should handle FAILED status with fail reason', async () => {
-      const mockResponse = {
-        data: {
-          status: 'FAILED',
-          fail_reason: 'Content policy violation',
-        },
-      };
-      mockAxiosInstance.post.mockResolvedValue(mockResponse);
+    it('handles failed and processing statuses', async () => {
+      fetchImpl
+        .mockResolvedValueOnce(jsonResponse({ data: { status: 'FAILED', fail_reason: 'Content policy violation' } }))
+        .mockResolvedValueOnce(jsonResponse({ data: { status: 'PROCESSING' } }));
 
-      const result = await client.fetchPublishStatus('publish-123');
-
-      expect(result.status).toBe('FAILED');
-      expect(result.fail_reason).toBe('Content policy violation');
-    });
-
-    it('should handle PROCESSING status', async () => {
-      const mockResponse = {
-        data: {
-          status: 'PROCESSING',
-        },
-      };
-      mockAxiosInstance.post.mockResolvedValue(mockResponse);
-
-      const result = await client.fetchPublishStatus('publish-123');
-
-      expect(result.status).toBe('PROCESSING');
+      await expect(client.fetchPublishStatus('publish-123')).resolves.toMatchObject({
+        status: 'FAILED',
+        fail_reason: 'Content policy violation',
+      });
+      await expect(client.fetchPublishStatus('publish-123')).resolves.toMatchObject({
+        status: 'PROCESSING',
+      });
     });
   });
 
   describe('error handling', () => {
-    it('should create TikTokApiError with status and error code', async () => {
-      const error = new Error('API Error');
-      (error as any).response = {
-        status: 429,
-        data: { error: 'RATE_LIMITED', message: 'Too many requests' },
-      };
-      mockAxiosInstance.post.mockRejectedValue(error);
+    it('creates TikTokApiError with status and error code', async () => {
+      fetchImpl.mockResolvedValueOnce(jsonResponse({
+        error: { code: 'RATE_LIMITED', message: 'Too many requests' },
+      }, 429));
 
-      const thrown = await expect(client.queryCreatorInfo()).rejects.toThrow(TikTokApiError);
-      await thrown.then((err) => {
-        expect(err.statusCode).toBe(429);
-        expect(err.errorCode).toBe('RATE_LIMITED');
-        expect(err.message).toBe('Too many requests');
+      await expect(client.queryCreatorInfo()).rejects.toMatchObject({
+        statusCode: 429,
+        errorCode: 'RATE_LIMITED',
+        message: 'Too many requests',
       });
     });
 
-    it('should handle non-axios errors', async () => {
-      const error = new Error('Network timeout');
-      mockAxiosInstance.post.mockRejectedValue(error);
+    it('handles network errors', async () => {
+      fetchImpl.mockRejectedValueOnce(new Error('Network timeout'));
 
-      const thrown = await expect(client.queryCreatorInfo()).rejects.toThrow(TikTokApiError);
-      await thrown.then((err) => {
-        expect(err.statusCode).toBe(500);
-        expect(err.errorCode).toBe('UNKNOWN_ERROR');
+      await expect(client.queryCreatorInfo()).rejects.toMatchObject({
+        statusCode: 500,
+        errorCode: 'UNKNOWN_ERROR',
+        message: 'Network timeout',
       });
     });
 
-    it('should handle unknown error types', async () => {
-      mockAxiosInstance.post.mockRejectedValue('String error');
+    it('handles unknown error types', async () => {
+      fetchImpl.mockRejectedValueOnce('String error');
 
-      const thrown = await expect(client.queryCreatorInfo()).rejects.toThrow(TikTokApiError);
-      await thrown.then((err) => {
-        expect(err.statusCode).toBe(500);
-        expect(err.errorCode).toBe('UNKNOWN_ERROR');
+      await expect(client.queryCreatorInfo()).rejects.toMatchObject({
+        statusCode: 500,
+        errorCode: 'UNKNOWN_ERROR',
       });
     });
   });
 });
+
+function jsonResponse(payload: Record<string, unknown>, status = 200): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => payload,
+  } as Response;
+}

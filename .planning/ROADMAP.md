@@ -12,6 +12,7 @@
 | 2 | TikTok Integration | Implement TikTok publishing | TIK-01 through TIK-04 | ✓ Complete |
 | 3 | Instagram Integration | Implement Instagram publishing | IG-01 through IG-03 | ✓ Complete |
 | 4 | Quality of Life | UX improvements + analytics | UX-01 through UX-03 | In Progress |
+| 5 | Launch Readiness | Go-live gates, verification, rollback playbooks | LR-01 through LR-03 | In Progress |
 
 ---
 
@@ -159,9 +160,9 @@
 - UX-03: Failed job dashboard
 
 **Plans:**
-- [ ] 04-01-PLAN.md — Failed Job Dashboard (complete: operations queue with retry/reauth/review actions)
-- [ ] 04-02-PLAN.md — Analytics Dashboard (platform and destination-level metrics)
-- [ ] 04-03-PLAN.md — Email Notifications (payment confirmation and campaign outcome emails)
+- [x] 04-01-PLAN.md — Failed Job Dashboard (complete: operations queue with retry/reauth/review actions)
+- [x] 04-02-PLAN.md — Analytics Dashboard (platform and destination-level metrics)
+- [x] 04-03-PLAN.md — Email Notifications (payment confirmation and campaign outcome emails)
 
 **Success Criteria:**
 1. ✓ User receives email when payment completes
@@ -186,7 +187,41 @@
 - **Total: ~4 days**
 
 ---
+## Phase 5: Launch Readiness
 
+**Goal:** Launch v1 with explicit release gates and a repeatable verification + rollback process.
+
+**Requirements:**
+- LR-01: Go-live verification suite
+- LR-02: Release gating checklist and ownership
+- LR-03: Rollback and incident playbooks
+
+**Plans:**
+- [ ] 05-01-PLAN.md - Go-Live Verification Suite
+- [ ] 05-02-PLAN.md - Release Gate and Ownership Matrix
+- [ ] 05-03-PLAN.md - Rollback and Incident Playbooks
+
+**Success Criteria:**
+1. Launch decision is based on recorded evidence, not ad-hoc checks
+2. Every launch gate has owner and fallback owner
+3. Rollback can be executed in under 30 minutes with a written playbook
+
+**Constraints:**
+- Must not block ongoing Phase 4 implementation
+- Must reuse existing tests/scripts before adding new automation
+- Production credentials and providers remain user-controlled
+
+**Dependencies:**
+- Phase 0-3 complete
+- Phase 4 can continue in parallel
+
+**Estimated Effort:**
+- Verification suite and runbook: 1 day
+- Release gates and ownership matrix: 1 day
+- Rollback and incident playbooks: 1 day
+- **Total: ~3 days**
+
+---
 ## Overall Timeline
 
 ```
@@ -195,9 +230,10 @@ Phase 1 (Infrastructure):             5 days          [✓ COMPLETE]
 Phase 2 (TikTok):                     6-7 days        [✓ COMPLETE]
 Phase 3 (Instagram):                  5-6 days        [✓ COMPLETE]
 Phase 4 (Quality of Life):            4 days          [IN PROGRESS]
+Phase 5 (Launch Readiness):           3 days          [IN PROGRESS]
                                       --------
-Total (planned):                      25-28 days
-Total (achieved by 2026-04-28):       87% complete
+Total (planned):                      28-31 days
+Total (achieved by 2026-04-28):       83% complete
 ```
 
 ## Milestone: v1 Public Launch
@@ -222,10 +258,10 @@ Total (achieved by 2026-04-28):       87% complete
 - **Phase 0 is critical path** — nothing ships until payment is reliable
 - **Phase 1 (infra) gates Phases 2-4** — all public platforms need HTTPS + storage
 - **Phases 2-3 run parallel** (after Phase 1), TikTok doesn't block Instagram
-- **Phase 4 splits into 3 slices** (failed jobs, analytics, email) for focused execution
+- **Phase 4 and Phase 5 run in parallel** (feature completion + release readiness)
 - **Success criteria are user-observable** (user can do X), not implementation details
 
 ---
 
 *Roadmap created: 2026-04-27 after requirements definition*  
-*Last updated: 2026-04-28 after Phase 4 planning*
+*Last updated: 2026-04-28 after Phase 5 kickoff planning*

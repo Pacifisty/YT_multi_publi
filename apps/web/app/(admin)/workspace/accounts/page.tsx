@@ -12,6 +12,7 @@ export interface AccountsPageView {
   connectUrls: {
     youtube: string;
     tiktok: string;
+    instagram: string;
   };
   emptyState?: {
     heading: string;
@@ -34,14 +35,15 @@ export function buildAccountsPageView(data: AccountsPageData): AccountsPageView 
     connectUrls: {
       youtube: '/accounts/oauth/youtube/start',
       tiktok: '/accounts/oauth/tiktok/start',
+      instagram: '/accounts/oauth/instagram/start',
     },
   };
 
   if (table.isEmpty) {
     view.emptyState = {
       heading: 'No accounts connected',
-      body: 'Connect YouTube or TikTok accounts to centralize your publishing workspace.',
-      ctas: ['Connect YouTube Account', 'Connect TikTok Account'],
+      body: 'Connect YouTube, TikTok, or Instagram accounts to centralize your publishing workspace.',
+      ctas: ['Connect YouTube Account', 'Connect TikTok Account', 'Connect Instagram Account'],
     };
   }
 

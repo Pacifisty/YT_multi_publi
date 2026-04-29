@@ -4,6 +4,72 @@ if (!root) {
   throw new Error('Missing app root container.');
 }
 
+/**
+ * Logo Animation Functions (Injected from logo-renderers.js)
+ * Renders animated SVG logos for YouTube, TikTok, Instagram
+ */
+const LOGO_STYLES = `
+<style id="logo-animations-style">
+  @keyframes youtubeEntrance {
+    0% { opacity: 0; transform: scale(0.7) rotate(-10deg); }
+    60% { opacity: 1; transform: scale(1.15) rotate(5deg); }
+    100% { opacity: 1; transform: scale(1) rotate(0deg); }
+  }
+  @keyframes tiktokEntrance {
+    0% { opacity: 0; transform: scale(0.5) rotate(-180deg); }
+    50% { opacity: 0.8; transform: scale(0.9) rotate(-45deg); }
+    85% { opacity: 1; transform: scale(1.1) rotate(0deg); }
+    100% { opacity: 1; transform: scale(1) rotate(0deg); }
+  }
+  @keyframes instagramEntrance {
+    0% { opacity: 0; transform: scale(0.3) translateY(20px); filter: brightness(0.8); }
+    50% { opacity: 0.7; filter: brightness(0.9); }
+    85% { transform: scale(1.1) translateY(-2px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); filter: brightness(1); }
+  }
+  @keyframes instagramShimmer {
+    0%, 100% { filter: brightness(1); }
+    50% { filter: brightness(1.2); }
+  }
+  .logo-animated { will-change: transform, opacity; transform-origin: center; display: inline-block; vertical-align: middle; }
+  .logo-youtube-animated { animation: youtubeEntrance 600ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+  .logo-tiktok-animated { animation: tiktokEntrance 700ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+  .logo-instagram-animated { animation: instagramEntrance 600ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards, instagramShimmer 1s ease-in-out 600ms forwards; }
+  @media (prefers-reduced-motion: reduce) {
+    .logo-youtube-animated, .logo-tiktok-animated, .logo-instagram-animated {
+      animation: none !important; opacity: 1 !important; transform: scale(1) !important; filter: brightness(1) !important;
+    }
+  }
+</style>
+`;
+
+function renderYouTubeLogo(size = 32) {
+  return `<svg class="logo-animated logo-youtube-animated" width="${size}" height="${size}" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="YouTube" style="will-change: transform, opacity;"><rect x="6" y="12" width="36" height="24" rx="4" ry="4" fill="#FF0000" /><path d="M 20 18 L 20 30 L 30 24 Z" fill="white" /></svg>`;
+}
+
+function renderTikTokLogo(size = 32) {
+  return `<svg class="logo-animated logo-tiktok-animated" width="${size}" height="${size}" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TikTok" style="will-change: transform, opacity;"><rect x="16" y="6" width="2" height="28" fill="#000000" /><circle cx="17" cy="32" r="4" fill="#000000" /><circle cx="23" cy="28" r="4" fill="#000000" /><circle cx="24" cy="24" r="18" fill="none" stroke="#25F4EE" stroke-width="2.5" opacity="0.8" /></svg>`;
+}
+
+function renderInstagramLogo(size = 32) {
+  return `<svg class="logo-animated logo-instagram-animated" width="${size}" height="${size}" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Instagram" style="will-change: transform, opacity, filter;"><defs><linearGradient id="instaGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#fd1d1d" /><stop offset="50%" stop-color="#f15245" /><stop offset="100%" stop-color="#d92e7f" /></linearGradient></defs><rect x="8" y="8" width="32" height="32" rx="8" ry="8" fill="url(#instaGrad)" /><circle cx="24" cy="24" r="10" fill="none" stroke="white" stroke-width="2.5" /><circle cx="24" cy="24" r="2.5" fill="white" /><circle cx="34" cy="14" r="1.5" fill="white" opacity="0.7" /></svg>`;
+}
+
+function renderAnimatedLogoByPlatform(platform, size = 32) {
+  const p = String(platform ?? '').toLowerCase().trim();
+  if (p === 'youtube') return renderYouTubeLogo(size);
+  if (p === 'tiktok') return renderTikTokLogo(size);
+  if (p === 'instagram') return renderInstagramLogo(size);
+  return '';
+}
+
+let logoStylesInjected = false;
+function injectLogoStyles() {
+  if (logoStylesInjected || !root) return;
+  root.insertAdjacentHTML('afterbegin', LOGO_STYLES);
+  logoStylesInjected = true;
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -243,16 +309,17 @@ const ACCOUNT_PLAN_OPTIONS = [
     id: 'PRO',
     label: 'Pro',
     priceLabel: 'R$ 49,90 / mês',
-    description: 'Plano completo para publicar em YouTube e TikTok.',
+    description: 'Plano completo para publicar em YouTube, TikTok e Instagram.',
     tokenSummary: 'ganho de 800 tokens todo mes na escolha deste plano',
     visitSummary: '+80 tokens por visita diaria',
-    platformSummary: 'YouTube + TikTok',
+    platformSummary: 'YouTube + TikTok + Instagram',
     featured: true,
     benefits: [
-      'Publicação no YouTube + TikTok',
+      'Publicação no YouTube + TikTok + Instagram',
       '800 tokens mensais',
       '+80 tokens por visita diária',
       'Thumbnails incluídas (sem custo extra)',
+      'Reels para Instagram',
       'Playlists com auto-rotação',
       'Agendamento aleatório avançado',
       'Suporte prioritário',
@@ -262,16 +329,16 @@ const ACCOUNT_PLAN_OPTIONS = [
     id: 'PREMIUM',
     label: 'Premium',
     priceLabel: 'R$ 99,90 / mês',
-    description: 'Potência máxima com tokens ilimitados e suporte dedicado 24/7.',
+    description: 'Potência máxima com tokens ilimitados, suporte 24/7 e todas as plataformas.',
     tokenSummary: 'ganho de 2000 tokens todo mes na escolha deste plano',
     visitSummary: '+200 tokens por visita diaria',
-    platformSummary: 'YouTube + TikTok',
+    platformSummary: 'YouTube + TikTok + Instagram',
     benefits: [
-      'Publicação no YouTube + TikTok',
+      'Publicação no YouTube + TikTok + Instagram',
       '2000 tokens mensais',
       '+200 tokens por visita diária',
       'Custo reduzido de 1 token por publicação',
-      'Thumbnails incluídas (sem custo extra)',
+      'Thumbnails + Reels inclusos',
       'Playlists ilimitadas com auto-rotação',
       'Agendamento aleatório avançado',
       'Geração de títulos por IA',
@@ -1038,6 +1105,12 @@ const PLATFORM_THEME_OPTIONS = [
     label: 'Redline',
     detail: 'YouTube mode',
   },
+  {
+    id: 'platform-instagram-gradient',
+    platform: 'instagram',
+    label: 'Gradient Dusk',
+    detail: 'Instagram mode',
+  },
 ];
 
 function readStoredBackgroundTheme() {
@@ -1065,7 +1138,7 @@ function readStoredFontTheme() {
 function readPendingOauthProvider() {
   try {
     const value = localStorage.getItem(OAUTH_PROVIDER_STORAGE_KEY);
-    return value === 'youtube' || value === 'google' || value === 'tiktok' ? value : null;
+    return value === 'youtube' || value === 'google' || value === 'tiktok' || value === 'instagram' ? value : null;
   } catch {
     return null;
   }
@@ -1180,9 +1253,11 @@ const api = {
   startGoogleOauth: () => apiRequest('GET', '/api/accounts/oauth/google/start'),
   startYouTubeOauth: () => apiRequest('GET', '/api/accounts/oauth/youtube/start'),
   startTikTokOauth: () => apiRequest('GET', '/api/accounts/oauth/tiktok/start'),
+  startInstagramOauth: () => apiRequest('GET', '/api/accounts/oauth/instagram/start'),
   accountOauthCallback: (code, stateParam) => apiRequest('GET', buildUrl('/api/accounts/oauth/google/callback', { code, state: stateParam })),
   accountYouTubeOauthCallback: (code, stateParam) => apiRequest('GET', buildUrl('/api/accounts/oauth/youtube/callback', { code, state: stateParam })),
   accountTikTokOauthCallback: (code, stateParam) => apiRequest('GET', buildUrl('/api/accounts/oauth/tiktok/callback', { code, state: stateParam })),
+  accountInstagramOauthCallback: (code, stateParam) => apiRequest('GET', buildUrl('/api/accounts/oauth/instagram/callback', { code, state: stateParam })),
   accountChannels: (accountId) => apiRequest('GET', `/api/accounts/${encodeURIComponent(accountId)}/channels`),
   syncAccountChannels: (accountId) => apiRequest('POST', `/api/accounts/${encodeURIComponent(accountId)}/channels/sync`),
   toggleChannel: (accountId, channelId, isActive) => apiRequest('PATCH', `/api/accounts/${encodeURIComponent(accountId)}/channels/${encodeURIComponent(channelId)}`, { isActive }),
@@ -1309,33 +1384,49 @@ function updateMediaPreviewSize(assetId, previewSize) {
 
 function settingsPickerHtml(prefix) {
   const selectedTheme = BACKGROUND_THEME_OPTIONS.find((option) => option.id === state.backgroundTheme) ?? BACKGROUND_THEME_OPTIONS[0];
-  const cardsHtml = BACKGROUND_THEME_OPTIONS.map((option) => {
+  const selectedFont = FONT_THEME_OPTIONS.find((option) => option.id === state.fontTheme) ?? FONT_THEME_OPTIONS[0];
+  const curatedThemeIds = ['platform-neon-night', 'deep-black-blue', 'clean-white'];
+  const curatedFontIds = ['black', 'lightgrey', 'turquoise', 'deeppink'];
+  const themePresets = curatedThemeIds
+    .map((id) => BACKGROUND_THEME_OPTIONS.find((option) => option.id === id))
+    .filter(Boolean);
+  if (!themePresets.some((option) => option.id === selectedTheme.id)) {
+    themePresets.unshift(selectedTheme);
+  }
+  const fontPresets = curatedFontIds
+    .map((id) => FONT_THEME_OPTIONS.find((option) => option.id === id))
+    .filter(Boolean);
+  if (!fontPresets.some((option) => option.id === selectedFont.id)) {
+    fontPresets.unshift(selectedFont);
+  }
+
+  const cardsHtml = themePresets.map((option) => {
     const selectedClass = option.id === state.backgroundTheme ? ' selected' : '';
     return `
       <button
         type="button"
-        class="background-card${selectedClass}"
+        class="style-preset-button${selectedClass}"
         data-background-theme-option="${option.id}"
-        style="--background-preview:${option.pageBackground};"
+        aria-pressed="${option.id === state.backgroundTheme ? 'true' : 'false'}"
+        style="--background-preview:${escapeAttribute(option.pageBackground)}; --preset-accent:${escapeAttribute(option.primary)};"
       >
-        <span class="background-card-preview" aria-hidden="true"></span>
-        <span class="background-card-body">
+        <span class="style-preset-preview" aria-hidden="true"></span>
+        <span class="style-preset-body">
           <strong>${escapeHtml(option.label)}</strong>
-          <span class="background-card-type">${escapeHtml(option.type)}</span>
-          <code>${escapeHtml(option.code)}</code>
           <small>${escapeHtml(option.description)}</small>
         </span>
       </button>
     `;
   }).join('');
 
-  const fontOptionsHtml = FONT_THEME_OPTIONS.map((option) => {
+  const fontOptionsHtml = fontPresets.map((option) => {
     const isSelected = option.id === state.fontTheme ? ' active' : '';
     return `
       <button
         type="button"
         class="font-theme-button${isSelected}"
         data-font-theme-id="${option.id}"
+        aria-pressed="${option.id === state.fontTheme ? 'true' : 'false'}"
         title="${escapeHtml(option.label)}"
         style="--color: ${option.color}"
       >
@@ -1346,28 +1437,36 @@ function settingsPickerHtml(prefix) {
   }).join('');
 
   return `
-    <details class="settings-picker">
+    <details class="settings-picker compact-settings">
       <summary class="theme-toggle-btn">
-        ⚙ Settings
+        Settings
         <span class="background-picker-current">${escapeHtml(selectedTheme.label)}</span>
       </summary>
-      <div class="settings-panel">
+      <div class="settings-panel settings-panel-compact">
+        <div
+          class="settings-preview-card"
+          style="--background-preview:${escapeAttribute(selectedTheme.pageBackground)}; --preset-accent:${escapeAttribute(selectedTheme.primary)}; --text-preview:${escapeAttribute(selectedFont.color)};"
+        >
+          <span>Workspace visual</span>
+          <strong>${escapeHtml(selectedTheme.label)}</strong>
+          <small>${escapeHtml(selectedTheme.type)} / ${escapeHtml(selectedFont.label)}</small>
+        </div>
         <div class="settings-section">
           <div class="settings-section-header">
-            <strong>Text color</strong>
-            <span class="muted">Applies globally.</span>
+            <strong>Visual mode</strong>
+            <span class="muted">3 presets</span>
           </div>
-          <div class="font-theme-grid">
-            ${fontOptionsHtml}
+          <div class="style-preset-grid">
+            ${cardsHtml}
           </div>
         </div>
         <div class="settings-section">
           <div class="settings-section-header">
-            <strong>Background</strong>
-            <span class="muted">Live preview on select.</span>
+            <strong>Text tint</strong>
+            <span class="muted">4 choices</span>
           </div>
-          <div class="background-grid">
-            ${cardsHtml}
+          <div class="font-theme-grid font-theme-grid-compact">
+            ${fontOptionsHtml}
           </div>
         </div>
       </div>
@@ -1461,7 +1560,7 @@ function renderUiNotice() {
         ${state.uiNotice.title ? `<h4>${escapeHtml(state.uiNotice.title)}</h4>` : ''}
         ${state.uiNotice.message ? `<p>${escapeHtml(state.uiNotice.message)}</p>` : ''}
       </div>
-      <button class="btn notice-dismiss-btn" type="button" data-action="dismiss-ui-notice">Dismiss</button>
+      <button class="button button-secondary notice-dismiss-btn" type="button" data-action="dismiss-ui-notice">Dismiss</button>
     </div>
   `;
 }
@@ -1511,8 +1610,8 @@ function showModal({
     const actionsHtml = showCancelButton || showConfirmButton
       ? `
         <div class="inline-actions modal-actions">
-          ${showCancelButton ? `<button class="btn" type="button" data-role="modal-cancel">${escapeHtml(cancelLabel)}</button>` : ''}
-          ${showConfirmButton ? `<button class="btn-primary" type="submit" data-role="modal-confirm">${escapeHtml(confirmLabel)}</button>` : ''}
+          ${showCancelButton ? `<button class="button button-secondary" type="button" data-role="modal-cancel">${escapeHtml(cancelLabel)}</button>` : ''}
+          ${showConfirmButton ? `<button class="button button-primary" type="submit" data-role="modal-confirm">${escapeHtml(confirmLabel)}</button>` : ''}
         </div>
       `
       : '';
@@ -1908,6 +2007,17 @@ function renderPlatformGlyph(platform, extraClass = '') {
           </svg>
         </span>
       `;
+    case 'instagram':
+      return `
+        <span class="${className}" aria-hidden="true">
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3" y="3" width="18" height="18" rx="5.4" fill="#d62976" />
+            <path d="M5.7 17.4c2.7 1.5 6.7 1.8 9.5.4 2.4-1.2 3.4-3.3 3.7-5.6" fill="none" stroke="#feda75" stroke-width="2" stroke-linecap="round" opacity="0.9" />
+            <circle cx="12" cy="12" r="4" fill="none" stroke="#ffffff" stroke-width="2" />
+            <circle cx="16.8" cy="7.2" r="1.2" fill="#ffffff" />
+          </svg>
+        </span>
+      `;
     case 'youtube':
     default:
       return `
@@ -2000,8 +2110,8 @@ function renderLoginPage(options = {}) {
           ${combinedNoticeHtml}
           <div class="platform-classic-form-header">
             <div class="auth-mode-switch" role="tablist" aria-label="Authentication mode">
-              <button class="${mode === 'login' ? 'btn-primary' : 'btn'}" type="button" data-auth-mode="login">Sign in</button>
-              <button class="${mode === 'register' ? 'btn-primary' : 'btn'}" type="button" data-auth-mode="register">Create account</button>
+              <button class="button ${mode === 'login' ? 'button-primary' : 'button-secondary'}" type="button" data-auth-mode="login">Sign in</button>
+              <button class="button ${mode === 'register' ? 'button-primary' : 'button-secondary'}" type="button" data-auth-mode="register">Create account</button>
             </div>
             <h2>${escapeHtml(title)}</h2>
             <p>${escapeHtml(subtitle)}</p>
@@ -2021,10 +2131,10 @@ function renderLoginPage(options = {}) {
               Password
               <input name="password" type="password" required autocomplete="${mode === 'register' ? 'new-password' : 'current-password'}" />
             </label>
-            <button class="btn-primary" type="submit">${escapeHtml(submitLabel)}</button>
+            <button class="button button-primary" type="submit">${escapeHtml(submitLabel)}</button>
           </form>
           <div class="auth-divider"><span>or</span></div>
-          <button id="google-auth-btn" class="btn" type="button">Continue with Google</button>
+          <button id="google-auth-btn" class="button button-secondary" type="button">Continue with Google</button>
           <p class="footnote">${mode === 'register'
             ? 'After the account is created, the next step is choosing the plan for the workspace.'
             : 'If this is your first Google access, the platform will ask you to choose a plan before opening the workspace.'}</p>
@@ -2530,8 +2640,8 @@ function renderModernLoginPage(options = {}) {
               <div class="platform-stepper">${stepperHtml}</div>
             </div>
             <div class="auth-mode-switch" role="tablist" aria-label="Authentication mode">
-              <button class="${mode === 'login' ? 'btn-primary' : 'btn'}" type="button" data-auth-mode="login">Sign in</button>
-              <button class="${mode === 'register' ? 'btn-primary' : 'btn'}" type="button" data-auth-mode="register">Create account</button>
+              <button class="button ${mode === 'login' ? 'button-primary' : 'button-secondary'}" type="button" data-auth-mode="login">Sign in</button>
+              <button class="button ${mode === 'register' ? 'button-primary' : 'button-secondary'}" type="button" data-auth-mode="register">Create account</button>
             </div>
           </div>
 
@@ -2560,11 +2670,11 @@ function renderModernLoginPage(options = {}) {
                 </div>
               </label>
               <div class="platform-login-action-row">
-                <button id="google-auth-btn" class="btn platform-button-ghost" type="button">
+                <button id="google-auth-btn" class="button button-ghost platform-button-ghost" type="button">
                   ${renderGoogleGlyph('small')}
                   Continue with Google
                 </button>
-                <button class="btn-primary platform-button-primary" type="submit">${escapeHtml(submitLabel)}</button>
+                <button class="button button-primary platform-button-primary" type="submit">${escapeHtml(submitLabel)}</button>
               </div>
             </form>
           ` : `
@@ -2576,8 +2686,8 @@ function renderModernLoginPage(options = {}) {
                 </div>
               </label>
               <div class="platform-login-action-row">
-                <button id="platform-login-back" class="btn" type="button">Back</button>
-                <button class="btn-primary platform-button-primary" type="submit">${escapeHtml(submitLabel)}</button>
+                <button id="platform-login-back" class="button button-secondary" type="button">Back</button>
+                <button class="button button-primary platform-button-primary" type="submit">${escapeHtml(submitLabel)}</button>
               </div>
             </form>
           `}
@@ -2898,6 +3008,10 @@ async function renderGoogleAuthCallbackPage() {
 function renderPlanCard(option, selectedPlan) {
   const isSelected = option.id === selectedPlan;
   const isPremium = option.id === 'PREMIUM';
+  const hasPremiumPlatforms = option.id === 'PRO' || option.id === 'PREMIUM';
+  const platformIcons = hasPremiumPlatforms
+    ? `${renderPlatformGlyph('youtube')}${renderPlatformGlyph('tiktok')}${renderPlatformGlyph('instagram')}`
+    : renderPlatformGlyph('youtube');
   const benefitsHtml = (option.benefits ?? []).map(
     (b) => `<li class="plan-benefit"><span class="plan-benefit__check">✓</span><span>${escapeHtml(b)}</span></li>`
   ).join('');
@@ -2912,10 +3026,13 @@ function renderPlanCard(option, selectedPlan) {
         <div class="plan-price">${escapeHtml(option.priceLabel)}</div>
         <p class="muted plan-description">${escapeHtml(option.description)}</p>
       </div>
+      <div style="display: flex; gap: 0.4rem; margin-bottom: 0.5rem;">
+        ${platformIcons}
+      </div>
       <ul class="plan-benefits plan-benefits--compact">
         ${benefitsHtml}
       </ul>
-      <button class="${option.featured || isPremium ? 'btn-primary' : 'btn'}" type="button" data-action="select-onboarding-plan" data-plan-id="${escapeHtml(option.id)}">
+      <button class="button ${option.featured || isPremium ? 'button-primary' : 'button-secondary'}" type="button" data-action="select-onboarding-plan" data-plan-id="${escapeHtml(option.id)}">
         ${isSelected ? 'Plano selecionado' : `Escolher ${escapeHtml(option.label)}`}
       </button>
     </article>
@@ -2927,10 +3044,10 @@ function renderWorkspacePlanCard(option, account) {
   const canUpgrade = !isCurrentPlan;
   const isFeatured = option.id === 'PRO';
   const isPremium = option.id === 'PREMIUM';
-  const hasTikTok = option.id === 'PRO' || option.id === 'PREMIUM';
+  const hasPremiumPlatforms = option.id === 'PRO' || option.id === 'PREMIUM';
 
-  const platformIcons = hasTikTok
-    ? `${renderPlatformGlyph('youtube')}${renderPlatformGlyph('tiktok')}`
+  const platformIcons = hasPremiumPlatforms
+    ? `${renderPlatformGlyph('youtube')}${renderPlatformGlyph('tiktok')}${renderPlatformGlyph('instagram')}`
     : renderPlatformGlyph('youtube');
 
   const benefitsHtml = (option.benefits ?? []).map(
@@ -2967,8 +3084,8 @@ function renderWorkspacePlanCard(option, account) {
         </div>
       ` : ''}
       ${canUpgrade
-        ? `<button class="${isFeatured || isPremium ? 'btn-primary' : 'btn'}" type="button" data-action="upgrade-plan" data-plan-id="${escapeHtml(option.id)}">Assinar ${escapeHtml(option.label)}</button>`
-        : '<button class="btn" type="button" disabled>Plano ativo</button>'}
+        ? `<button class="button ${isFeatured || isPremium ? 'button-primary' : 'button-secondary'}" type="button" data-action="upgrade-plan" data-plan-id="${escapeHtml(option.id)}">Assinar ${escapeHtml(option.label)}</button>`
+        : '<button class="button button-secondary" type="button" disabled>Plano ativo</button>'}
     </article>
   `;
 }
@@ -3035,7 +3152,7 @@ async function renderPlanosPage(options = {}) {
               <strong>R$ ${pack.priceBrl.toFixed(2).replace('.', ',')}</strong>
             </header>
             <p><strong>${pack.tokens}</strong> tokens</p>
-            <button class="btn primary" data-action="buy-token-pack" data-pack-id="${escapeHtml(pack.id)}">Comprar</button>
+            <button class="button button-primary" data-action="buy-token-pack" data-pack-id="${escapeHtml(pack.id)}">Comprar</button>
           </article>
         `).join('')}
       </div>
@@ -3337,6 +3454,170 @@ function unauthorizedRedirect() {
   navigate('/login', true);
 }
 
+function renderPublicLandingPage() {
+  root.innerHTML = `
+    <div class="public-landing">
+      <header class="public-nav">
+        <a class="public-brand" href="/" data-link aria-label="Platform Multi Publisher">
+          <span class="public-brand-mark">PMP</span>
+          <span>
+            <strong>Platform Multi Publisher</strong>
+            <small>YouTube, TikTok e Instagram</small>
+          </span>
+        </a>
+        <nav class="public-nav-links" aria-label="Conteudo principal">
+          <a href="#plataformas">Plataformas</a>
+          <a href="#dashboard-publico">Dashboard</a>
+          <a href="#seo-base">SEO</a>
+        </nav>
+        <div class="public-nav-actions">
+          <a class="public-link" href="/login" data-link>Entrar</a>
+          <a class="public-button" href="/login?mode=register" data-link>Criar conta</a>
+        </div>
+      </header>
+
+      <main>
+        <section class="public-hero">
+          <div class="public-hero-copy">
+            <p class="public-eyebrow">Automacao visual para criadores e equipes</p>
+            <h1>Platform Multi Publisher</h1>
+            <p class="public-hero-text">
+              Planeje campanhas, organize midias e publique videos em YouTube, TikTok e Instagram a partir de um unico workspace com dashboard operacional.
+            </p>
+            <div class="public-hero-actions">
+              <a class="public-button public-button-large" href="/login?mode=register" data-link>Comecar agora</a>
+              <a class="public-secondary-button" href="/login" data-link>Acessar workspace</a>
+            </div>
+            <div class="public-proof-row" aria-label="Recursos principais">
+              <span>Campanhas por plataforma</span>
+              <span>Biblioteca de midias</span>
+              <span>Fila de publicacao</span>
+            </div>
+          </div>
+
+          <div class="public-preview" data-platform="youtube" aria-label="Preview operacional do produto">
+            <div class="public-preview-toolbar" role="tablist" aria-label="Escolha de plataforma">
+              <button type="button" class="active" data-landing-platform="youtube">YouTube</button>
+              <button type="button" data-landing-platform="tiktok">TikTok</button>
+              <button type="button" data-landing-platform="instagram">Instagram</button>
+            </div>
+            <div class="public-preview-screen">
+              <div class="public-metric-line">
+                <span>Campanhas ativas</span>
+                <strong>24</strong>
+              </div>
+              <div class="public-channel-rail">
+                <span class="rail rail-youtube"></span>
+                <span class="rail rail-tiktok"></span>
+                <span class="rail rail-instagram"></span>
+              </div>
+              <div class="public-preview-panels">
+                <article data-landing-panel="youtube">
+                  <span class="platform-dot youtube"></span>
+                  <h2>YouTube</h2>
+                  <p>Videos, Shorts, thumbnails, playlists e destinos do canal no mesmo fluxo de campanha.</p>
+                </article>
+                <article data-landing-panel="tiktok" hidden>
+                  <span class="platform-dot tiktok"></span>
+                  <h2>TikTok</h2>
+                  <p>Publicacoes curtas, privacidade, fila de envio e reautenticacao acompanhadas pelo dashboard.</p>
+                </article>
+                <article data-landing-panel="instagram" hidden>
+                  <span class="platform-dot instagram"></span>
+                  <h2>Instagram</h2>
+                  <p>Reels com legenda, conta conectada e status de publicacao vistos junto das outras redes.</p>
+                </article>
+              </div>
+              <div class="public-job-grid" aria-label="Estados de publicacao">
+                <span data-state="ready">Ready</span>
+                <span data-state="sending">Sending</span>
+                <span data-state="published">Published</span>
+                <span data-state="risk">Review</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="plataformas" class="public-section">
+          <div class="public-section-head">
+            <p class="public-eyebrow">Operacao multi canal</p>
+            <h2>Uma campanha, varias redes, menos retrabalho.</h2>
+          </div>
+          <div class="public-feature-grid">
+            <article>
+              <span class="platform-dot youtube"></span>
+              <h3>YouTube</h3>
+              <p>Controle canais, playlists, thumbnails e publicacoes com historico de jobs.</p>
+            </article>
+            <article>
+              <span class="platform-dot tiktok"></span>
+              <h3>TikTok</h3>
+              <p>Centralize conta, privacidade, tentativas de envio e bloqueios de autenticacao.</p>
+            </article>
+            <article>
+              <span class="platform-dot instagram"></span>
+              <h3>Instagram</h3>
+              <p>Leve Reels para dentro do mesmo planejamento usado pelas outras plataformas.</p>
+            </article>
+          </div>
+        </section>
+
+        <section id="dashboard-publico" class="public-section public-dashboard-strip">
+          <div>
+            <p class="public-eyebrow">Dashboard de projeto</p>
+            <h2>Veja saude, fila, midias e riscos antes da publicacao sair do trilho.</h2>
+          </div>
+          <div class="public-stat-board" aria-label="Resumo visual do dashboard">
+            <div><strong>92</strong><span>health</span></div>
+            <div><strong>61</strong><span>targets</span></div>
+            <div><strong>14</strong><span>destinos</span></div>
+            <div><strong>3</strong><span>alertas</span></div>
+          </div>
+        </section>
+
+        <section id="seo-base" class="public-section public-seo-section">
+          <div class="public-section-head">
+            <p class="public-eyebrow">Base para aparecer no Google</p>
+            <h2>Pagina publica, sitemap, robots e metadados prontos para indexacao.</h2>
+          </div>
+          <div class="public-check-grid">
+            <span>Conteudo indexavel na raiz</span>
+            <span>Sitemap XML publico</span>
+            <span>Robots com areas privadas bloqueadas</span>
+            <span>Title, description e dados estruturados</span>
+          </div>
+        </section>
+      </main>
+
+      <footer class="public-footer">
+        <span>Platform Multi Publisher</span>
+        <a href="/login?mode=register" data-link>Criar workspace</a>
+      </footer>
+    </div>
+  `;
+
+  bindPublicLandingInteractions();
+}
+
+function bindPublicLandingInteractions() {
+  const preview = document.querySelector('.public-preview');
+  const buttons = Array.from(document.querySelectorAll('[data-landing-platform]'));
+  const panels = Array.from(document.querySelectorAll('[data-landing-panel]'));
+
+  buttons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const platform = button.getAttribute('data-landing-platform');
+      if (!platform || !preview) return;
+
+      preview.setAttribute('data-platform', platform);
+      buttons.forEach((item) => item.classList.toggle('active', item === button));
+      panels.forEach((panel) => {
+        panel.hidden = panel.getAttribute('data-landing-panel') !== platform;
+      });
+    });
+  });
+}
+
 function normalizeLabel(value) {
   return String(value ?? '')
     .replace(/[_-]+/g, ' ')
@@ -3452,6 +3733,8 @@ function getAccountPlatformKey(provider) {
   switch ((provider ?? '').toLowerCase()) {
     case 'tiktok':
       return 'tiktok';
+    case 'instagram':
+      return 'instagram';
     case 'youtube':
     case 'google':
     default:
@@ -3474,6 +3757,8 @@ function getProviderLabel(provider) {
       return 'YouTube';
     case 'tiktok':
       return 'TikTok';
+    case 'instagram':
+      return 'Instagram';
     case 'google':
     default:
       return 'Google';
@@ -3487,7 +3772,7 @@ function supportsChannels(provider) {
 
 function isSupportedWorkspaceProvider(provider) {
   const normalized = (provider ?? '').toLowerCase();
-  return normalized === 'google' || normalized === 'youtube' || normalized === 'tiktok';
+  return normalized === 'google' || normalized === 'youtube' || normalized === 'tiktok' || normalized === 'instagram';
 }
 
 function buildMediaAssetFileUrl(assetId) {
@@ -3509,7 +3794,7 @@ function renderMediaPreviewSizePicker(assetId, previewSizeLabel, previewSize) {
 
   return `
     <details class="media-preview-picker">
-      <summary class="btn">Display: ${escapeHtml(previewSizeLabel)}</summary>
+      <summary class="button button-secondary">Display: ${escapeHtml(previewSizeLabel)}</summary>
       <div class="media-preview-picker-menu">
         ${sizeOptionsHtml}
       </div>
@@ -3522,8 +3807,8 @@ function renderMediaFileActionLinks(asset) {
   const fileName = asset.original_name ?? asset.id;
 
   return `
-    <a class="btn" href="${escapeAttribute(fileUrl)}" target="_blank" rel="noopener noreferrer">Open</a>
-    <a class="btn" href="${escapeAttribute(fileUrl)}" download="${escapeAttribute(fileName)}">Download</a>
+    <a class="button button-secondary" href="${escapeAttribute(fileUrl)}" target="_blank" rel="noopener noreferrer">Open</a>
+    <a class="button button-secondary" href="${escapeAttribute(fileUrl)}" download="${escapeAttribute(fileName)}">Download</a>
   `;
 }
 
@@ -3721,7 +4006,7 @@ function summarizeCampaignOutcomes(campaign) {
   let reauthRequired = 0;
 
   for (const target of targets) {
-    if (target.status === 'publicado' && target.youtubeVideoId) {
+    if (target.status === 'publicado' && (target.youtubeVideoId || target.externalPublishId)) {
       published += 1;
       continue;
     }
@@ -3878,7 +4163,653 @@ function buildOdGlobe() {
   return _odGlobeCache;
 }
 
+function dashboardNumber(value) {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function dashboardStatusHref(status) {
+  return status ? buildUrl('/workspace/campanhas', { status }) : '/workspace/campanhas';
+}
+
+function dashboardFailureReasonLabel(reason) {
+  switch (reason) {
+    case 'quota_exceeded':
+      return 'Quota exceeded';
+    case 'post_upload_step_failed':
+      return 'Post upload step';
+    case 'other_failure':
+      return 'Other failure';
+    default:
+      return 'No failures';
+  }
+}
+
+function dashboardPlatformLabel(platform) {
+  switch ((platform ?? '').toLowerCase()) {
+    case 'youtube':
+      return 'YouTube';
+    case 'tiktok':
+      return 'TikTok';
+    case 'instagram':
+      return 'Instagram';
+    default:
+      return normalizeLabel(platform || 'Unknown');
+  }
+}
+
+function bindDashboardInteractions() {
+  const dashboardRoot = document.getElementById('od-root');
+  if (!dashboardRoot) return;
+
+  dashboardRoot.querySelectorAll('[data-dashboard-mode]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const mode = button.getAttribute('data-dashboard-mode') || 'overview';
+      dashboardRoot.setAttribute('data-mode', mode);
+      dashboardRoot.querySelectorAll('[data-dashboard-mode]').forEach((item) => {
+        item.classList.toggle('active', item.getAttribute('data-dashboard-mode') === mode);
+      });
+    });
+  });
+
+  dashboardRoot.querySelectorAll('[data-action="dashboard-refresh"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      setButtonBusy(button, true, '...');
+      void renderPlatformDashboardPage();
+    });
+  });
+}
+
 async function renderPlatformDashboardPage() {
+  let result;
+  let campaignsResult;
+  let mediaResult;
+  let accountsResult;
+  let playlistsResult;
+  let destinationsResult;
+
+  try {
+    [result, campaignsResult, mediaResult, accountsResult, playlistsResult, destinationsResult] = await Promise.all([
+      api.dashboard(),
+      api.campaigns({ limit: 50, offset: 0 }),
+      api.media(),
+      api.accounts(),
+      api.playlists(),
+      loadConnectedPublishDestinations(),
+    ]);
+  } catch (error) {
+    renderWorkspaceShell({
+      title: 'Dashboard',
+      subtitle: 'Campaign health and operational summaries.',
+      noticeHtml: `<div class="notice error">${escapeHtml(error?.message ?? 'Dashboard request failed')}</div>`,
+      contentHtml: '<section class="card">Unable to load dashboard data.</section>',
+    });
+    return;
+  }
+
+  const authFailure = [result, campaignsResult, mediaResult, accountsResult, playlistsResult, destinationsResult]
+    .find((entry) => entry && !entry.ok && entry.status === 401);
+  if (authFailure) {
+    unauthorizedRedirect();
+    return;
+  }
+
+  if (!result.ok) {
+    renderWorkspaceShell({
+      title: 'Dashboard',
+      subtitle: 'Campaign health and operational summaries.',
+      noticeHtml: `<div class="notice error">${escapeHtml(result.error)}</div>`,
+      contentHtml: '<section class="card">Unable to load dashboard data.</section>',
+    });
+    return;
+  }
+
+  const stats = result.body ?? {};
+  const campaignsByStatus = stats?.campaigns?.byStatus ?? {};
+  const targetsByStatus = stats?.targets?.byStatus ?? {};
+  const jobsByStatus = stats?.jobs?.byStatus ?? {};
+  const channels = Array.isArray(stats?.channels) ? [...stats.channels] : [];
+  const campaigns = campaignsResult?.ok && Array.isArray(campaignsResult.body?.campaigns)
+    ? campaignsResult.body.campaigns
+    : [];
+  const assets = mediaResult?.ok && Array.isArray(mediaResult.body?.assets) ? mediaResult.body.assets : [];
+  const accounts = accountsResult?.ok && Array.isArray(accountsResult.body?.accounts)
+    ? accountsResult.body.accounts.filter((account) => isSupportedWorkspaceProvider(account.provider))
+    : [];
+  const playlists = playlistsResult?.ok && Array.isArray(playlistsResult.body?.playlists) ? playlistsResult.body.playlists : [];
+  const destinations = destinationsResult?.ok && Array.isArray(destinationsResult.destinations) ? destinationsResult.destinations : [];
+
+  const liveClock = formatClockLabel();
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const campaignTotal = dashboardNumber(stats?.campaigns?.total ?? campaignsResult?.body?.total ?? campaigns.length);
+  const targetTotal = dashboardNumber(stats?.targets?.total);
+  const publishedTargets = dashboardNumber(targetsByStatus.publicado);
+  const failedTargets = dashboardNumber(targetsByStatus.erro);
+  const waitingTargets = dashboardNumber(targetsByStatus.aguardando);
+  const sendingTargets = dashboardNumber(targetsByStatus.enviando);
+  const activeJobs = dashboardNumber(jobsByStatus.queued) + dashboardNumber(jobsByStatus.processing);
+  const successRate = dashboardNumber(stats?.targets?.successRate);
+  const completionRate = targetTotal > 0 ? ((publishedTargets + failedTargets) / targetTotal) * 100 : 0;
+  const quotaWarningState = stats?.quota?.warningState ?? 'healthy';
+  const quotaTone = quotaWarningState === 'critical' ? 'danger' : quotaWarningState === 'warning' ? 'warning' : 'info';
+  const projectedQuota = dashboardNumber(stats?.quota?.projectedPercent);
+  const reauthBlockedTargets = dashboardNumber(stats?.reauth?.blockedTargets);
+  const totalStorageBytes = assets.reduce((sum, asset) => sum + dashboardNumber(asset.size_bytes), 0);
+  const totalDurationSeconds = assets.reduce((sum, asset) => sum + dashboardNumber(asset.duration_seconds), 0);
+  const videoAssets = assets.filter((asset) => asset.asset_type === 'video');
+  const thumbnailAssets = assets.filter((asset) => asset.asset_type === 'thumbnail');
+  const shortVideos = videoAssets.filter((asset) => getVideoPublishFormat(asset) === 'short').length;
+  const standardVideos = videoAssets.filter((asset) => getVideoPublishFormat(asset) === 'standard').length;
+  const connectedAccounts = accounts.filter((account) => account.status === 'connected').length;
+  const reauthAccounts = accounts.filter((account) => account.status === 'reauth_required').length;
+  const disconnectedAccounts = accounts.filter((account) => account.status === 'disconnected').length;
+  const todayLaunches = campaigns.filter((campaign) => {
+    const value = campaign.scheduledAt ? new Date(campaign.scheduledAt).getTime() : NaN;
+    return Number.isFinite(value) && value >= todayStart && value < todayStart + 86400000;
+  }).length;
+  const nextCampaign = campaigns
+    .filter((campaign) => campaign.scheduledAt && new Date(campaign.scheduledAt).getTime() > now.getTime())
+    .sort((left, right) => new Date(left.scheduledAt).getTime() - new Date(right.scheduledAt).getTime())[0] ?? null;
+
+  const platformTargets = { youtube: 0, tiktok: 0, instagram: 0 };
+  for (const campaign of campaigns) {
+    for (const target of campaign.targets ?? []) {
+      const platform = (target.platform ?? 'youtube').toLowerCase();
+      platformTargets[platform] = (platformTargets[platform] ?? 0) + 1;
+    }
+  }
+  const platformDestinations = destinations.reduce((acc, destination) => {
+    const platform = (destination.platform ?? 'youtube').toLowerCase();
+    acc[platform] = (acc[platform] ?? 0) + 1;
+    return acc;
+  }, {});
+  const providerAccounts = accounts.reduce((acc, account) => {
+    const platform = getAccountPlatformKey(account.provider);
+    acc[platform] = (acc[platform] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  const quotaPenalty = Math.min(35, projectedQuota * 0.35);
+  const failurePenalty = targetTotal > 0 ? Math.min(28, (failedTargets / targetTotal) * 100 * 0.32) : 0;
+  const reauthPenalty = Math.min(22, reauthBlockedTargets * 7);
+  const queueSignal = activeJobs > 0 ? 3 : 0;
+  const healthScore = Math.round(clampPercent(92 - quotaPenalty - failurePenalty - reauthPenalty + queueSignal));
+  const healthTone = healthScore < 58 ? 'danger' : healthScore < 78 ? 'warning' : 'success';
+  const selectedBackgroundTheme = getSelectedBackgroundTheme();
+
+  const rankedChannels = [...channels].sort((left, right) => {
+    const leftTopViews = dashboardNumber(left?.topVideoViews);
+    const rightTopViews = dashboardNumber(right?.topVideoViews);
+    if (rightTopViews !== leftTopViews) return rightTopViews - leftTopViews;
+    const leftTotalViews = dashboardNumber(left?.totalViews);
+    const rightTotalViews = dashboardNumber(right?.totalViews);
+    if (rightTotalViews !== leftTotalViews) return rightTotalViews - leftTotalViews;
+    return dashboardNumber(right?.published) - dashboardNumber(left?.published);
+  });
+
+  function buildModeButton(mode, label, detail) {
+    return `
+      <button type="button" class="od-mode-btn${mode === 'overview' ? ' active' : ''}" data-dashboard-mode="${escapeHtml(mode)}">
+        <strong>${escapeHtml(label)}</strong>
+        <span>${escapeHtml(detail)}</span>
+      </button>
+    `;
+  }
+
+  function buildKpiCard({ label, value, detail, tone = 'info', href = '', ring = null }) {
+    const tag = href ? 'a' : 'article';
+    const hrefAttr = href ? ` href="${escapeHtml(href)}" data-link` : '';
+    const ringHtml = ring === null
+      ? ''
+      : `<span class="od-mini-ring" style="--ring:${clampPercent(ring)}" aria-hidden="true"></span>`;
+    return `
+      <${tag} class="od-kpi-card" data-tone="${escapeHtml(tone)}"${hrefAttr}>
+        <span class="od-kpi-label od-mono">${escapeHtml(label)}</span>
+        <strong>${escapeHtml(value)}</strong>
+        <span class="od-kpi-detail">${escapeHtml(detail)}</span>
+        ${ringHtml}
+      </${tag}>
+    `;
+  }
+
+  function buildStatusStack(title, entries, emptyLabel) {
+    const total = Math.max(1, entries.reduce((sum, item) => sum + dashboardNumber(item.count), 0));
+    const rows = entries
+      .filter((item) => dashboardNumber(item.count) > 0)
+      .map((item) => {
+        const pct = clampPercent((dashboardNumber(item.count) / total) * 100);
+        return `
+          <a class="od-stack-row" data-tone="${escapeHtml(item.tone)}" href="${escapeHtml(item.href)}" data-link>
+            <span>${escapeHtml(item.label)}</span>
+            <strong class="od-mono">${formatNumber(item.count)}</strong>
+            <span class="od-stack-track"><span class="od-stack-fill" style="width:${pct}%"></span></span>
+          </a>
+        `;
+      }).join('');
+
+    return `
+      <div class="od-status-stack">
+        <div class="od-stack-title od-mono">${escapeHtml(title)}</div>
+        ${rows || `<p class="od-muted">${escapeHtml(emptyLabel)}</p>`}
+      </div>
+    `;
+  }
+
+  function buildSparkline() {
+    const days = [];
+    for (let index = 11; index >= 0; index -= 1) {
+      const dayStart = todayStart - index * 86400000;
+      const dayEnd = dayStart + 86400000;
+      const count = campaigns.filter((campaign) => {
+        const timestamp = new Date(campaign.scheduledAt ?? campaign.createdAt ?? 0).getTime();
+        return timestamp >= dayStart && timestamp < dayEnd;
+      }).length;
+      days.push({
+        count,
+        label: new Date(dayStart).toLocaleDateString([], { month: 'short', day: 'numeric' }),
+      });
+    }
+    const max = Math.max(1, ...days.map((day) => day.count));
+    return `
+      <div class="od-spark-bars" aria-label="Campaign rhythm">
+        ${days.map((day, index) => `
+          <span class="od-spark-col" title="${escapeAttribute(`${day.label}: ${day.count}`)}">
+            <span class="od-spark-fill${index === days.length - 1 ? ' today' : ''}" style="height:${clampPercent((day.count / max) * 100)}%"></span>
+          </span>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function buildPlatformMix() {
+    const platforms = ['youtube', 'tiktok', 'instagram'];
+    const max = Math.max(1, ...platforms.map((platform) => dashboardNumber(platformTargets[platform]) + dashboardNumber(platformDestinations[platform])));
+    return platforms.map((platform) => {
+      const targetCount = dashboardNumber(platformTargets[platform]);
+      const destinationCount = dashboardNumber(platformDestinations[platform]);
+      const accountCount = dashboardNumber(providerAccounts[platform]);
+      const pct = clampPercent(((targetCount + destinationCount) / max) * 100);
+      return `
+        <a class="od-platform-row ${escapeHtml(platform)}" href="${escapeHtml(buildUrl('/workspace/accounts', { search: dashboardPlatformLabel(platform) }))}" data-link>
+          <span class="od-platform-icon">${renderPlatformGlyph(platform, 'small')}</span>
+          <span class="od-platform-copy">
+            <strong>${escapeHtml(dashboardPlatformLabel(platform))}</strong>
+            <small>${formatNumber(targetCount)} targets / ${formatNumber(destinationCount)} destinations / ${formatNumber(accountCount)} accounts</small>
+            <span class="od-platform-meter"><span style="width:${pct}%"></span></span>
+          </span>
+        </a>
+      `;
+    }).join('');
+  }
+
+  function buildMediaComposition() {
+    const total = Math.max(1, assets.length);
+    const otherAssets = Math.max(0, assets.length - videoAssets.length - thumbnailAssets.length);
+    const pieces = [
+      { label: 'Video', count: videoAssets.length, tone: 'info' },
+      { label: 'Thumb', count: thumbnailAssets.length, tone: 'warning' },
+      { label: 'Other', count: otherAssets, tone: 'neutral' },
+    ];
+    return `
+      <div class="od-composition">
+        <div class="od-composition-bar">
+          ${pieces.map((piece) => `<span data-tone="${escapeHtml(piece.tone)}" style="width:${clampPercent((piece.count / total) * 100)}%"></span>`).join('')}
+        </div>
+        <div class="od-composition-legend">
+          ${pieces.map((piece) => `<span>${escapeHtml(piece.label)} <strong>${formatNumber(piece.count)}</strong></span>`).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  function buildChannelLeaderboard() {
+    if (rankedChannels.length === 0) {
+      return '<p class="od-muted">Connect accounts and publish targets to unlock channel ranking.</p>';
+    }
+    const maxViews = Math.max(1, ...rankedChannels.map((channel) => dashboardNumber(channel?.topVideoViews)));
+    return rankedChannels.slice(0, 7).map((channel, index) => {
+      const label = channel?.channelId ?? 'Unknown destination';
+      const topVideoViews = dashboardNumber(channel?.topVideoViews);
+      const totalViews = dashboardNumber(channel?.totalViews);
+      const pct = clampPercent((topVideoViews / maxViews) * 100);
+      return `
+        <a class="od-leader-row od-leader-link" href="${escapeHtml(buildUrl('/workspace/accounts', { search: label }))}" data-link>
+          <span class="od-leader-rank od-mono">${String(index + 1).padStart(2, '0')}</span>
+          <span class="od-leader-main">
+            <strong>${escapeHtml(label)}</strong>
+            <small class="od-leader-sub">${escapeHtml(channel?.topVideoTitle ?? channel?.topVideoId ?? 'No YouTube view data yet')}</small>
+            <span class="od-leader-bar-track"><span class="od-leader-bar-fill" style="width:${pct}%"></span></span>
+          </span>
+          <span class="od-leader-pub od-mono">${formatNumber(topVideoViews)} top / ${formatNumber(totalViews)} total</span>
+        </a>
+      `;
+    }).join('');
+  }
+
+  function buildRecentCampaigns() {
+    if (campaigns.length === 0) {
+      return '<p class="od-muted">No campaigns yet. Create one to populate the command timeline.</p>';
+    }
+    return campaigns.slice(0, 8).map((campaign) => {
+      const outcome = summarizeCampaignOutcomes(campaign);
+      const progress = outcome.total > 0 ? ((outcome.published + outcome.failed) / outcome.total) * 100 : 0;
+      return `
+        <a class="od-campaign-row" href="/workspace/campanhas/${encodeURIComponent(campaign.id)}" data-link>
+          <span class="od-campaign-status" data-tone="${escapeHtml(statusTone(campaign.status))}"></span>
+          <span class="od-campaign-copy">
+            <strong>${escapeHtml(campaign.title ?? 'Untitled campaign')}</strong>
+            <small>${escapeHtml(normalizeLabel(campaign.status))} / ${formatNumber(outcome.published)} published / ${formatNumber(outcome.failed)} failed / ${formatNumber(outcome.pending)} pending</small>
+            <span class="od-campaign-meter"><span style="width:${clampPercent(progress)}%"></span></span>
+          </span>
+          <span class="od-campaign-date od-mono">${escapeHtml(campaign.scheduledAt ? formatDate(campaign.scheduledAt) : 'No schedule')}</span>
+        </a>
+      `;
+    }).join('');
+  }
+
+  function buildAuditList() {
+    const entries = Object.entries(stats?.audit?.byType ?? {})
+      .filter(([, count]) => dashboardNumber(count) > 0)
+      .sort((left, right) => dashboardNumber(right[1]) - dashboardNumber(left[1]))
+      .slice(0, 8);
+    if (entries.length === 0) {
+      return '<p class="od-muted">No audit activity recorded yet.</p>';
+    }
+    const max = Math.max(1, ...entries.map(([, count]) => dashboardNumber(count)));
+    return entries.map(([eventType, count]) => `
+      <div class="od-audit-row">
+        <span>${escapeHtml(normalizeLabel(eventType))}</span>
+        <strong class="od-mono">${formatNumber(count)}</strong>
+        <span class="od-stack-track"><span class="od-stack-fill" style="width:${clampPercent((dashboardNumber(count) / max) * 100)}%"></span></span>
+      </div>
+    `).join('');
+  }
+
+  function buildRiskList() {
+    const reasons = Array.isArray(stats?.failures?.reasons) ? stats.failures.reasons : [];
+    const blockedIds = Array.isArray(stats?.reauth?.blockedChannelIds) ? stats.reauth.blockedChannelIds : [];
+    const riskItems = [
+      {
+        label: 'Failed targets',
+        value: failedTargets,
+        detail: dashboardFailureReasonLabel(stats?.failures?.topReason),
+        tone: failedTargets > 0 ? 'danger' : 'success',
+      },
+      {
+        label: 'Reauth blocks',
+        value: reauthBlockedTargets,
+        detail: blockedIds.slice(0, 2).join(', ') || 'All credentials clear',
+        tone: reauthBlockedTargets > 0 ? 'warning' : 'success',
+      },
+      {
+        label: 'Retries',
+        value: dashboardNumber(stats?.jobs?.totalRetries),
+        detail: stats?.retries?.hotspotChannelId ? `Hotspot ${stats.retries.hotspotChannelId}` : 'No hotspot',
+        tone: dashboardNumber(stats?.jobs?.totalRetries) > 0 ? 'warning' : 'success',
+      },
+      {
+        label: 'Quota pressure',
+        value: formatPercent(projectedQuota),
+        detail: `${formatNumber(stats?.quota?.estimatedRemainingUnits ?? 0)} units remaining`,
+        tone: quotaTone,
+      },
+    ];
+    const reasonRows = reasons.length === 0
+      ? '<p class="od-muted">No failure reasons recorded.</p>'
+      : reasons.map((entry) => `
+          <div class="od-reason-row">
+            <span>${escapeHtml(dashboardFailureReasonLabel(entry.reason))}</span>
+            <strong class="od-mono">${formatNumber(entry.count)}</strong>
+          </div>
+        `).join('');
+
+    return `
+      <div class="od-risk-grid">
+        ${riskItems.map((item) => `
+          <div class="od-risk-card" data-tone="${escapeHtml(item.tone)}">
+            <span class="od-kpi-label od-mono">${escapeHtml(item.label)}</span>
+            <strong>${escapeHtml(String(item.value))}</strong>
+            <small>${escapeHtml(item.detail)}</small>
+          </div>
+        `).join('')}
+      </div>
+      <div class="od-reason-list">${reasonRows}</div>
+    `;
+  }
+
+  const campaignStatusEntries = [
+    { label: 'Draft', count: campaignsByStatus.draft, tone: 'neutral', href: dashboardStatusHref('draft') },
+    { label: 'Ready', count: campaignsByStatus.ready, tone: 'info', href: dashboardStatusHref('ready') },
+    { label: 'Launching', count: campaignsByStatus.launching, tone: 'warning', href: dashboardStatusHref('launching') },
+    { label: 'Completed', count: campaignsByStatus.completed, tone: 'success', href: dashboardStatusHref('completed') },
+    { label: 'Failed', count: campaignsByStatus.failed, tone: 'danger', href: dashboardStatusHref('failed') },
+  ];
+  const targetStatusEntries = [
+    { label: 'Waiting', count: waitingTargets, tone: 'neutral', href: '/workspace/campanhas' },
+    { label: 'Sending', count: sendingTargets, tone: 'warning', href: '/workspace/campanhas' },
+    { label: 'Published', count: publishedTargets, tone: 'success', href: '/workspace/campanhas' },
+    { label: 'Error', count: failedTargets, tone: 'danger', href: '/workspace/campanhas' },
+  ];
+  const jobStatusEntries = [
+    { label: 'Queued', count: jobsByStatus.queued, tone: 'warning', href: '/workspace/campanhas' },
+    { label: 'Processing', count: jobsByStatus.processing, tone: 'info', href: '/workspace/campanhas' },
+    { label: 'Completed', count: jobsByStatus.completed, tone: 'success', href: '/workspace/campanhas' },
+    { label: 'Failed', count: jobsByStatus.failed, tone: 'danger', href: '/workspace/campanhas' },
+  ];
+
+  const warningBannerHtml = quotaWarningState !== 'healthy'
+    ? `<div class="od-warning-banner" data-tone="${escapeHtml(quotaTone)}">Quota ${escapeHtml(quotaWarningState)}: ${formatPercent(projectedQuota)} projected of ${formatNumber(stats?.quota?.dailyLimitUnits ?? 0)} units.</div>`
+    : '';
+
+  const contentHtml = `
+    <div id="od-root" class="od-root od-dashboard-pro" data-mode="overview">
+      <div class="od-bracket od-bracket-tl"></div>
+      <div class="od-bracket od-bracket-tr"></div>
+      <div class="od-bracket od-bracket-bl"></div>
+      <div class="od-bracket od-bracket-br"></div>
+      <div class="od-bg-globe-field" aria-hidden="true">
+        <div class="od-bg-globe od-bg-globe-secondary">${buildOdGlobe()}</div>
+        <div class="od-bg-globe">${buildOdGlobe()}</div>
+      </div>
+
+      <div class="od-topbar od-command-topbar">
+        <div>
+          <div class="od-brand od-mono">PLATFORM COMMAND</div>
+          <span id="od-theme-name" class="od-muted od-mono">THEME: ${escapeHtml(selectedBackgroundTheme.label)}</span>
+        </div>
+        <div class="od-mode-switch" role="tablist" aria-label="Dashboard view">
+          ${buildModeButton('overview', 'Overview', 'health')}
+          ${buildModeButton('flow', 'Flow', 'targets')}
+          ${buildModeButton('library', 'Library', 'assets')}
+          ${buildModeButton('risk', 'Risk', 'alerts')}
+        </div>
+        <div class="od-topbar-right od-muted od-mono">
+          <span class="od-live-dot"></span>${escapeHtml(liveClock)}
+          <button type="button" class="od-refresh-button od-mono" data-action="dashboard-refresh">Refresh</button>
+        </div>
+      </div>
+
+      ${warningBannerHtml}
+
+      <section class="od-command-hero">
+        <div class="od-hero-copy od-panel">
+          <span class="od-kpi-label od-mono">Workspace pulse</span>
+          <h1>Every campaign, account, queue and asset in one live cockpit.</h1>
+          <p class="od-muted">Today: ${formatNumber(todayLaunches)} launches / next: ${escapeHtml(nextCampaign ? `${nextCampaign.title} at ${formatDate(nextCampaign.scheduledAt)}` : 'no scheduled campaign')}</p>
+          <div class="od-hero-actions">
+            <a class="platform-button-primary" data-link href="/workspace/campanhas/nova">Create campaign</a>
+            <a class="button button-secondary" data-link href="/workspace/accounts">Accounts</a>
+            <a class="button button-secondary" data-link href="/workspace/media">Media</a>
+          </div>
+          ${buildSparkline()}
+        </div>
+        <div class="od-hero-ring od-panel" data-tone="${escapeHtml(healthTone)}">
+          <div class="od-health-ring" style="--ring:${healthScore}">
+            <span>${formatNumber(healthScore)}</span>
+            <small>health</small>
+          </div>
+          <div class="od-health-metrics">
+            <div><span>Success</span><strong>${formatPercent(successRate)}</strong></div>
+            <div><span>Complete</span><strong>${formatPercent(completionRate)}</strong></div>
+            <div><span>Quota</span><strong>${formatPercent(projectedQuota)}</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="od-kpi-grid">
+        ${buildKpiCard({ label: 'Campaigns', value: formatNumber(campaignTotal), detail: `${formatNumber(campaignsByStatus.launching ?? 0)} launching`, href: '/workspace/campanhas', ring: completionRate })}
+        ${buildKpiCard({ label: 'Targets', value: formatNumber(targetTotal), detail: `${formatNumber(publishedTargets)} published`, tone: 'success', href: '/workspace/campanhas', ring: successRate })}
+        ${buildKpiCard({ label: 'Queue', value: formatNumber(activeJobs), detail: `${formatNumber(stats?.jobs?.total ?? 0)} jobs tracked`, tone: activeJobs > 0 ? 'warning' : 'info', href: '/workspace/campanhas', ring: activeJobs > 0 ? 72 : 12 })}
+        ${buildKpiCard({ label: 'Accounts', value: formatNumber(connectedAccounts), detail: `${formatNumber(destinations.length)} active destinations`, tone: reauthAccounts > 0 ? 'warning' : 'info', href: '/workspace/accounts', ring: accounts.length > 0 ? (connectedAccounts / accounts.length) * 100 : 0 })}
+        ${buildKpiCard({ label: 'Assets', value: formatNumber(assets.length), detail: `${formatBytes(totalStorageBytes)} stored`, tone: 'info', href: '/workspace/media', ring: assets.length > 0 ? (videoAssets.length / assets.length) * 100 : 0 })}
+        ${buildKpiCard({ label: 'Tokens', value: formatNumber(state.account?.tokens ?? 0), detail: state.account ? `Plan ${state.account.planLabel ?? '-'}` : 'No plan', tone: 'success', href: '/workspace/planos', ring: Math.min(100, dashboardNumber(state.account?.tokens ?? 0) / 5) })}
+      </section>
+
+      <section class="od-dashboard-section" data-dashboard-panel="overview">
+        <div class="od-dashboard-main">
+          <div class="od-panel od-flow-panel">
+            <div class="od-panel-head">
+              <span class="od-panel-label od-mono">Campaign and target flow</span>
+              <span class="od-panel-meta od-muted od-mono">${formatNumber(targetTotal)} targets</span>
+            </div>
+            <div class="od-flow-grid">
+              ${buildStatusStack('Campaign lifecycle', campaignStatusEntries, 'No campaigns yet.')}
+              ${buildStatusStack('Target delivery', targetStatusEntries, 'No targets yet.')}
+              ${buildStatusStack('Job queue', jobStatusEntries, 'No jobs yet.')}
+            </div>
+          </div>
+          <div class="od-panel od-platform-panel">
+            <div class="od-panel-head">
+              <span class="od-panel-label od-mono">Platform mix</span>
+              <span class="od-panel-meta od-muted od-mono">${formatNumber(destinations.length)} destinations</span>
+            </div>
+            ${buildPlatformMix()}
+          </div>
+        </div>
+        <div class="od-dashboard-main">
+          <div class="od-panel">
+            <div class="od-panel-head">
+              <span class="od-panel-label od-mono">Destination leaderboard</span>
+              <span class="od-panel-meta od-muted od-mono">views and delivery</span>
+            </div>
+            ${buildChannelLeaderboard()}
+          </div>
+          <div class="od-panel">
+            <div class="od-panel-head">
+              <span class="od-panel-label od-mono">Recent campaigns</span>
+              <span class="od-panel-meta od-muted od-mono">latest 8</span>
+            </div>
+            <div class="od-campaign-list">${buildRecentCampaigns()}</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="od-dashboard-section" data-dashboard-panel="flow">
+        <div class="od-dashboard-main">
+          <div class="od-panel">
+            <div class="od-panel-head">
+              <span class="od-panel-label od-mono">Delivery lanes</span>
+              <span class="od-panel-meta od-muted od-mono">${formatPercent(successRate)} success</span>
+            </div>
+            <div class="od-lane-grid">
+              ${buildStatusStack('Targets', targetStatusEntries, 'No target lane data.')}
+              ${buildStatusStack('Jobs', jobStatusEntries, 'No job lane data.')}
+            </div>
+          </div>
+          <div class="od-panel">
+            <div class="od-panel-head">
+              <span class="od-panel-label od-mono">Quota forecast</span>
+              <span class="od-panel-meta od-muted od-mono">${formatNumber(stats?.quota?.dailyLimitUnits ?? 0)} daily limit</span>
+            </div>
+            <div class="od-quota-large">
+              <span class="od-quota-large-track">
+                <span class="od-quota-large-used" style="width:${clampPercent(stats?.quota?.usagePercent ?? 0)}%"></span>
+                <span class="od-quota-large-projected" style="width:${clampPercent(projectedQuota)}%"></span>
+              </span>
+              <div class="od-health-metrics">
+                <div><span>Used</span><strong>${formatNumber(stats?.quota?.estimatedConsumedUnits ?? 0)}</strong></div>
+                <div><span>Queued</span><strong>${formatNumber(stats?.quota?.estimatedQueuedUnits ?? 0)}</strong></div>
+                <div><span>Remaining</span><strong>${formatNumber(stats?.quota?.estimatedRemainingUnits ?? 0)}</strong></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="od-dashboard-section" data-dashboard-panel="library">
+        <div class="od-dashboard-main">
+          <div class="od-panel">
+            <div class="od-panel-head">
+              <span class="od-panel-label od-mono">Media library</span>
+              <span class="od-panel-meta od-muted od-mono">${formatBytes(totalStorageBytes)}</span>
+            </div>
+            ${buildMediaComposition()}
+            <div class="od-health-metrics">
+              <div><span>Videos</span><strong>${formatNumber(videoAssets.length)}</strong></div>
+              <div><span>Short form</span><strong>${formatNumber(shortVideos)}</strong></div>
+              <div><span>Standard</span><strong>${formatNumber(standardVideos)}</strong></div>
+              <div><span>Thumbnails</span><strong>${formatNumber(thumbnailAssets.length)}</strong></div>
+            </div>
+          </div>
+          <div class="od-panel">
+            <div class="od-panel-head">
+              <span class="od-panel-label od-mono">Project inventory</span>
+              <span class="od-panel-meta od-muted od-mono">${formatDurationSeconds(totalDurationSeconds)}</span>
+            </div>
+            <div class="od-risk-grid">
+              <div class="od-risk-card"><span class="od-kpi-label od-mono">Playlists</span><strong>${formatNumber(playlists.length)}</strong><small>auto-rotation sources</small></div>
+              <div class="od-risk-card"><span class="od-kpi-label od-mono">Accounts</span><strong>${formatNumber(accounts.length)}</strong><small>${formatNumber(connectedAccounts)} connected</small></div>
+              <div class="od-risk-card"><span class="od-kpi-label od-mono">Destinations</span><strong>${formatNumber(destinations.length)}</strong><small>publish-ready</small></div>
+              <div class="od-risk-card"><span class="od-kpi-label od-mono">Disconnected</span><strong>${formatNumber(disconnectedAccounts)}</strong><small>needs review</small></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="od-dashboard-section" data-dashboard-panel="risk">
+        <div class="od-dashboard-main">
+          <div class="od-panel">
+            <div class="od-panel-head">
+              <span class="od-panel-label od-mono">Operational risk</span>
+              <span class="od-panel-meta od-muted od-mono">${formatNumber(failedTargets + reauthBlockedTargets)} blockers</span>
+            </div>
+            ${buildRiskList()}
+          </div>
+          <div class="od-panel">
+            <div class="od-panel-head">
+              <span class="od-panel-label od-mono">Audit activity</span>
+              <span class="od-panel-meta od-muted od-mono">${formatNumber(stats?.audit?.totalEvents ?? 0)} events</span>
+            </div>
+            <div class="od-audit-list">${buildAuditList()}</div>
+            <div class="od-audit-last od-muted">
+              Last: ${escapeHtml(stats?.audit?.lastEventType ? normalizeLabel(stats.audit.lastEventType) : 'none')} / ${escapeHtml(stats?.audit?.lastEventAt ? formatDate(stats.audit.lastEventAt) : '-')}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="od-footer od-muted od-mono">
+        PLATFORM MULTI PUBLI / ${escapeHtml(liveClock)} / ${formatNumber(campaignTotal)} campaigns / ${formatNumber(publishedTargets)} published / ${formatNumber(destinations.length)} destinations
+      </div>
+    </div>
+  `;
+
+  renderWorkspaceShell({ title: '', contentHtml });
+  applyOdThemeFromSettings();
+  bindDashboardInteractions();
+  clearAutoRefreshTimer();
+
+  if (shouldAutoRefreshDashboard(stats)) {
+    state.autoRefreshTimer = setTimeout(() => {
+      if (window.location.pathname !== '/workspace/dashboard') return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      void renderPlatformDashboardPage();
+    }, 12000);
+  }
+}
+
+async function renderPlatformDashboardLegacyPage() {
   const [result, recentCampaignsResult] = await Promise.all([
     api.dashboard(),
     api.campaigns({ limit: 8, offset: 0 }),
@@ -4107,6 +5038,9 @@ async function renderAccountsOauthCallbackPage() {
     case 'tiktok':
       callbackRequest = api.accountTikTokOauthCallback(code, stateParam);
       break;
+    case 'instagram':
+      callbackRequest = api.accountInstagramOauthCallback(code, stateParam);
+      break;
     case 'google':
     default:
       callbackRequest = api.accountOauthCallback(code, stateParam);
@@ -4118,7 +5052,7 @@ async function renderAccountsOauthCallbackPage() {
       title: 'Accounts',
       subtitle: `${providerLabel} OAuth callback`,
       noticeHtml: '<div class="notice error">Missing OAuth callback parameters (code/state).</div>',
-      contentHtml: '<section class="card"><a class="btn" data-link href="/workspace/accounts">Back to accounts</a></section>',
+      contentHtml: '<section class="card"><a class="button button-secondary" data-link href="/workspace/accounts">Back to accounts</a></section>',
     });
     return;
   }
@@ -4286,6 +5220,12 @@ async function renderAccountsPage() {
       count: accounts.filter((account) => (account.provider ?? '').toLowerCase() === 'tiktok').length,
       detail: 'Short-form relay',
     },
+    {
+      key: 'instagram',
+      label: 'Instagram',
+      count: accounts.filter((account) => (account.provider ?? '').toLowerCase() === 'instagram').length,
+      detail: 'Reels publishing',
+    },
   ];
   const providerBreakdownHtml = providerBreakdown.map((provider) => `
     <article class="platform-page-provider-card ${escapeHtml(provider.key)}">
@@ -4337,8 +5277,8 @@ async function renderAccountsPage() {
               </div>
             </a>
             <div class="account-chip-footer-actions inline-actions">
-              <button class="btn" data-action="disconnect-account" data-account-id="${escapeHtml(account.id)}" type="button">Disconnect</button>
-              <button class="btn-danger" data-action="delete-account" data-account-id="${escapeHtml(account.id)}" type="button">Delete</button>
+              <button class="button button-secondary button-sm" data-action="disconnect-account" data-account-id="${escapeHtml(account.id)}" type="button">Disconnect</button>
+              <button class="button button-danger button-sm" data-action="delete-account" data-account-id="${escapeHtml(account.id)}" type="button">Delete</button>
             </div>
           </div>
         `;
@@ -4363,7 +5303,7 @@ async function renderAccountsPage() {
               <td>${escapeHtml(channel.handle ?? '-')}</td>
               <td>${statusPill(channel.isActive ? 'active' : 'inactive')}</td>
               <td>
-                <button class="btn" data-action="toggle-channel" data-account-id="${escapeHtml(selectedAccountId)}" data-channel-id="${escapeHtml(channel.id)}" data-next-active="${channel.isActive ? 'false' : 'true'}" type="button">
+                <button class="button button-secondary button-sm" data-action="toggle-channel" data-account-id="${escapeHtml(selectedAccountId)}" data-channel-id="${escapeHtml(channel.id)}" data-next-active="${channel.isActive ? 'false' : 'true'}" type="button">
                   ${channel.isActive ? 'Deactivate' : 'Activate'}
                 </button>
               </td>
@@ -4444,18 +5384,19 @@ async function renderAccountsPage() {
   const accountsSetupCard = accounts.length === 0
     ? renderEmptyStateCard({
         title: 'No connected accounts yet',
-        message: 'Connect YouTube or TikTok accounts to centralize your publishing workspace.',
+        message: 'Connect YouTube, TikTok, or Instagram accounts to centralize your publishing workspace.',
         tone: 'info',
         actionsHtml: `
-          <button class="btn-primary" type="button" data-action="start-youtube-oauth">Connect YouTube</button>
-          <button class="btn" type="button" data-action="start-tiktok-oauth">Connect TikTok</button>
+          <button class="button button-primary" type="button" data-action="start-youtube-oauth">Connect YouTube</button>
+          <button class="button button-secondary" type="button" data-action="start-tiktok-oauth">Connect TikTok</button>
+          <button class="button button-secondary" type="button" data-action="start-instagram-oauth">Connect Instagram</button>
         `,
       })
     : filteredAccounts.length === 0
       ? renderEmptyStateCard({
           title: 'No accounts match the current filters',
           message: 'Try clearing search or status filters to see the connected accounts again.',
-          actionsHtml: '<a class="btn" data-link href="/workspace/accounts">Clear filters</a>',
+          actionsHtml: '<a class="button button-secondary" data-link href="/workspace/accounts">Clear filters</a>',
         })
       : '';
   const channelsOverviewCard = accounts.length > 0 && allChannels.length === 0
@@ -4464,7 +5405,7 @@ async function renderAccountsPage() {
         message: 'The sign-in is connected, but no channels were returned yet. Run Sync channels or reconnect using the Google profile that owns the channel or Brand Account.',
         tone: 'warning',
         actionsHtml: selectedAccountId
-          ? `<button class="btn" type="button" data-action="sync-channels" data-account-id="${escapeHtml(selectedAccountId)}">Sync channels</button>`
+          ? `<button class="button button-secondary" type="button" data-action="sync-channels" data-account-id="${escapeHtml(selectedAccountId)}">Sync channels</button>`
           : '',
       })
     : '';
@@ -4472,12 +5413,13 @@ async function renderAccountsPage() {
 
   renderWorkspaceShell({
     title: 'Accounts',
-    subtitle: 'Connected YouTube and TikTok publishing accounts.',
+    subtitle: 'Connected YouTube, TikTok, and Instagram publishing accounts.',
     actionsHtml: `
       <div class="inline-actions">
-        <button class="btn-primary" type="button" data-action="start-youtube-oauth">Connect YouTube</button>
-        <button class="btn" type="button" data-action="start-tiktok-oauth">Connect TikTok</button>
-        <a class="btn" data-link href="${escapeHtml(buildUrl('/workspace/accounts', { search, status: statusFilter }))}">Refresh</a>
+        <button class="button button-primary" type="button" data-action="start-youtube-oauth">Connect YouTube</button>
+        <button class="button button-secondary" type="button" data-action="start-tiktok-oauth">Connect TikTok</button>
+        <button class="button button-secondary" type="button" data-action="start-instagram-oauth">Connect Instagram</button>
+        <a class="button button-secondary" data-link href="${escapeHtml(buildUrl('/workspace/accounts', { search, status: statusFilter }))}">Refresh</a>
       </div>
     `,
     noticeHtml: notices.join(''),
@@ -4536,6 +5478,25 @@ async function renderAccountsPage() {
               <span class="accounts-cockpit-card-label">TikTok</span>
               <strong class="accounts-cockpit-card-value" data-counter="${providerBreakdown[1].count}">0</strong>
               <span class="accounts-cockpit-card-detail">Short-form relay</span>
+            </div>
+            <div class="accounts-cockpit-card-arrow" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <line x1="5" y1="12" x2="19" y2="12"/>
+                <polyline points="12 5 19 12 12 19"/>
+              </svg>
+            </div>
+          </article>
+
+          <article class="accounts-cockpit-card accounts-cockpit-card-platform" data-platform="instagram" tabindex="0" role="button" aria-label="Instagram — ${formatNumber(providerBreakdown[2].count)} accounts">
+            <div class="accounts-cockpit-card-glow"></div>
+            <div class="accounts-cockpit-card-icon-wrap">
+              <span class="accounts-cockpit-card-icon">${renderPlatformGlyph('instagram', 'small')}</span>
+              <span class="accounts-cockpit-card-icon-ring"></span>
+            </div>
+            <div class="accounts-cockpit-card-info">
+              <span class="accounts-cockpit-card-label">Instagram</span>
+              <strong class="accounts-cockpit-card-value" data-counter="${providerBreakdown[2].count}">0</strong>
+              <span class="accounts-cockpit-card-detail">Reels publishing</span>
             </div>
             <div class="accounts-cockpit-card-arrow" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -4630,8 +5591,8 @@ async function renderAccountsPage() {
             </select>
           </label>
           <div class="inline-actions">
-            <button class="btn-primary" type="submit">Apply</button>
-            <a class="btn" data-link href="/workspace/accounts">Clear</a>
+            <button class="button button-primary" type="submit">Apply</button>
+            <a class="button button-secondary" data-link href="/workspace/accounts">Clear</a>
           </div>
         </form>
         <div class="account-grid">${accountCardsHtml}</div>
@@ -4641,7 +5602,7 @@ async function renderAccountsPage() {
         <div class="platform-dashboard-chip-row">
           ${selectedAccount ? `<span class="platform-dashboard-inline-stat">${escapeHtml(getProviderLabel(selectedAccount.provider))}</span>` : ''}
           ${selectedAccount ? `<span class="platform-dashboard-inline-stat">${formatNumber(selectedAccountChannelSummary?.active ?? 0)} active / ${formatNumber(selectedAccountChannelSummary?.total ?? 0)} total</span>` : ''}
-          <button class="btn" data-action="sync-channels" data-account-id="${escapeHtml(selectedAccountId ?? '')}" type="button" ${selectedAccountId && selectedAccountSupportsChannels ? '' : 'disabled'}>
+          <button class="button button-secondary" data-action="sync-channels" data-account-id="${escapeHtml(selectedAccountId ?? '')}" type="button" ${selectedAccountId && selectedAccountSupportsChannels ? '' : 'disabled'}>
             Sync channels
           </button>
         </div>
@@ -4853,6 +5814,31 @@ async function renderAccountsPage() {
       }
 
       writePendingOauthProvider('tiktok');
+      window.location.assign(redirectUrl);
+    });
+  });
+
+  document.querySelectorAll('[data-action="start-instagram-oauth"]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      clearUiNotice();
+      setButtonBusy(button, true, 'Connecting...');
+      const result = await api.startInstagramOauth();
+      setButtonBusy(button, false);
+
+      if (!result.ok) {
+        setUiNotice('error', 'Instagram OAuth failed', result.error);
+        await renderAccountsPage();
+        return;
+      }
+
+      const redirectUrl = result.body?.redirectUrl;
+      if (!redirectUrl) {
+        setUiNotice('error', 'Instagram OAuth failed', 'OAuth redirect URL not returned by API.');
+        await renderAccountsPage();
+        return;
+      }
+
+      writePendingOauthProvider('instagram');
       window.location.assign(redirectUrl);
     });
   });
@@ -5097,8 +6083,8 @@ async function renderMediaPage() {
         <td>
           <div class="inline-actions">
             ${renderMediaFileActionLinks(asset)}
-            <button class="btn" type="button" data-action="copy-media-id" data-media-id="${escapeHtml(asset.id)}">Copy ID</button>
-            <button class="btn-danger" type="button" data-action="delete-media" data-media-id="${escapeHtml(asset.id)}">Delete</button>
+            <button class="button button-secondary button-sm" type="button" data-action="copy-media-id" data-media-id="${escapeHtml(asset.id)}">Copy ID</button>
+            <button class="button button-danger" type="button" data-action="delete-media" data-media-id="${escapeHtml(asset.id)}">Delete</button>
           </div>
         </td>
       </tr>
@@ -5114,7 +6100,7 @@ async function renderMediaPage() {
       ? renderEmptyStateCard({
           title: 'No media matches the current filters',
           message: 'Try clearing the search or type filter to bring the asset list back.',
-          actionsHtml: '<a class="btn" data-link href="/workspace/media">Clear filters</a>',
+          actionsHtml: '<a class="button button-secondary" data-link href="/workspace/media">Clear filters</a>',
         })
       : '';
   const mediaCardsHtml = filteredAssets.map((asset) => {
@@ -5166,8 +6152,8 @@ async function renderMediaPage() {
         </div>
         <div class="platform-media-card-actions inline-actions">
           ${renderMediaFileActionLinks(asset)}
-          <button class="btn" type="button" data-action="copy-media-id" data-media-id="${escapeHtml(asset.id)}">Copy ID</button>
-          <button class="btn-danger" type="button" data-action="delete-media" data-media-id="${escapeHtml(asset.id)}">Delete</button>
+          <button class="button button-secondary" type="button" data-action="copy-media-id" data-media-id="${escapeHtml(asset.id)}">Copy ID</button>
+          <button class="button button-danger" type="button" data-action="delete-media" data-media-id="${escapeHtml(asset.id)}">Delete</button>
         </div>
       </article>
     `;
@@ -5178,7 +6164,7 @@ async function renderMediaPage() {
     subtitle: 'Uploaded reusable assets.',
     actionsHtml: `
       <div class="inline-actions">
-        <a class="btn" data-link href="${escapeHtml(buildUrl('/workspace/media', { search: searchInput, type: typeFilter }))}">Refresh</a>
+        <a class="button button-secondary" data-link href="${escapeHtml(buildUrl('/workspace/media', { search: searchInput, type: typeFilter }))}">Refresh</a>
       </div>
     `,
     contentHtml: `
@@ -5272,7 +6258,7 @@ async function renderMediaPage() {
               </div>
             </div>
             <div class="inline-actions">
-              <button class="btn-primary" type="submit">Upload media</button>
+              <button class="button button-primary" type="submit">Upload media</button>
             </div>
           </form>
         </section>
@@ -5298,8 +6284,8 @@ async function renderMediaPage() {
               </select>
             </label>
             <div class="inline-actions">
-              <button class="btn-primary" type="submit">Apply</button>
-              <a class="btn" data-link href="/workspace/media">Clear</a>
+              <button class="button button-primary" type="submit">Apply</button>
+              <a class="button button-secondary" data-link href="/workspace/media">Clear</a>
             </div>
           </form>
           <div class="platform-page-summary-grid">
@@ -5499,17 +6485,17 @@ async function renderMediaPage() {
 function campaignActionButtons(campaign) {
   const targetCount = Number(campaign.targetCount ?? campaign.targets?.length ?? 0);
   const buttons = [
-    `<a class="btn" data-link href="/workspace/campanhas/${encodeURIComponent(campaign.id)}">View</a>`,
-    `<button class="btn" type="button" data-action="clone-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Clone</button>`,
+    `<a class="button button-secondary" data-link href="/workspace/campanhas/${encodeURIComponent(campaign.id)}">View</a>`,
+    `<button class="button button-secondary" type="button" data-action="clone-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Clone</button>`,
   ];
   if (campaign.status === 'draft' && targetCount > 0) {
-    buttons.push(`<button class="btn" type="button" data-action="mark-ready" data-campaign-id="${escapeHtml(campaign.id)}">Mark ready</button>`);
+    buttons.push(`<button class="button button-secondary" type="button" data-action="mark-ready" data-campaign-id="${escapeHtml(campaign.id)}">Mark ready</button>`);
   }
   if (campaign.status === 'ready' && targetCount > 0) {
-    buttons.push(`<button class="btn-primary" type="button" data-action="launch-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Launch</button>`);
+    buttons.push(`<button class="button button-primary" type="button" data-action="launch-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Launch</button>`);
   }
   if (campaign.status === 'draft' || campaign.status === 'ready') {
-    buttons.push(`<button class="btn-danger" type="button" data-action="delete-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Delete</button>`);
+    buttons.push(`<button class="button button-danger" type="button" data-action="delete-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Delete</button>`);
   }
   return `<div class="inline-actions">${buttons.join('')}</div>`;
 }
@@ -5757,8 +6743,8 @@ async function renderPlaylistsPage() {
               </div>
             </div>
             <div class="platform-media-card-actions inline-actions">
-              <a class="btn" data-link href="/workspace/playlists/${encodeURIComponent(pl.id)}">Abrir</a>
-              <button class="btn-danger" type="button" data-action="delete-playlist" data-playlist-id="${escapeHtml(pl.id)}">Excluir</button>
+              <a class="button button-secondary" data-link href="/workspace/playlists/${encodeURIComponent(pl.id)}">Abrir</a>
+              <button class="button button-danger" type="button" data-action="delete-playlist" data-playlist-id="${escapeHtml(pl.id)}">Excluir</button>
             </div>
           </article>
         `;
@@ -5777,7 +6763,7 @@ async function renderPlaylistsPage() {
     subtitle: 'Organize videos em playlists a partir de pastas locais.',
     actionsHtml: `
       <div class="inline-actions">
-        <a class="btn" data-link href="/workspace/playlists">Refresh</a>
+        <a class="button button-secondary" data-link href="/workspace/playlists">Refresh</a>
       </div>
     `,
     contentHtml: `
@@ -5938,7 +6924,7 @@ async function renderPlaylistsPage() {
             </form>
           </div>
           <div class="inline-actions">
-            <button class="btn-primary" type="button" id="scan-folder-submit">Escanear e importar</button>
+            <button class="button button-primary" type="button" id="scan-folder-submit">Escanear e importar</button>
           </div>
         </section>
         <section class="platform-surface platform-dashboard-panel">
@@ -5951,7 +6937,7 @@ async function renderPlaylistsPage() {
           </div>
           <p class="muted">Crie uma playlist vazia e adicione videos manualmente depois.</p>
           <div class="inline-actions">
-            <button class="btn-primary" type="button" data-action="create-playlist-manual">+ Nova playlist</button>
+            <button class="button button-primary" type="button" data-action="create-playlist-manual">+ Nova playlist</button>
           </div>
           <div class="platform-page-summary-grid">
             <article class="platform-page-summary-card">
@@ -6088,8 +7074,8 @@ async function renderPlaylistDetailPage(playlistId) {
           </div>
         </div>
         <div class="platform-media-card-actions inline-actions">
-          <button class="btn" type="button" data-action="edit-preset" data-video-asset-id="${escapeHtml(item.videoAssetId)}" data-name="${escapeHtml(asset?.original_name ?? '')}">Preset</button>
-          <button class="btn-danger" type="button" data-action="remove-pl-item" data-video-asset-id="${escapeHtml(item.videoAssetId)}">Remover</button>
+          <button class="button button-secondary" type="button" data-action="edit-preset" data-video-asset-id="${escapeHtml(item.videoAssetId)}" data-name="${escapeHtml(asset?.original_name ?? '')}">Preset</button>
+          <button class="button button-danger" type="button" data-action="remove-pl-item" data-video-asset-id="${escapeHtml(item.videoAssetId)}">Remover</button>
         </div>
       </article>
     `;
@@ -6103,8 +7089,8 @@ async function renderPlaylistDetailPage(playlistId) {
     subtitle: escapeHtml(playlist.folderPath || 'Playlist manual'),
     actionsHtml: `
       <div class="inline-actions">
-        <a class="btn" data-link href="/workspace/playlists">← Playlists</a>
-        <a class="btn" data-link href="/workspace/playlists/${encodeURIComponent(playlistId)}">Refresh</a>
+        <a class="button button-secondary" data-link href="/workspace/playlists">← Playlists</a>
+        <a class="button button-secondary" data-link href="/workspace/playlists/${encodeURIComponent(playlistId)}">Refresh</a>
       </div>
     `,
     contentHtml: `
@@ -6179,7 +7165,7 @@ async function renderPlaylistDetailPage(playlistId) {
               </form>
             </div>
             <div class="inline-actions">
-              <button class="btn-primary" type="button" id="add-pl-item-submit">Adicionar a playlist</button>
+              <button class="button button-primary" type="button" id="add-pl-item-submit">Adicionar a playlist</button>
             </div>
           ` : '<p class="muted">Todos os videos da biblioteca ja estao nesta playlist.</p>'}
         </section>
@@ -6361,8 +7347,8 @@ async function renderCampaignsPage() {
     if (m > 0) return `${m}m ${s}s`;
     return `${s}s`;
   };
-  const platformLabel = topPlatform ? (topPlatform[0] === 'youtube' ? 'YouTube' : topPlatform[0] === 'tiktok' ? 'TikTok' : topPlatform[0]) : '—';
-  const platformIcon = topPlatform?.[0] === 'tiktok' ? '🎵' : topPlatform?.[0] === 'youtube' ? '▶️' : '📡';
+  const platformLabel = topPlatform ? (topPlatform[0] === 'youtube' ? 'YouTube' : topPlatform[0] === 'tiktok' ? 'TikTok' : topPlatform[0] === 'instagram' ? 'Instagram' : topPlatform[0]) : '—';
+  const platformIcon = topPlatform?.[0] === 'tiktok' ? '🎵' : topPlatform?.[0] === 'youtube' ? '▶️' : topPlatform?.[0] === 'instagram' ? '📸' : '📡';
   const successCircumference = 2 * Math.PI * 36;
   const successOffset = successCircumference * (1 - successRate / 100);
 
@@ -6435,16 +7421,16 @@ async function renderCampaignsPage() {
         message: 'Start by creating your first campaign. If you have not uploaded media or connected channels yet, you can do that first.',
         tone: 'info',
         actionsHtml: [
-          '<a class="btn btn-primary" data-link href="/workspace/campanhas/nova">Create campaign</a>',
-          '<a class="btn" data-link href="/workspace/media">Open media</a>',
-          '<a class="btn" data-link href="/workspace/accounts">Open accounts</a>',
+          '<a class="button button-primary" data-link href="/workspace/campanhas/nova">Create campaign</a>',
+          '<a class="button button-secondary" data-link href="/workspace/media">Open media</a>',
+          '<a class="button button-secondary" data-link href="/workspace/accounts">Open accounts</a>',
         ].join(''),
       })
     : campaigns.length === 0
       ? renderEmptyStateCard({
           title: 'No campaigns match the current filters',
           message: 'Change the filters or clear the search to show campaigns again.',
-          actionsHtml: '<a class="btn" data-link href="/workspace/campanhas">Clear filters</a>',
+          actionsHtml: '<a class="button button-secondary" data-link href="/workspace/campanhas">Clear filters</a>',
         })
       : '';
 
@@ -6746,11 +7732,11 @@ async function renderCampaignsPage() {
           </div>
           <div class="inline-actions">
             ${previousHref
-              ? `<a class="btn" data-link href="${previousHref}">Previous</a>`
-              : '<button class="btn" type="button" disabled>Previous</button>'}
+              ? `<a class="button button-secondary" data-link href="${previousHref}">Previous</a>`
+              : '<button class="button button-secondary" type="button" disabled>Previous</button>'}
             ${nextHref
-              ? `<a class="btn" data-link href="${nextHref}">Next</a>`
-              : '<button class="btn" type="button" disabled>Next</button>'}
+              ? `<a class="button button-secondary" data-link href="${nextHref}">Next</a>`
+              : '<button class="button button-secondary" type="button" disabled>Next</button>'}
           </div>
         </div>
         ${campaignItemsHtml}
@@ -6901,10 +7887,14 @@ async function renderCampaignComposerPage() {
   const unknownDurationVideos = videos.filter((asset) => getVideoPublishFormat(asset) === 'unknown');
   const connectedChannels = destinationsResult.destinations;
   const activeChannels = connectedChannels.filter((channel) => channel.platform === 'youtube');
+  const socialDestinationCount = connectedChannels.length - activeChannels.length;
   const hasVideos = videos.length > 0;
   const hasChannels = connectedChannels.length > 0;
   const playlists = Array.isArray(playlistsResult.body?.playlists) ? playlistsResult.body.playlists : [];
   const playlistOptions = playlists.map((pl) => `<option value="${escapeHtml(pl.id)}">${escapeHtml(pl.name)} (${formatNumber(pl.items?.length ?? 0)} videos)</option>`).join('');
+
+  // Inject logo animation styles on first use
+  injectLogoStyles();
 
   const channelToggleCards = connectedChannels.length === 0
     ? '<p class="muted">No connected publishing destinations available.</p>'
@@ -6913,7 +7903,10 @@ async function renderCampaignComposerPage() {
         <input class="channel-toggle-input" type="checkbox" name="destinationRef" value="${escapeHtml(`${channel.platform}:${channel.destinationId}`)}" ${channel.platform === 'youtube' ? 'checked' : ''} />
         <span class="channel-toggle-body">
           <span class="channel-toggle-meta">
-            <strong>${escapeHtml(channel.destinationLabel || channel.title || channel.youtubeChannelId || channel.id)}</strong>
+            <span class="channel-logo-wrapper" style="display: inline-flex; align-items: center; gap: 8px; margin-right: 8px;">
+              ${renderAnimatedLogoByPlatform(channel.platform, 28)}
+              <strong>${escapeHtml(channel.destinationLabel || channel.title || channel.youtubeChannelId || channel.id)}</strong>
+            </span>
             <small>${escapeHtml(getProviderLabel(channel.platform))}</small>
             <small>${escapeHtml(channel.handle || channel.youtubeChannelId || channel.email || channel.id)}</small>
           </span>
@@ -6940,13 +7933,13 @@ async function renderCampaignComposerPage() {
           done: hasVideos,
           label: hasVideos ? 'Media library is ready' : 'Upload media first',
           hint: hasVideos ? `${formatNumber(videos.length)} video assets are available for campaign creation.` : 'You need at least one video in Media before saving a campaign.',
-          actionHtml: '<a class="btn" data-link href="/workspace/media">Open media</a>',
+          actionHtml: '<a class="button button-secondary" data-link href="/workspace/media">Open media</a>',
         },
         {
           done: hasChannels,
           label: hasChannels ? 'Publishing destinations are ready' : 'Connect publishing accounts',
-          hint: hasChannels ? `${formatNumber(activeChannels.length)} YouTube channels and ${formatNumber(connectedChannels.length - activeChannels.length)} social destinations are available for this campaign.` : 'Connect YouTube or TikTok accounts to target publications directly from the composer.',
-          actionHtml: '<a class="btn" data-link href="/workspace/accounts">Open accounts</a>',
+          hint: hasChannels ? `${formatNumber(activeChannels.length)} YouTube channels and ${formatNumber(socialDestinationCount)} social destinations are available for this campaign.` : 'Connect YouTube, TikTok, or Instagram accounts to target publications directly from the composer.',
+          actionHtml: '<a class="button button-secondary" data-link href="/workspace/accounts">Open accounts</a>',
         },
       ])}
       <section class="card stack">
@@ -6955,7 +7948,7 @@ async function renderCampaignComposerPage() {
           title: 'No video assets available',
           message: 'The composer is ready, but you still need to upload at least one video before creating a campaign.',
           tone: 'warning',
-          actionsHtml: '<a class="btn btn-primary" data-link href="/workspace/media">Upload media</a>',
+          actionsHtml: '<a class="button button-primary" data-link href="/workspace/media">Upload media</a>',
         }) : ''}
         <div class="grid-3">
           <article class="card">
@@ -6978,8 +7971,8 @@ async function renderCampaignComposerPage() {
           <fieldset class="card">
             <legend>1. Connected publishing destinations <small class="muted">(escolha onde publicar)</small></legend>
             <div class="inline-actions">
-              <button class="btn" type="button" data-action="select-all-campaign-channels">Turn all ON</button>
-              <button class="btn" type="button" data-action="clear-campaign-channels">Turn all OFF</button>
+              <button class="button button-secondary" type="button" data-action="select-all-campaign-channels">Turn all ON</button>
+              <button class="button button-secondary" type="button" data-action="clear-campaign-channels">Turn all OFF</button>
             </div>
             <div class="notice info">Use the toggle to decide exactly which connected channels or social accounts will receive this campaign.</div>
             <div class="channel-toggle-grid">${channelToggleCards}</div>
@@ -7069,7 +8062,7 @@ async function renderCampaignComposerPage() {
                     <div class="schedule-dates-list" id="schedule-dates-list"></div>
                     <div class="inline-actions">
                       <input type="date" id="schedule-date-input" />
-                      <button type="button" class="btn" id="schedule-date-add">+ Adicionar dia</button>
+                      <button type="button" class="button button-secondary" id="schedule-date-add">+ Adicionar dia</button>
                     </div>
                   </div>
                   <small class="muted">Selecione um ou mais dias manualmente em que a campanha sera disparada.</small>
@@ -7100,6 +8093,24 @@ async function renderCampaignComposerPage() {
             Target video description
             <textarea name="videoDescription" required placeholder="Description for selected channels"></textarea>
           </label>
+          <fieldset class="platform-target-options">
+            <legend>Instagram options <small class="muted">(Reels)</small></legend>
+            <label>
+              Reels caption
+              <textarea name="instagramCaption" maxlength="2200" placeholder="Defaults to target description"></textarea>
+            </label>
+            <label class="instagram-share-row">
+              <span>
+                Share Reel to feed
+                <small class="muted">Visible on profile feed</small>
+              </span>
+              <span class="schedule-toggle-switch">
+                <input type="checkbox" name="instagramShareToFeed" value="1" checked />
+                <span class="schedule-toggle-track" aria-hidden="true"><span class="schedule-toggle-thumb"></span></span>
+                <span class="schedule-toggle-label">ON</span>
+              </span>
+            </label>
+          </fieldset>
           <label>
             Tags (comma-separated)
             <input name="tags" placeholder="news, update, launch" />
@@ -7122,8 +8133,8 @@ async function renderCampaignComposerPage() {
             <input name="youtubePlaylistId" placeholder="PL..." />
           </label>
           <div class="inline-actions">
-            <button class="btn-primary" type="submit" ${hasVideos ? '' : 'disabled'}>Save draft</button>
-            <a class="btn" data-link href="/workspace/campanhas">Cancel</a>
+            <button class="button button-primary" type="submit" ${hasVideos ? '' : 'disabled'}>Save draft</button>
+            <a class="button button-secondary" data-link href="/workspace/campanhas">Cancel</a>
           </div>
         </form>
       </section>
@@ -7133,6 +8144,11 @@ async function renderCampaignComposerPage() {
   const form = document.getElementById('campaign-create-form');
   const videoSelect = form?.querySelector('select[name="videoAssetId"]');
   const publishFormatSelect = form?.querySelector('select[name="publishFormat"]');
+  const instagramShareToggle = form?.querySelector('input[name="instagramShareToFeed"]');
+  if (instagramShareToggle) {
+    syncSwitchLabel(instagramShareToggle);
+    instagramShareToggle.addEventListener('change', () => syncSwitchLabel(instagramShareToggle));
+  }
 
   function applyPublishFormatFilter() {
     if (!(videoSelect instanceof HTMLSelectElement) || !(publishFormatSelect instanceof HTMLSelectElement)) {
@@ -7485,6 +8501,10 @@ async function renderCampaignComposerPage() {
       playlistId: String(data.get('youtubePlaylistId') ?? '').trim() || undefined,
       privacy: String(data.get('privacy') ?? '').trim() || undefined,
     };
+    const platformOptions = {
+      instagramCaption: String(data.get('instagramCaption') ?? '').trim(),
+      instagramShareToFeed: data.get('instagramShareToFeed') === '1',
+    };
 
     const titleAutoEnabled = data.get('schedulePatternEnabled') === '1' && data.get('scheduleTitleEnabled') === '1';
     const titleSeed = String(data.get('scheduleTitleSeed') ?? '').trim();
@@ -7512,21 +8532,15 @@ async function renderCampaignComposerPage() {
       if (!newId) return { ok: false, error: 'Missing campaign id' };
 
       if (selectedDestinationRefs.length > 0) {
-        await api.addTargetsBulk(
+        const addTargetsResponse = await api.addTargetsBulk(
           newId,
           selectedDestinationRefs.map((destinationRef) => {
             const [platform, destinationId] = destinationRef.split(':');
             const destination = connectedChannels.find((entry) => entry.platform === platform && entry.destinationId === destinationId);
-            return {
-              platform,
-              destinationId,
-              destinationLabel: destination?.destinationLabel ?? destination?.title ?? destinationId,
-              connectedAccountId: destination?.connectedAccountId ?? null,
-              channelId: platform === 'youtube' ? destinationId : undefined,
-              ...targetTemplate,
-            };
+            return buildCampaignTargetPayloadForDestination(destination ?? { platform, destinationId }, targetTemplate, platformOptions);
           }),
         );
+        if (!addTargetsResponse.ok) return { ok: false, error: addTargetsResponse.error || 'Failed to add campaign targets' };
         const readyResponse = await api.markReady(newId);
         if (!readyResponse.ok) return { ok: false, error: readyResponse.error || 'Failed to mark campaign ready' };
       }
@@ -7713,6 +8727,45 @@ function formatPublishDestinationOptionLabel(destination) {
   return `${providerLabel}: ${title} (${secondary})`;
 }
 
+function syncSwitchLabel(input, onLabel = 'ON', offLabel = 'OFF') {
+  const label = input?.closest('.schedule-toggle-switch')?.querySelector('.schedule-toggle-label');
+  if (label) {
+    label.textContent = input.checked ? onLabel : offLabel;
+  }
+}
+
+function buildCampaignTargetPayloadForDestination(destination, targetTemplate, platformOptions = {}) {
+  const platform = String(destination?.platform ?? 'youtube').toLowerCase();
+  const destinationId = String(destination?.destinationId ?? destination?.id ?? '').trim();
+  const payload = {
+    platform,
+    destinationId,
+    destinationLabel: destination?.destinationLabel ?? destination?.title ?? destinationId,
+    connectedAccountId: destination?.connectedAccountId ?? null,
+    channelId: platform === 'youtube' ? destinationId : undefined,
+    videoTitle: targetTemplate.videoTitle,
+    videoDescription: targetTemplate.videoDescription,
+    tags: targetTemplate.tags,
+    publishAt: targetTemplate.publishAt,
+    privacy: targetTemplate.privacy,
+  };
+
+  if (platform === 'youtube') {
+    payload.playlistId = targetTemplate.playlistId;
+    payload.thumbnailAssetId = targetTemplate.thumbnailAssetId;
+  }
+
+  if (platform === 'instagram') {
+    const caption = String(platformOptions.instagramCaption ?? '').trim()
+      || targetTemplate.videoDescription
+      || targetTemplate.videoTitle;
+    payload.instagramCaption = caption.slice(0, 2200);
+    payload.instagramShareToFeed = platformOptions.instagramShareToFeed !== false;
+  }
+
+  return payload;
+}
+
 async function loadActiveConnectedChannels() {
   const accountsResult = await api.accounts();
   if (!accountsResult.ok) {
@@ -7890,13 +8943,13 @@ async function renderCampaignDetailPage(campaignId) {
     actions.push(`<button type="button" data-action="mark-ready" data-campaign-id="${escapeHtml(campaign.id)}">Mark ready</button>`);
   }
   if (campaign.status === 'ready' && (campaign.targets?.length ?? 0) > 0) {
-    actions.push(`<button class="btn-primary" type="button" data-action="launch-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Launch</button>`);
+    actions.push(`<button class="button button-primary" type="button" data-action="launch-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Launch</button>`);
   }
   if (campaign.status === 'draft' || campaign.status === 'ready') {
-    actions.push(`<button class="btn-danger" type="button" data-action="delete-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Delete</button>`);
+    actions.push(`<button class="button button-danger" type="button" data-action="delete-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Delete</button>`);
   }
   actions.push(`<button type="button" data-action="clone-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Clone</button>`);
-  actions.push(`<a class="btn" data-link href="/workspace/campanhas">Back</a>`);
+  actions.push(`<a class="button button-secondary" data-link href="/workspace/campanhas">Back</a>`);
 
   const targets = Array.isArray(campaign.targets) ? campaign.targets : [];
   const existingChannelIds = new Set(targets.map((target) => `${target.platform ?? 'youtube'}:${target.destinationId ?? target.channelId}`).filter(Boolean));
@@ -7939,7 +8992,7 @@ async function renderCampaignDetailPage(campaignId) {
       }
       if (canMutateTargets) {
         actionButtons.push(`<button type="button" data-action="edit-target" data-target-id="${escapeHtml(target.id)}">Edit</button>`);
-        actionButtons.push(`<button class="btn-danger" type="button" data-action="remove-target" data-target-id="${escapeHtml(target.id)}">Remove</button>`);
+        actionButtons.push(`<button class="button button-danger" type="button" data-action="remove-target" data-target-id="${escapeHtml(target.id)}">Remove</button>`);
       }
 
       return `
@@ -8023,7 +9076,7 @@ async function renderCampaignDetailPage(campaignId) {
             <input value="${escapeHtml(getVideoPublishFormatLabel(publishFormat))}" disabled />
           </label>
           <div class="inline-actions">
-            <button class="btn-primary" type="submit">Save campaign</button>
+            <button class="button button-primary" type="submit">Save campaign</button>
           </div>
         </form>
       </section>
@@ -8039,6 +9092,24 @@ async function renderCampaignDetailPage(campaignId) {
             Video description
             <textarea name="videoDescription" required placeholder="Target description"></textarea>
           </label>
+          <fieldset class="platform-target-options">
+            <legend>Instagram options <small class="muted">(Reels)</small></legend>
+            <label>
+              Reels caption
+              <textarea name="instagramCaption" maxlength="2200" placeholder="Defaults to target description"></textarea>
+            </label>
+            <label class="instagram-share-row">
+              <span>
+                Share Reel to feed
+                <small class="muted">Visible on profile feed</small>
+              </span>
+              <span class="schedule-toggle-switch">
+                <input type="checkbox" name="instagramShareToFeed" value="1" checked />
+                <span class="schedule-toggle-track" aria-hidden="true"><span class="schedule-toggle-thumb"></span></span>
+                <span class="schedule-toggle-label">ON</span>
+              </span>
+            </label>
+          </fieldset>
           <label>
             Tags (comma-separated)
             <input name="tags" placeholder="tag1, tag2" />
@@ -8066,7 +9137,7 @@ async function renderCampaignDetailPage(campaignId) {
           </label>
           ${addTargetChannelNoticeHtml}
           <div class="inline-actions">
-            <button class="btn-primary" type="submit" ${canSubmitConnectedTarget ? '' : 'disabled'}>Add target</button>
+            <button class="button button-primary" type="submit" ${canSubmitConnectedTarget ? '' : 'disabled'}>Add target</button>
           </div>
         </form>
       </section>
@@ -8094,9 +9165,9 @@ async function renderCampaignDetailPage(campaignId) {
         <div class="title-row">
           <h3>Activity timeline</h3>
           <div class="inline-actions">
-            <a class="btn ${activityFilter === 'all' ? 'btn-primary' : ''}" data-link href="${filterHrefs.all}">All</a>
-            <a class="btn ${activityFilter === 'jobs' ? 'btn-primary' : ''}" data-link href="${filterHrefs.jobs}">Jobs</a>
-            <a class="btn ${activityFilter === 'audit' ? 'btn-primary' : ''}" data-link href="${filterHrefs.audit}">Audit</a>
+            <a class="button ${activityFilter === 'all' ? 'button-primary' : 'button-secondary'}" data-link href="${filterHrefs.all}">All</a>
+            <a class="button ${activityFilter === 'jobs' ? 'button-primary' : 'button-secondary'}" data-link href="${filterHrefs.jobs}">Jobs</a>
+            <a class="button ${activityFilter === 'audit' ? 'button-primary' : 'button-secondary'}" data-link href="${filterHrefs.audit}">Audit</a>
           </div>
         </div>
         <form id="timeline-filter-form" class="inline-actions">
@@ -8150,6 +9221,11 @@ async function renderCampaignDetailPage(campaignId) {
   });
 
   const addTargetForm = document.getElementById('campaign-add-target-form');
+  const addTargetInstagramShareToggle = addTargetForm?.querySelector('input[name="instagramShareToFeed"]');
+  if (addTargetInstagramShareToggle) {
+    syncSwitchLabel(addTargetInstagramShareToggle);
+    addTargetInstagramShareToggle.addEventListener('change', () => syncSwitchLabel(addTargetInstagramShareToggle));
+  }
   addTargetForm?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const data = new FormData(addTargetForm);
@@ -8158,24 +9234,7 @@ async function renderCampaignDetailPage(campaignId) {
       .split(',')
       .map((entry) => entry.trim())
       .filter(Boolean);
-    const payload = {
-      ...(data.get('destinationRef')
-        ? (() => {
-            const destinationRef = String(data.get('destinationRef') ?? '');
-            const [platform, destinationId] = destinationRef.split(':');
-            const destination = availableConnectedChannels.find((entry) => entry.platform === platform && entry.destinationId === destinationId);
-            return {
-              platform,
-              destinationId,
-              destinationLabel: destination?.destinationLabel ?? destination?.title ?? destinationId,
-              connectedAccountId: destination?.connectedAccountId ?? null,
-              channelId: platform === 'youtube' ? destinationId : undefined,
-            };
-          })()
-        : {
-            destinationId: String(data.get('destinationId') ?? ''),
-            channelId: String(data.get('destinationId') ?? ''),
-          }),
+    const targetTemplate = {
       videoTitle: String(data.get('videoTitle') ?? ''),
       videoDescription: String(data.get('videoDescription') ?? ''),
       tags: tags.length > 0 ? tags : undefined,
@@ -8184,6 +9243,22 @@ async function renderCampaignDetailPage(campaignId) {
       playlistId: String(data.get('playlistId') ?? '').trim() || undefined,
       thumbnailAssetId: String(data.get('thumbnailAssetId') ?? '').trim() || undefined,
     };
+    const platformOptions = {
+      instagramCaption: String(data.get('instagramCaption') ?? '').trim(),
+      instagramShareToFeed: data.get('instagramShareToFeed') === '1',
+    };
+    const payload = data.get('destinationRef')
+      ? (() => {
+          const destinationRef = String(data.get('destinationRef') ?? '');
+          const [platform, destinationId] = destinationRef.split(':');
+          const destination = availableConnectedChannels.find((entry) => entry.platform === platform && entry.destinationId === destinationId);
+          return buildCampaignTargetPayloadForDestination(destination ?? { platform, destinationId }, targetTemplate, platformOptions);
+        })()
+      : {
+          destinationId: String(data.get('destinationId') ?? ''),
+          channelId: String(data.get('destinationId') ?? ''),
+          ...targetTemplate,
+        };
     setButtonBusy(submitButton, true, 'Adding...');
     const response = await api.addTarget(campaign.id, payload);
     setButtonBusy(submitButton, false);
@@ -8429,9 +9504,7 @@ async function renderRoute() {
   try {
     const path = window.location.pathname;
     if (path === '/') {
-      renderLoading('Checking session...');
-      const me = await ensureAuthenticated();
-      navigate(me ? (me.needsPlanSelection ? '/onboarding/plan' : '/workspace/dashboard') : '/login', true);
+      renderPublicLandingPage();
       return;
     }
 

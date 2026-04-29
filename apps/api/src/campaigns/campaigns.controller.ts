@@ -68,11 +68,19 @@ function normalizePlatformValue(rawValue: unknown): CampaignTargetPlatform | und
     return undefined;
   }
 
-  if (normalized === 'youtube' || normalized === 'tiktok') {
+  if (normalized === 'youtube' || normalized === 'tiktok' || normalized === 'instagram') {
     return normalized;
   }
 
   return undefined;
+}
+
+function normalizeOptionalBoolean(rawValue: unknown): boolean | undefined | null {
+  if (rawValue === undefined) {
+    return undefined;
+  }
+
+  return typeof rawValue === 'boolean' ? rawValue : null;
 }
 
 function normalizeTags(rawValue: unknown): string[] | undefined | null {
@@ -133,6 +141,8 @@ interface TargetCreateRequestBody {
   playlistId?: string;
   privacy?: string;
   thumbnailAssetId?: string;
+  instagramCaption?: string;
+  instagramShareToFeed?: boolean;
 }
 
 function normalizeTargetCreateBody(body: TargetCreateRequestBody | undefined):
@@ -143,7 +153,7 @@ function normalizeTargetCreateBody(body: TargetCreateRequestBody | undefined):
       destinationId: string;
       destinationLabel?: string;
       connectedAccountId?: string;
-      channelId: string | null;
+      channelId?: string;
       videoTitle: string;
       videoDescription: string;
       tags?: string[];
@@ -151,6 +161,8 @@ function normalizeTargetCreateBody(body: TargetCreateRequestBody | undefined):
       playlistId?: string;
       privacy?: string;
       thumbnailAssetId?: string;
+      instagramCaption?: string;
+      instagramShareToFeed?: boolean;
     };
   }
   | { ok: false; error: string } {
@@ -164,6 +176,8 @@ function normalizeTargetCreateBody(body: TargetCreateRequestBody | undefined):
   const publishAt = normalizeScheduledAt(body?.publishAt);
   const playlistId = body?.playlistId === undefined ? undefined : normalizeNonEmptyString(body.playlistId);
   const thumbnailAssetId = body?.thumbnailAssetId === undefined ? undefined : normalizeNonEmptyString(body.thumbnailAssetId);
+  const instagramCaption = body?.instagramCaption === undefined ? undefined : normalizeNonEmptyString(body.instagramCaption);
+  const instagramShareToFeed = normalizeOptionalBoolean(body?.instagramShareToFeed);
 
   if (!destinationId || !videoTitle || !videoDescription) {
     return { ok: false, error: 'Missing required fields: destinationId/channelId, videoTitle, videoDescription' };
@@ -171,6 +185,14 @@ function normalizeTargetCreateBody(body: TargetCreateRequestBody | undefined):
 
   if (body?.thumbnailAssetId !== undefined && !thumbnailAssetId) {
     return { ok: false, error: 'Invalid thumbnailAssetId: value must not be blank' };
+  }
+
+  if (body?.instagramCaption !== undefined && !instagramCaption) {
+    return { ok: false, error: 'Invalid instagramCaption: value must not be blank' };
+  }
+
+  if (instagramShareToFeed === null) {
+    return { ok: false, error: 'Invalid instagramShareToFeed: value must be a boolean.' };
   }
 
   if (body?.publishAt !== undefined && !publishAt) {
@@ -198,7 +220,7 @@ function normalizeTargetCreateBody(body: TargetCreateRequestBody | undefined):
       destinationId,
       destinationLabel,
       connectedAccountId,
-      channelId: platform === 'youtube' ? destinationId : null,
+      channelId: platform === 'youtube' ? destinationId : undefined,
       videoTitle,
       videoDescription,
       tags: tags ?? undefined,
@@ -206,6 +228,8 @@ function normalizeTargetCreateBody(body: TargetCreateRequestBody | undefined):
       playlistId,
       privacy,
       thumbnailAssetId,
+      instagramCaption,
+      instagramShareToFeed,
     },
   };
 }
@@ -405,7 +429,10 @@ export class CampaignsController {
       }
       const destinationRef = `${normalizedTarget.value.platform}:${normalizedTarget.value.destinationId}`;
       if (seenDestinationRefs.has(destinationRef)) {
-        return { status: 400, body: { error: `Duplicate destination in targets payload: ${destinationRef}` } };
+        const duplicateMessage = normalizedTarget.value.platform === 'youtube'
+          ? `Duplicate channelId in targets payload: ${normalizedTarget.value.destinationId}`
+          : `Duplicate destination in targets payload: ${destinationRef}`;
+        return { status: 400, body: { error: duplicateMessage } };
       }
       if (existingDestinationRefs.has(destinationRef)) {
         return { status: 400, body: { error: `Target for destination already exists in campaign: ${destinationRef}` } };

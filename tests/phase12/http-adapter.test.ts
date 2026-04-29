@@ -264,6 +264,78 @@ describe('HTTP adapter — createRequestHandler', () => {
     expect(app.handleRequest).not.toHaveBeenCalled();
   });
 
+  test('adds indexable SEO metadata to the public root document', async () => {
+    const app = mockApp();
+    const handler = createRequestHandler({ app });
+    const previousPublicUrl = process.env.PUBLIC_APP_URL;
+    process.env.PUBLIC_APP_URL = 'https://platform.example';
+    const req = mockReq({ method: 'GET', url: '/' });
+    const res = mockRes();
+
+    try {
+      await handler(req, res as any);
+    } finally {
+      if (previousPublicUrl === undefined) {
+        delete process.env.PUBLIC_APP_URL;
+      } else {
+        process.env.PUBLIC_APP_URL = previousPublicUrl;
+      }
+    }
+
+    expect(res._status).toBe(200);
+    expect(res._body).toContain('<meta name="description"');
+    expect(res._body).toContain('<meta name="robots" content="index,follow" />');
+    expect(res._body).toContain('<link rel="canonical" href="https://platform.example/" />');
+    expect(res._body).toContain('<script type="application/ld+json">');
+    expect(res._body).toContain('Publicacao multi plataforma');
+  });
+
+  test('marks private workspace documents as noindex', async () => {
+    const app = mockApp();
+    const handler = createRequestHandler({ app });
+    const req = mockReq({ method: 'GET', url: '/workspace/dashboard' });
+    const res = mockRes();
+
+    await handler(req, res as any);
+
+    expect(res._status).toBe(200);
+    expect(res._body).toContain('<meta name="robots" content="noindex,nofollow" />');
+    expect(app.handleRequest).not.toHaveBeenCalled();
+  });
+
+  test('serves robots.txt and sitemap.xml for search engines', async () => {
+    const app = mockApp();
+    const handler = createRequestHandler({ app });
+    const previousPublicUrl = process.env.PUBLIC_APP_URL;
+    process.env.PUBLIC_APP_URL = 'https://platform.example';
+
+    const robotsReq = mockReq({ method: 'GET', url: '/robots.txt' });
+    const robotsRes = mockRes();
+    const sitemapReq = mockReq({ method: 'GET', url: '/sitemap.xml' });
+    const sitemapRes = mockRes();
+
+    try {
+      await handler(robotsReq, robotsRes as any);
+      await handler(sitemapReq, sitemapRes as any);
+    } finally {
+      if (previousPublicUrl === undefined) {
+        delete process.env.PUBLIC_APP_URL;
+      } else {
+        process.env.PUBLIC_APP_URL = previousPublicUrl;
+      }
+    }
+
+    expect(robotsRes._status).toBe(200);
+    expect(robotsRes._headers['content-type']).toBe('text/plain; charset=utf-8');
+    expect(robotsRes._body).toContain('Disallow: /workspace/');
+    expect(robotsRes._body).toContain('Sitemap: https://platform.example/sitemap.xml');
+
+    expect(sitemapRes._status).toBe(200);
+    expect(sitemapRes._headers['content-type']).toBe('application/xml; charset=utf-8');
+    expect(sitemapRes._body).toContain('<loc>https://platform.example/</loc>');
+    expect(app.handleRequest).not.toHaveBeenCalled();
+  });
+
   test('serves frontend script asset', async () => {
     const app = mockApp();
     const handler = createRequestHandler({ app });

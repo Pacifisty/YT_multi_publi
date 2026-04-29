@@ -52,7 +52,7 @@ describe('buildDashboardView', () => {
     expect(view.summaryCards).toHaveLength(4);
     expect(view.summaryCards[0]).toMatchObject({ label: 'Total Campaigns', value: 10 });
     expect(view.summaryCards[1]).toMatchObject({ label: 'Published Videos', value: 20 });
-    expect(view.summaryCards[2]).toMatchObject({ label: 'Success Rate', value: '66.67%' });
+    expect(view.summaryCards[2]).toMatchObject({ label: 'Success Rate', value: '66.7%' });
     expect(view.summaryCards[3]).toMatchObject({ label: 'Failed Uploads', value: 5 });
   });
 
@@ -407,6 +407,148 @@ describe('buildDashboardView', () => {
       ],
       primaryAction: {
         kind: 'review_campaigns',
+        href: '/workspace/campanhas',
+      },
+    });
+  });
+
+  test('renders an actionable failed job queue', () => {
+    const data: DashboardData = {
+      campaigns: { total: 2, byStatus: { draft: 0, ready: 0, launching: 0, completed: 1, failed: 1 } },
+      targets: { total: 4, byStatus: { aguardando: 0, enviando: 0, publicado: 1, erro: 3 }, successRate: 25 },
+      jobs: { total: 3, byStatus: { queued: 0, processing: 0, completed: 0, failed: 3 }, totalRetries: 0 },
+      quota: {
+        dailyLimitUnits: 10000,
+        estimatedConsumedUnits: 300,
+        estimatedQueuedUnits: 0,
+        estimatedProjectedUnits: 300,
+        estimatedRemainingUnits: 9700,
+        usagePercent: 3,
+        projectedPercent: 3,
+        warningState: 'healthy',
+      },
+      failures: {
+        failedCampaigns: 1,
+        failedTargets: 2,
+        topReason: 'other_failure',
+        reasons: [{ reason: 'other_failure', count: 2 }],
+      },
+      failedJobs: [
+        {
+          jobId: 'job-retry',
+          campaignId: 'campaign-1',
+          campaignTitle: 'Spring Launch',
+          targetId: 'target-retry',
+          platform: 'tiktok',
+          destinationId: 'tt-account',
+          destinationLabel: 'TikTok Main',
+          videoTitle: 'Clip Retry',
+          errorMessage: 'temporarily unavailable',
+          errorClass: 'transient',
+          attempt: 1,
+          failedAt: '2026-04-28T12:00:01.000Z',
+          suggestedAction: 'retry',
+        },
+        {
+          jobId: null,
+          campaignId: 'campaign-1',
+          campaignTitle: 'Spring Launch',
+          targetId: 'target-reauth',
+          platform: 'youtube',
+          destinationId: 'ch-reauth',
+          destinationLabel: null,
+          videoTitle: 'Clip Reauth',
+          errorMessage: 'REAUTH_REQUIRED',
+          errorClass: null,
+          attempt: null,
+          failedAt: null,
+          suggestedAction: 'reauth',
+        },
+        {
+          jobId: 'job-review',
+          campaignId: 'campaign-2',
+          campaignTitle: 'Policy Check',
+          targetId: 'target-review',
+          platform: 'instagram',
+          destinationId: 'ig-account',
+          destinationLabel: 'Instagram Main',
+          videoTitle: 'Clip Review',
+          errorMessage: 'copyright violation',
+          errorClass: 'permanent',
+          attempt: 1,
+          failedAt: '2026-04-28T12:00:02.000Z',
+          suggestedAction: 'review',
+        },
+      ],
+      retries: {
+        retriedTargets: 0,
+        highestAttempt: 0,
+        hotspotChannelId: null,
+        hotspotRetryCount: 0,
+      },
+      audit: {
+        totalEvents: 0,
+        byType: { launch_campaign: 0, retry_target: 0, mark_ready: 0, clone_campaign: 0, delete_campaign: 0, update_campaign: 0, remove_target: 0, update_target: 0, add_target: 0, add_targets_bulk: 0, publish_completed: 0, publish_failed: 0, publish_partial_failure: 0 },
+        lastEventAt: null,
+        lastEventType: null,
+        lastActorEmail: null,
+      },
+      reauth: { blockedCampaigns: 1, blockedTargets: 1, blockedChannelCount: 1, blockedChannelIds: ['ch-reauth'] },
+      channels: [],
+    };
+
+    const view = buildDashboardView(data);
+
+    expect(view.failedJobQueue).toMatchObject({
+      total: 3,
+      retryableCount: 1,
+      reauthCount: 1,
+      reviewCount: 1,
+    });
+    expect(view.failedJobQueue?.rows.map((row) => row.primaryAction)).toEqual([
+      {
+        kind: 'retry_target',
+        label: 'Retry',
+        href: '/api/campaigns/campaign-1/targets/target-retry/retry',
+      },
+      {
+        kind: 'reauth_accounts',
+        label: 'Reconnect account',
+        href: '/workspace/accounts',
+      },
+      {
+        kind: 'review_campaign',
+        label: 'Review campaign',
+        href: '/workspace/campanhas/campaign-2',
+      },
+    ]);
+    expect(view.failedJobQueue?.rows.map((row) => ({
+      campaignHref: row.campaignHref,
+      historyHref: row.historyHref,
+    }))).toEqual([
+      {
+        campaignHref: '/workspace/campanhas/campaign-1',
+        historyHref: '/api/campaigns/campaign-1/targets/target-retry/jobs',
+      },
+      {
+        campaignHref: '/workspace/campanhas/campaign-1',
+        historyHref: '/api/campaigns/campaign-1/targets/target-reauth/jobs',
+      },
+      {
+        campaignHref: '/workspace/campanhas/campaign-2',
+        historyHref: '/api/campaigns/campaign-2/targets/target-review/jobs',
+      },
+    ]);
+    expect(view.failedJobBanner).toEqual({
+      tone: 'warning',
+      title: 'Failed publishing work needs attention',
+      body: '3 failed targets: 1 retryable, 1 need reconnect, 1 need review.',
+      total: 3,
+      retryableCount: 1,
+      reauthCount: 1,
+      reviewCount: 1,
+      primaryAction: {
+        kind: 'review_failed_jobs',
         href: '/workspace/campanhas',
       },
     });

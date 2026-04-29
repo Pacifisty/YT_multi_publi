@@ -1,6 +1,6 @@
 import type { AuthFetch } from './auth-client';
 
-export type SupportedOauthProvider = 'google' | 'youtube' | 'tiktok';
+export type SupportedOauthProvider = 'google' | 'youtube' | 'tiktok' | 'instagram';
 
 export interface ConnectedAccountRecord {
   id: string;
@@ -52,6 +52,8 @@ export function normalizeOauthProvider(provider?: string): SupportedOauthProvide
       return 'youtube';
     case 'tiktok':
       return 'tiktok';
+    case 'instagram':
+      return 'instagram';
     case 'google':
     default:
       return 'google';
@@ -66,6 +68,8 @@ export function getOauthProviderLabel(provider?: string): string {
       return 'YouTube';
     case 'tiktok':
       return 'TikTok';
+    case 'instagram':
+      return 'Instagram';
     case 'google':
     default:
       return 'Google';

@@ -2,6 +2,10 @@ import { describe, expect, test } from 'vitest';
 import {
   classifyPublishError,
   classifyPublishErrorMessage,
+  classifyTikTokError,
+  isTikTokAuthError,
+  isTikTokContentRejected,
+  isTikTokRateLimited,
 } from '../../apps/api/src/campaigns/error-classifier';
 import {
   PublishJobService,
@@ -126,5 +130,23 @@ describe('PublishJobService.retry — errorClass gating', () => {
     await service.markFailed(job.id, 'connection reset', { errorClass: 'transient' });
     const result = await service.retry(job.id);
     expect(result).toEqual({ error: 'MAX_ATTEMPTS_REACHED' });
+  });
+});
+
+describe('classifyTikTokError', () => {
+  test('classifies auth and content errors as permanent', () => {
+    expect(classifyTikTokError({ statusCode: 401, message: 'Invalid access token' })).toBe('permanent');
+    expect(classifyTikTokError({ errorCode: '10001', message: 'invalid access token' })).toBe('permanent');
+    expect(classifyTikTokError({ errorCode: 'invalid_grant', message: 'token revoked' })).toBe('permanent');
+    expect(classifyTikTokError(new Error('Content Policy Violation'))).toBe('permanent');
+    expect(isTikTokAuthError({ errorCode: 'invalid_grant', message: 'token revoked' })).toBe(true);
+    expect(isTikTokContentRejected(new Error('copyright violation'))).toBe(true);
+  });
+
+  test('classifies rate limits and token expiry as transient', () => {
+    expect(classifyTikTokError({ statusCode: 429, message: 'Too many requests' })).toBe('transient');
+    expect(classifyTikTokError({ errorCode: 'rate_limit_exceeded', message: 'rate limit exceeded' })).toBe('transient');
+    expect(classifyTikTokError({ errorCode: '10002', message: 'token expired' })).toBe('transient');
+    expect(isTikTokRateLimited({ statusCode: 429, message: 'Too many requests' })).toBe(true);
   });
 });

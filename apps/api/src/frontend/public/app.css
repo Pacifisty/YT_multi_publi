@@ -9508,14 +9508,26 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .notice {
 }
 
 /* ==================== PMP Brand Logo ==================== */
+/* Strip the inherited "panel" treatment (border + gradient bg from .header-brand-block)
+   so the logo reads as an identity mark, not a boxed widget. */
+.header-brand-block.pmp-brand,
+.header-shell-fullwidth .header-brand-block.pmp-brand {
+  border: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+  gap: 18px;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .pmp-brand {
   display: inline-flex !important;
   align-items: center;
-  gap: 14px;
+  gap: 18px;
   text-decoration: none;
   color: inherit;
-  padding: 4px 4px 4px 0;
-  border-radius: 14px;
+  padding: 0;
+  border-radius: 0;
   transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -9525,8 +9537,8 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .notice {
 
 .pmp-logo-mark {
   position: relative;
-  width: 52px;
-  height: 52px;
+  width: 64px;
+  height: 64px;
   flex-shrink: 0;
 }
 
@@ -9534,7 +9546,7 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .notice {
   width: 100%;
   height: 100%;
   display: block;
-  filter: drop-shadow(0 0 12px rgba(99, 102, 241, 0.45));
+  filter: drop-shadow(0 2px 14px rgba(99, 102, 241, 0.55));
   transition: filter 0.4s, transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -9624,16 +9636,16 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .notice {
 }
 
 .pmp-brand-kicker {
-  font-size: 0.62rem;
+  font-size: 0.68rem;
   letter-spacing: 0.42em;
   font-weight: 700;
   color: var(--text-subtle);
   text-transform: uppercase;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 
 .pmp-brand-name {
-  font-size: 1.2rem;
+  font-size: 1.5rem;
   font-weight: 800;
   background: linear-gradient(120deg, #22d3ee 0%, #6366f1 50%, #c084fc 100%);
   background-size: 200% auto;
@@ -9654,8 +9666,8 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .notice {
     display: none;
   }
   .pmp-logo-mark {
-    width: 44px;
-    height: 44px;
+    width: 52px;
+    height: 52px;
   }
 }
 
@@ -9674,6 +9686,131 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .notice {
     opacity: 1 !important;
     transform: none !important;
     stroke-dashoffset: 0 !important;
+  }
+}
+
+/* ==================== Videos · view switcher ==================== */
+.videos-view-switcher {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 6px;
+  margin-bottom: 24px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 14px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px -16px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+.videos-view-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--text-subtle);
+  font-weight: 600;
+  font-size: 0.92rem;
+  letter-spacing: 0.01em;
+  transition: color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+  white-space: nowrap;
+}
+
+.videos-view-tab:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface-muted) 60%, transparent);
+}
+
+.videos-view-tab.is-active {
+  color: var(--text);
+  background: linear-gradient(135deg,
+    color-mix(in srgb, var(--primary) 18%, transparent),
+    color-mix(in srgb, var(--primary) 6%, transparent));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--primary) 32%, transparent),
+    0 6px 20px -10px color-mix(in srgb, var(--primary) 70%, transparent);
+}
+
+.videos-view-tab.is-active::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 4px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #22d3ee, #6366f1, #c084fc);
+  opacity: 0.85;
+}
+
+.videos-view-tab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.2em;
+  height: 1.2em;
+  opacity: 0.9;
+}
+
+.videos-view-tab-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.4));
+  transition: filter 0.18s ease;
+}
+
+.videos-view-tab:hover .videos-view-tab-icon svg {
+  filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.6));
+}
+
+.videos-view-tab.is-active .videos-view-tab-icon svg {
+  filter: drop-shadow(0 0 10px rgba(99, 102, 241, 0.8));
+}
+
+.videos-view-tab-label {
+  letter-spacing: 0.04em;
+}
+
+.videos-view-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text-subtle);
+  letter-spacing: 0.02em;
+}
+
+.videos-view-tab.is-active .videos-view-tab-count {
+  background: color-mix(in srgb, var(--primary) 22%, transparent);
+  color: var(--text);
+}
+
+@media (max-width: 640px) {
+  .videos-view-switcher {
+    display: flex;
+    width: 100%;
+  }
+  .videos-view-tab {
+    flex: 1;
+    justify-content: center;
+    padding: 10px 12px;
+    font-size: 0.86rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .videos-view-tab {
+    transition: none;
   }
 }
 
@@ -12460,6 +12597,20 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .notice {
   resize: vertical;
 }
 
+.campaign-field-warning {
+  color: var(--text-subtle);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.campaign-field-warning[data-state="warning"] {
+  color: var(--warning);
+}
+
+.campaign-field-warning[data-state="ok"] {
+  color: var(--success);
+}
+
 .campaign-flow-field-wide {
   grid-column: 1 / -1;
 }
@@ -12481,6 +12632,176 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .notice {
   width: 18px;
   height: 18px;
   flex: 0 0 auto;
+}
+
+.campaign-thumbnail-panel {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border));
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--surface-muted) 88%, transparent), var(--surface)),
+    linear-gradient(90deg, color-mix(in srgb, var(--primary) 8%, transparent), color-mix(in srgb, var(--success) 7%, transparent));
+  box-shadow: var(--shadow-sm);
+}
+
+.campaign-thumbnail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 14px;
+  min-width: 0;
+}
+
+.campaign-thumbnail-head h3 {
+  margin: 0;
+}
+
+.campaign-thumbnail-head p {
+  margin: 6px 0 0;
+  color: var(--text-subtle);
+  line-height: 1.45;
+}
+
+.campaign-thumbnail-badge {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.campaign-cover-platform-wrap {
+  display: grid;
+  gap: 10px;
+}
+
+.campaign-cover-platform-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.campaign-cover-platform {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.campaign-cover-platform input {
+  width: 18px;
+  height: 18px;
+}
+
+.campaign-cover-platform strong {
+  min-width: 0;
+}
+
+.campaign-cover-platform span {
+  color: var(--text-subtle);
+  line-height: 1.35;
+  font-size: 0.82rem;
+}
+
+.campaign-cover-platform[data-selected="true"],
+.campaign-cover-platform:has(input:checked) {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.campaign-thumbnail-warning {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--warning) 40%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--warning) 12%, var(--surface));
+}
+
+.campaign-thumbnail-warning[hidden] {
+  display: none;
+}
+
+.campaign-thumbnail-warning p {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.campaign-thumbnail-checklist {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.campaign-thumbnail-checklist div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.campaign-thumbnail-checklist div[data-state="ready"] {
+  border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+}
+
+.campaign-thumbnail-checklist div[data-state="attention"] {
+  border-color: color-mix(in srgb, var(--warning) 42%, var(--border));
+}
+
+.campaign-thumbnail-checklist div[data-state="pending"] {
+  border-style: dashed;
+}
+
+.campaign-thumbnail-checklist span {
+  color: var(--text-subtle);
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.campaign-thumbnail-checklist strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.campaign-thumbnail-panel textarea {
+  width: 100%;
+  min-height: 260px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: 0.88rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  resize: vertical;
+}
+
+.campaign-thumbnail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.campaign-thumbnail-standby {
+  padding: 14px;
+  border: 1px dashed color-mix(in srgb, var(--primary) 32%, var(--border));
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-subtle);
+  line-height: 1.45;
 }
 
 .campaign-random-panel {
@@ -12579,6 +12900,66 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .notice {
   gap: 9px;
 }
 
+.campaign-automation-guide {
+  display: grid;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.campaign-automation-guide-head {
+  display: grid;
+  gap: 3px;
+}
+
+.campaign-automation-guide-head strong {
+  font-size: 0.95rem;
+}
+
+.campaign-automation-guide-list {
+  display: grid;
+  gap: 8px;
+}
+
+.campaign-automation-guide-item {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+
+.campaign-automation-guide-item span {
+  color: var(--text-subtle);
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.campaign-automation-guide-item strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+  font-size: 0.82rem;
+}
+
+.campaign-automation-guide-item[data-state="active"] {
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border));
+  background: color-mix(in srgb, var(--success-soft) 28%, var(--surface-muted));
+}
+
+.campaign-automation-guide-item[data-state="available"] {
+  border-color: color-mix(in srgb, var(--primary) 38%, var(--border));
+}
+
+.campaign-automation-guide-item[data-state="locked"] {
+  opacity: 0.64;
+}
+
 .campaign-flow-summary-grid div,
 .campaign-review-grid div {
   display: grid;
@@ -12672,6 +13053,20 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .notice {
 .campaign-review-destination small {
   color: var(--text-subtle);
   text-align: right;
+}
+
+.campaign-review-thumbnail {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border));
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.campaign-review-thumbnail span {
+  color: var(--text-subtle);
+  line-height: 1.45;
 }
 
 .campaign-save-grid {
@@ -12906,7 +13301,9 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .notice {
   .campaign-flow-field-grid,
   .campaign-review-grid,
   .campaign-format-row,
-  .campaign-save-grid {
+  .campaign-save-grid,
+  .campaign-cover-platform-grid,
+  .campaign-thumbnail-checklist {
     grid-template-columns: 1fr;
   }
 
@@ -12927,6 +13324,12 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .notice {
   .campaign-flow-footer {
     position: static;
     flex-direction: column-reverse;
+  }
+
+  .campaign-thumbnail-head,
+  .campaign-thumbnail-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .campaign-flow-footer .button {

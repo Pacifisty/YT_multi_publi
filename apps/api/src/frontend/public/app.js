@@ -1745,8 +1745,11 @@ async function showFormDialog({ title, message = '', fields, confirmLabel = 'Sav
 
 function activeTab(pathname) {
   if (pathname.startsWith('/workspace/accounts')) return 'accounts';
-  if (pathname.startsWith('/workspace/playlists')) return 'playlists';
-  if (pathname.startsWith('/workspace/media')) return 'media';
+  if (
+    pathname.startsWith('/workspace/videos')
+    || pathname.startsWith('/workspace/playlists')
+    || pathname.startsWith('/workspace/media')
+  ) return 'videos';
   if (pathname.startsWith('/workspace/campanhas')) return 'campanhas';
   if (pathname.startsWith('/workspace/planos')) return 'planos';
   return 'dashboard';
@@ -1757,8 +1760,7 @@ function renderWorkspaceShell(options) {
     { id: 'dashboard', label: 'Dashboard', href: '/workspace/dashboard' },
     { id: 'campanhas', label: 'Campanhas', href: '/workspace/campanhas' },
     { id: 'accounts', label: 'Accounts', href: '/workspace/accounts' },
-    { id: 'media', label: 'Media', href: '/workspace/media' },
-    { id: 'playlists', label: 'Playlists', href: '/workspace/playlists' },
+    { id: 'videos', label: 'Videos', href: '/workspace/videos' },
     { id: 'planos', label: 'Planos', href: '/workspace/planos' },
   ];
   const pathname = window.location.pathname;
@@ -3916,8 +3918,13 @@ async function backfillMissingMediaDurations(assets) {
     }
   }));
 
-  if (updatedAny && window.location.pathname === '/workspace/media') {
-    await renderMediaPage();
+  if (updatedAny) {
+    const path = window.location.pathname;
+    if (path === '/workspace/videos') {
+      await renderVideosPage();
+    } else if (path === '/workspace/media') {
+      await renderMediaPage();
+    }
   }
 }
 
@@ -6198,7 +6205,66 @@ function attachVideoPreviewListeners(assetMap) {
   });
 }
 
-async function renderMediaPage() {
+function renderVideosViewSwitcher({ activeView, libraryHref, playlistsHref, libraryCount, playlistsCount }) {
+  const libraryActive = activeView === 'library';
+  const playlistsActive = activeView === 'playlists';
+  const libCountHtml = Number.isFinite(libraryCount) ? `<span class="videos-view-tab-count">${formatNumber(libraryCount)}</span>` : '';
+  const plCountHtml = Number.isFinite(playlistsCount) ? `<span class="videos-view-tab-count">${formatNumber(playlistsCount)}</span>` : '';
+
+  const assetLibrarySvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="3" width="7" height="7" rx="1"/>
+    <rect x="14" y="3" width="7" height="7" rx="1"/>
+    <rect x="3" y="14" width="7" height="7" rx="1"/>
+    <rect x="14" y="14" width="7" height="7" rx="1"/>
+  </svg>`;
+
+  const playlistSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="8" y1="6" x2="21" y2="6"/>
+    <line x1="8" y1="12" x2="21" y2="12"/>
+    <line x1="8" y1="18" x2="21" y2="18"/>
+    <rect x="3" y="5" width="2" height="2" rx="0.5" fill="currentColor"/>
+    <rect x="3" y="11" width="2" height="2" rx="0.5" fill="currentColor"/>
+    <rect x="3" y="17" width="2" height="2" rx="0.5" fill="currentColor"/>
+  </svg>`;
+
+  return `
+    <nav class="videos-view-switcher" role="tablist" aria-label="Visualização de vídeos">
+      <a class="videos-view-tab ${libraryActive ? 'is-active' : ''}" role="tab" aria-selected="${libraryActive ? 'true' : 'false'}" data-link href="${escapeHtml(libraryHref)}">
+        <span class="videos-view-tab-icon" aria-hidden="true">${assetLibrarySvg}</span>
+        <span class="videos-view-tab-label">Asset library</span>
+        ${libCountHtml}
+      </a>
+      <a class="videos-view-tab ${playlistsActive ? 'is-active' : ''}" role="tab" aria-selected="${playlistsActive ? 'true' : 'false'}" data-link href="${escapeHtml(playlistsHref)}">
+        <span class="videos-view-tab-icon" aria-hidden="true">${playlistSvg}</span>
+        <span class="videos-view-tab-label">Playlists</span>
+        ${plCountHtml}
+      </a>
+    </nav>
+  `;
+}
+
+async function renderVideosPage() {
+  const query = parseCurrentQuery();
+  const view = query.get('view') === 'playlists' ? 'playlists' : 'library';
+  const videosCtx = { view };
+  if (view === 'playlists') {
+    await renderPlaylistsPage({ videosCtx });
+  } else {
+    await renderMediaPage({ videosCtx });
+  }
+}
+
+async function renderMediaPage(options = {}) {
+  const videosCtx = options.videosCtx ?? null;
+  const reRender = () => renderMediaPage(options);
+  const baseHref = videosCtx ? '/workspace/videos' : '/workspace/media';
+  const libraryHref = videosCtx ? '/workspace/videos?view=library' : '/workspace/media';
+  const playlistsHref = videosCtx ? '/workspace/videos?view=playlists' : '/workspace/playlists';
+  const pageTitle = videosCtx ? 'Videos' : 'Media';
+  const pageSubtitle = videosCtx
+    ? 'Sua biblioteca de vídeos e organização de playlists em um só lugar.'
+    : 'Uploaded reusable assets.';
+
   const result = await api.media();
   if (!result.ok) {
     if (result.status === 401) {
@@ -6206,8 +6272,8 @@ async function renderMediaPage() {
       return;
     }
     renderWorkspaceShell({
-      title: 'Media',
-      subtitle: 'Uploaded reusable assets.',
+      title: pageTitle,
+      subtitle: pageSubtitle,
       noticeHtml: `<div class="notice error">${escapeHtml(result.error)}</div>`,
       contentHtml: '<section class="card">Unable to load media assets.</section>',
     });
@@ -6305,7 +6371,7 @@ async function renderMediaPage() {
       ? renderEmptyStateCard({
           title: 'No media matches the current filters',
           message: 'Try clearing the search or type filter to bring the asset list back.',
-          actionsHtml: '<a class="button button-secondary" data-link href="/workspace/media">Clear filters</a>',
+          actionsHtml: `<a class="button button-secondary" data-link href="${escapeHtml(libraryHref)}">Clear filters</a>`,
         })
       : '';
   const mediaCardsHtml = filteredAssets.map((asset) => {
@@ -6364,15 +6430,23 @@ async function renderMediaPage() {
     `;
   }).join('');
 
+  const viewSwitcherHtml = videosCtx ? renderVideosViewSwitcher({
+    activeView: 'library',
+    libraryHref: buildUrl('/workspace/videos', { view: 'library', search: searchInput, type: typeFilter }),
+    playlistsHref: '/workspace/videos?view=playlists',
+    libraryCount: assets.length,
+  }) : '';
+
   renderWorkspaceShell({
-    title: 'Media',
-    subtitle: 'Uploaded reusable assets.',
+    title: pageTitle,
+    subtitle: pageSubtitle,
     actionsHtml: `
       <div class="inline-actions">
-        <a class="button button-secondary" data-link href="${escapeHtml(buildUrl('/workspace/media', { search: searchInput, type: typeFilter }))}">Refresh</a>
+        <a class="button button-secondary" data-link href="${escapeHtml(buildUrl(baseHref, videosCtx ? { view: 'library', search: searchInput, type: typeFilter } : { search: searchInput, type: typeFilter }))}">Refresh</a>
       </div>
     `,
     contentHtml: `
+      ${viewSwitcherHtml}
       <section class="media-hero-interactive" id="media-hero-interactive">
         <div class="media-hero-bg">
           <div class="media-hero-orb media-hero-orb-1"></div>
@@ -6490,7 +6564,7 @@ async function renderMediaPage() {
             </label>
             <div class="inline-actions">
               <button class="button button-primary" type="submit">Apply</button>
-              <a class="button button-secondary" data-link href="/workspace/media">Clear</a>
+              <a class="button button-secondary" data-link href="${escapeHtml(libraryHref)}">Clear</a>
             </div>
           </form>
           <div class="platform-page-summary-grid">
@@ -6548,7 +6622,7 @@ async function renderMediaPage() {
     const thumbnailFile = thumbnailInput.files?.[0];
     if (!videoFile) {
       setUiNotice('warning', 'Video required', 'Select a video file before uploading media.');
-      await renderMediaPage();
+      await reRender();
       return;
     }
 
@@ -6557,16 +6631,16 @@ async function renderMediaPage() {
       const uploadResult = await uploadMediaFiles(videoFile, thumbnailFile ?? null);
       if (!uploadResult.ok) {
         setUiNotice('error', 'Upload failed', uploadResult.error);
-        await renderMediaPage();
+        await reRender();
         return;
       }
 
       setUiNotice('success', 'Media uploaded', 'The new asset was added to the library.');
-      await renderMediaPage();
+      await reRender();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Upload failed.';
       setUiNotice('error', 'Upload failed', message);
-      await renderMediaPage();
+      await reRender();
     } finally {
       setButtonBusy(submitButton, false);
     }
@@ -6576,10 +6650,10 @@ async function renderMediaPage() {
   mediaFilterForm?.addEventListener('submit', (event) => {
     event.preventDefault();
     const data = new FormData(mediaFilterForm);
-    const href = buildUrl('/workspace/media', {
-      search: String(data.get('search') ?? ''),
-      type: String(data.get('type') ?? 'all'),
-    });
+    const params = videosCtx
+      ? { view: 'library', search: String(data.get('search') ?? ''), type: String(data.get('type') ?? 'all') }
+      : { search: String(data.get('search') ?? ''), type: String(data.get('type') ?? 'all') };
+    const href = buildUrl(baseHref, params);
     navigate(href);
   });
 
@@ -6587,7 +6661,10 @@ async function renderMediaPage() {
     tile.addEventListener('click', () => {
       const filterValue = tile.getAttribute('data-media-filter');
       if (!filterValue) return;
-      navigate(buildUrl('/workspace/media', { search: searchInput, type: filterValue }));
+      const params = videosCtx
+        ? { view: 'library', search: searchInput, type: filterValue }
+        : { search: searchInput, type: filterValue };
+      navigate(buildUrl(baseHref, params));
     });
   });
 
@@ -6638,10 +6715,10 @@ async function renderMediaPage() {
       try {
         await navigator.clipboard.writeText(mediaId);
         setUiNotice('success', 'Media ID copied', 'The asset id was copied to the clipboard.');
-        await renderMediaPage();
+        await reRender();
       } catch {
         setUiNotice('error', 'Copy failed', 'Unable to copy the media id to the clipboard.');
-        await renderMediaPage();
+        await reRender();
       }
     });
   });
@@ -6656,7 +6733,7 @@ async function renderMediaPage() {
       }
 
       updateMediaPreviewSize(mediaId, previewSize);
-      await renderMediaPage();
+      await reRender();
     });
   });
 
@@ -6678,11 +6755,11 @@ async function renderMediaPage() {
       setButtonBusy(button, false);
       if (!deleteResult.ok) {
         setUiNotice('error', 'Delete failed', deleteResult.error);
-        await renderMediaPage();
+        await reRender();
         return;
       }
       setUiNotice('success', 'Media deleted', 'The selected asset was removed from the library.');
-      await renderMediaPage();
+      await reRender();
     });
   });
 }
@@ -6872,11 +6949,21 @@ function animateMissionInsights() {
   });
 }
 
-async function renderPlaylistsPage() {
+async function renderPlaylistsPage(options = {}) {
+  const videosCtx = options.videosCtx ?? null;
+  const reRender = () => renderPlaylistsPage(options);
+  const baseHref = videosCtx ? '/workspace/videos' : '/workspace/playlists';
+  const playlistsHref = videosCtx ? '/workspace/videos?view=playlists' : '/workspace/playlists';
+  const libraryHref = videosCtx ? '/workspace/videos?view=library' : '/workspace/media';
+  const pageTitle = videosCtx ? 'Videos' : 'Playlists';
+  const pageSubtitle = videosCtx
+    ? 'Sua biblioteca de vídeos e organização de playlists em um só lugar.'
+    : 'Organize videos em playlists a partir de pastas locais.';
+
   const [playlistsResult, mediaResult] = await Promise.all([api.playlists(), api.media()]);
   if (!playlistsResult.ok) {
     if (playlistsResult.status === 401) { unauthorizedRedirect(); return; }
-    renderWorkspaceShell({ title: 'Playlists', subtitle: 'Organize videos em playlists a partir de pastas locais.', noticeHtml: `<div class="notice error">${escapeHtml(playlistsResult.error)}</div>`, contentHtml: '' });
+    renderWorkspaceShell({ title: pageTitle, subtitle: pageSubtitle, noticeHtml: `<div class="notice error">${escapeHtml(playlistsResult.error)}</div>`, contentHtml: '' });
     return;
   }
 
@@ -6948,7 +7035,7 @@ async function renderPlaylistsPage() {
               </div>
             </div>
             <div class="platform-media-card-actions inline-actions">
-              <a class="button button-secondary" data-link href="/workspace/playlists/${encodeURIComponent(pl.id)}">Abrir</a>
+              <a class="button button-secondary" data-link href="/workspace/playlists/${encodeURIComponent(pl.id)}?from=videos">Abrir</a>
               <button class="button button-danger" type="button" data-action="delete-playlist" data-playlist-id="${escapeHtml(pl.id)}">Excluir</button>
             </div>
           </article>
@@ -6963,15 +7050,24 @@ async function renderPlaylistsPage() {
       })
     : '';
 
+  const viewSwitcherHtml = videosCtx ? renderVideosViewSwitcher({
+    activeView: 'playlists',
+    libraryHref: '/workspace/videos?view=library',
+    playlistsHref: '/workspace/videos?view=playlists',
+    libraryCount: allAssets.length,
+    playlistsCount: playlists.length,
+  }) : '';
+
   renderWorkspaceShell({
-    title: 'Playlists',
-    subtitle: 'Organize videos em playlists a partir de pastas locais.',
+    title: pageTitle,
+    subtitle: pageSubtitle,
     actionsHtml: `
       <div class="inline-actions">
-        <a class="button button-secondary" data-link href="/workspace/playlists">Refresh</a>
+        <a class="button button-secondary" data-link href="${escapeHtml(playlistsHref)}">Refresh</a>
       </div>
     `,
     contentHtml: `
+      ${viewSwitcherHtml}
       <section class="playlist-cockpit" id="playlist-cockpit">
         <div class="playlist-cockpit-bg" aria-hidden="true">
           <div class="playlist-cockpit-orb-a"></div>
@@ -7192,7 +7288,7 @@ async function renderPlaylistsPage() {
       const { created, updated } = result.body ?? {};
       setUiNotice('success', 'Scan concluido', `${created} playlists criadas, ${updated} atualizadas.`);
     }
-    await renderPlaylistsPage();
+    await reRender();
   });
 
   document.querySelector('[data-action="create-playlist-manual"]')?.addEventListener('click', async () => {
@@ -7206,7 +7302,7 @@ async function renderPlaylistsPage() {
     if (!result) return;
     const r = await api.createPlaylist(result.name, result.folderPath ?? '');
     if (!r.ok) { setUiNotice('error', 'Erro', r.error); } else { setUiNotice('success', 'Playlist criada', ''); }
-    await renderPlaylistsPage();
+    await reRender();
   });
 
   document.querySelectorAll('[data-action="delete-playlist"]').forEach((btn) => {
@@ -7216,7 +7312,7 @@ async function renderPlaylistsPage() {
       if (!confirmed) return;
       const r = await api.deletePlaylist(playlistId);
       if (!r.ok) { setUiNotice('error', 'Erro ao excluir', r.error); } else { setUiNotice('success', 'Playlist excluida', ''); }
-      await renderPlaylistsPage();
+      await reRender();
     });
   });
 }
@@ -7294,7 +7390,7 @@ async function renderPlaylistDetailPage(playlistId) {
     subtitle: escapeHtml(playlist.folderPath || 'Playlist manual'),
     actionsHtml: `
       <div class="inline-actions">
-        <a class="button button-secondary" data-link href="/workspace/playlists">← Playlists</a>
+        <a class="button button-secondary" data-link href="/workspace/videos?view=playlists">← Playlists</a>
         <a class="button button-secondary" data-link href="/workspace/playlists/${encodeURIComponent(playlistId)}">Refresh</a>
       </div>
     `,
@@ -7627,7 +7723,7 @@ async function renderCampaignsPage() {
         tone: 'info',
         actionsHtml: [
           '<a class="button button-primary" data-link href="/workspace/campanhas/nova">Create campaign</a>',
-          '<a class="button button-secondary" data-link href="/workspace/media">Open media</a>',
+          '<a class="button button-secondary" data-link href="/workspace/videos">Open videos</a>',
           '<a class="button button-secondary" data-link href="/workspace/accounts">Open accounts</a>',
         ].join(''),
       })
@@ -8106,6 +8202,8 @@ function getCampaignFlowDefaults() {
     privacy: '',
     youtubePlaylistId: '',
     thumbnailAssetId: '',
+    thumbnailAssistantEnabled: false,
+    thumbnailCoverPlatforms: [],
     instagramCaption: '',
     instagramShareToFeed: true,
   };
@@ -8119,6 +8217,7 @@ function readCampaignFlowState() {
       ...(parsed && typeof parsed === 'object' ? parsed : {}),
       selectedPlatforms: Array.isArray(parsed?.selectedPlatforms) ? parsed.selectedPlatforms : [],
       selectedDestinationRefs: Array.isArray(parsed?.selectedDestinationRefs) ? parsed.selectedDestinationRefs : [],
+      thumbnailCoverPlatforms: Array.isArray(parsed?.thumbnailCoverPlatforms) ? parsed.thumbnailCoverPlatforms : [],
       perTargetPublishAt: parsed?.perTargetPublishAt && typeof parsed.perTargetPublishAt === 'object' ? parsed.perTargetPublishAt : {},
       scheduleHours: Array.isArray(parsed?.scheduleHours) ? parsed.scheduleHours : [],
       scheduleDays: Array.isArray(parsed?.scheduleDays) ? parsed.scheduleDays : [],
@@ -8233,6 +8332,179 @@ function campaignFlowSelectedVideos(videos, flowState) {
   });
 }
 
+function countCampaignFlowWords(value) {
+  return String(value ?? '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
+function campaignFlowCoverPlatformLabel(platform) {
+  return getCampaignFlowPlatformLabel(platform);
+}
+
+function campaignFlowCoverFormat(platform) {
+  if (platform === 'youtube') return 'YouTube: thumbnail horizontal 16:9, alto contraste e leitura forte em telas pequenas.';
+  if (platform === 'tiktok') return 'TikTok: capa vertical 9:16, assunto centralizado e texto dentro de area segura.';
+  if (platform === 'instagram') return 'Instagram: capa para Reels/feed, vertical 9:16 com centro seguro para corte 1:1.';
+  return 'Capa de video adaptada para a plataforma selecionada.';
+}
+
+function getCampaignFlowThumbnailAssistantGate(flowState) {
+  const baseWordCount = countCampaignFlowWords(flowState.titleSeed);
+  const baseReady = baseWordCount >= 12;
+  const coverPlatforms = (Array.isArray(flowState.thumbnailCoverPlatforms) ? flowState.thumbnailCoverPlatforms : [])
+    .filter((platform) => CAMPAIGN_FLOW_PLATFORMS.includes(platform));
+  const hasCoverPlatform = coverPlatforms.length > 0;
+  const hasCampaignPlatform = Array.isArray(flowState.selectedPlatforms) && flowState.selectedPlatforms.length > 0;
+  const hasDestination = Array.isArray(flowState.selectedDestinationRefs) && flowState.selectedDestinationRefs.length > 0;
+  const canEnable = baseReady && hasCoverPlatform && hasCampaignPlatform && hasDestination;
+  let message = '';
+  if (!baseReady) {
+    message = 'Preencha a Base para título aleatório com no mínimo 12 palavras para gerar um briefing melhor.';
+  } else if (!hasCoverPlatform) {
+    message = 'Selecione pelo menos uma plataforma: YouTube, TikTok ou Instagram.';
+  } else if (!hasCampaignPlatform || !hasDestination) {
+    message = 'Selecione pelo menos uma plataforma e um destino antes de ativar o briefing de capa.';
+  }
+  return {
+    baseReady,
+    baseWordCount,
+    canEnable,
+    coverPlatforms,
+    hasCoverPlatform,
+    hasCampaignPlatform,
+    hasDestination,
+    message,
+  };
+}
+
+function buildCampaignFlowThumbnailBrief(context, flowState) {
+  const selectedVideo = context.videos.find((video) => video.id === flowState.videoAssetId);
+  const selectedPlaylist = context.playlists.find((playlist) => playlist.id === flowState.playlistId);
+  const gate = getCampaignFlowThumbnailAssistantGate(flowState);
+  const destinationNames = flowState.selectedDestinationRefs
+    .map((ref) => campaignFlowFindDestination(context.destinations, ref))
+    .filter(Boolean)
+    .map((destination) => destination.destinationLabel ?? destination.title ?? destination.destinationId)
+    .slice(0, 5);
+  const campaignTitle = flowState.titleSeed.trim();
+  const platformFormats = gate.coverPlatforms.map(campaignFlowCoverFormat);
+  const sourceLabel = flowState.sourceType === 'playlist'
+    ? `playlist "${selectedPlaylist?.name ?? 'selecionada'}"`
+    : `video "${selectedVideo?.original_name ?? 'selecionado'}"`;
+  const scheduleLabel = flowState.schedulePatternEnabled
+    ? `${flowState.scheduleTimesPerDay} disparo${Number(flowState.scheduleTimesPerDay) === 1 ? '' : 's'} por dia com horarios ${flowState.scheduleHourAuto ? 'automaticos' : 'definidos manualmente'}`
+    : (flowState.scheduledAt ? `agendado para ${campaignFlowFormatLocalDate(flowState.scheduledAt)}` : 'publicacao manual ou imediata');
+
+  return [
+    'Brief de capa de video para campanha automatizada.',
+    '',
+    `Base principal obrigatoria: ${campaignTitle}.`,
+    'Conceito central: automacao de postagens automaticas para criadores e equipes que publicam em escala.',
+    `Origem do conteudo: ${sourceLabel}.`,
+    `Mecanica de automacao: ${scheduleLabel}.`,
+    destinationNames.length > 0 ? `Canais/destinos relacionados: ${destinationNames.join(', ')}.` : 'Canais/destinos relacionados: YouTube.',
+    `Plataformas da capa: ${gate.coverPlatforms.map(campaignFlowCoverPlatformLabel).join(', ')}.`,
+    '',
+    'Formatos a considerar:',
+    ...platformFormats.map((format) => `- ${format}`),
+    '',
+    'Direcao visual recomendada para capa de video:',
+    '- Mostre um painel de publicacao automatica, fila de posts, calendario, icones de upload e sinal de fluxo continuo.',
+    '- Estilo profissional de SaaS/creator tools, moderno, claro, premium e confiavel.',
+    '- Use contraste forte, foco central nitido e profundidade leve; evite fundo poluido.',
+    `- Use como base textual e semantica: "${campaignTitle}".`,
+    '- Transforme a base em uma frase curta de capa, com poucas palavras e leitura imediata.',
+    '- Nao use logos oficiais do YouTube se nao houver licenca; use uma referencia generica de play/video.',
+    '- Nao criar texto pequeno demais, marcas d agua, deformacoes, excesso de elementos ou visual generico de banco de imagem.',
+    '',
+    'Fluxo no app:',
+    '1. Crie a imagem em qualquer editor ou ferramenta de imagem usando este brief.',
+    '2. Envie a imagem em Midia como thumbnail.',
+    '3. Volte para esta etapa e selecione a imagem no campo Thumbnail.',
+  ].join('\n');
+}
+
+function getCampaignFlowThumbnailChecklist(context, flowState) {
+  const selectedThumbnail = context.thumbnails.find((asset) => asset.id === flowState.thumbnailAssetId);
+  const gate = getCampaignFlowThumbnailAssistantGate(flowState);
+  const hasAutomationContext = flowState.sourceType === 'playlist' || flowState.schedulePatternEnabled;
+  return [
+    {
+      label: 'Base',
+      value: gate.baseReady ? `${formatNumber(gate.baseWordCount)} palavras` : `${formatNumber(gate.baseWordCount)}/12 palavras`,
+      state: gate.baseReady ? 'ready' : 'attention',
+    },
+    {
+      label: 'Plataformas',
+      value: gate.hasCoverPlatform ? gate.coverPlatforms.map(campaignFlowCoverPlatformLabel).join(', ') : 'Nenhuma capa selecionada',
+      state: gate.hasCoverPlatform ? 'ready' : 'pending',
+    },
+    {
+      label: 'Contexto',
+      value: hasAutomationContext ? 'Automacao visivel' : 'Mostre o fluxo de publicacao',
+      state: hasAutomationContext ? 'ready' : 'attention',
+    },
+    {
+      label: 'Arquivo',
+      value: selectedThumbnail ? selectedThumbnail.original_name : 'Thumbnail ainda nao selecionada',
+      state: selectedThumbnail ? 'ready' : 'pending',
+    },
+  ];
+}
+
+function renderCampaignAutomationGuide(context, flowState) {
+  const playlistAutomationOn = flowState.sourceType === 'playlist';
+  const scheduleAutomationOn = playlistAutomationOn && flowState.schedulePatternEnabled;
+  const titleAutomationOn = scheduleAutomationOn && flowState.randomTitleEnabled;
+  const thumbnailGate = getCampaignFlowThumbnailAssistantGate(flowState);
+  const thumbnailAssistantOn = flowState.thumbnailAssistantEnabled && thumbnailGate.canEnable;
+  const automationItems = [
+    {
+      label: 'Videos',
+      state: playlistAutomationOn ? 'active' : 'manual',
+      value: playlistAutomationOn ? 'Playlist automatica' : 'Midia manual',
+    },
+    {
+      label: 'Agenda',
+      state: scheduleAutomationOn ? 'active' : 'manual',
+      value: scheduleAutomationOn ? 'Padrao aleatorio' : (flowState.scheduledAt ? 'Data fixa' : 'Manual'),
+    },
+    {
+      label: 'Titulos',
+      state: titleAutomationOn ? 'active' : 'manual',
+      value: titleAutomationOn ? 'Gerados por disparo' : 'Titulo fixo',
+    },
+    {
+      label: 'Thumbnail',
+      state: thumbnailAssistantOn ? 'active' : thumbnailGate.hasCoverPlatform ? 'available' : 'locked',
+      value: thumbnailAssistantOn
+        ? 'Briefing pronto'
+        : thumbnailGate.hasCoverPlatform
+          ? 'Aguardando base'
+          : 'Escolha capa',
+    },
+  ];
+
+  return `
+    <section class="campaign-automation-guide" aria-label="Automacao da campanha">
+      <div class="campaign-automation-guide-head">
+        <span class="campaign-flow-eyebrow">Automacao</span>
+        <strong>${scheduleAutomationOn ? 'Publicacao automatica ativa' : 'Configure a automacao por etapas'}</strong>
+      </div>
+      <div class="campaign-automation-guide-list">
+        ${automationItems.map((item) => `
+          <div class="campaign-automation-guide-item" data-state="${item.state}">
+            <span>${escapeHtml(item.label)}</span>
+            <strong>${escapeHtml(item.value)}</strong>
+          </div>
+        `).join('')}
+      </div>
+    </section>
+  `;
+}
+
 async function loadCampaignFlowContext() {
   const [mediaResult, destinationsResult, playlistsResult, planResult] = await Promise.all([
     api.media(),
@@ -8301,6 +8573,7 @@ function renderCampaignFlowSummary(context, flowState) {
         <div><span>Destinos</span><strong>${formatNumber(selectedDestinations.length)}</strong></div>
         <div><span>Agendamento</span><strong>${flowState.schedulePatternEnabled ? 'Aleatorio' : (flowState.scheduledAt ? 'Data fixa' : 'Manual')}</strong></div>
       </div>
+      ${renderCampaignAutomationGuide(context, flowState)}
     </aside>
   `;
 }
@@ -8732,6 +9005,25 @@ function renderCampaignFlowMetadataStep(context, flowState) {
   `).join('');
   const randomTitleAvailable = flowState.sourceType === 'playlist' && flowState.schedulePatternEnabled;
   const randomTitleOn = randomTitleAvailable && flowState.randomTitleEnabled;
+  const thumbnailGate = getCampaignFlowThumbnailAssistantGate(flowState);
+  const thumbnailAssistantEnabled = flowState.thumbnailAssistantEnabled && thumbnailGate.canEnable;
+  const thumbnailBrief = buildCampaignFlowThumbnailBrief(context, flowState);
+  const thumbnailChecklist = getCampaignFlowThumbnailChecklist(context, flowState);
+  const thumbnailWarnings = [
+    !thumbnailGate.baseReady ? 'Preencha a Base para título aleatório com no mínimo 12 palavras para gerar um briefing melhor.' : '',
+    !thumbnailGate.hasCoverPlatform ? 'Selecione pelo menos uma plataforma: YouTube, TikTok ou Instagram.' : '',
+    (!thumbnailGate.hasCampaignPlatform || !thumbnailGate.hasDestination) ? 'Selecione pelo menos uma plataforma e um destino antes de ativar o briefing de capa.' : '',
+  ].filter(Boolean);
+  const coverPlatformCards = CAMPAIGN_FLOW_PLATFORMS.map((platform) => {
+    const selected = thumbnailGate.coverPlatforms.includes(platform);
+    return `
+      <label class="campaign-cover-platform" data-selected="${selected ? 'true' : 'false'}">
+        <input type="checkbox" name="campaign-flow-cover-platform" data-campaign-flow-meta value="${platform}" ${selected ? 'checked' : ''} />
+        <strong>${escapeHtml(campaignFlowCoverPlatformLabel(platform))}</strong>
+        <span>${escapeHtml(campaignFlowCoverFormat(platform))}</span>
+      </label>
+    `;
+  }).join('');
 
   return renderCampaignFlowLayout(context, flowState, 4, `
     <section class="campaign-flow-panel">
@@ -8743,7 +9035,11 @@ function renderCampaignFlowMetadataStep(context, flowState) {
       <div class="campaign-flow-field-grid">
         <label class="campaign-flow-field"><span>Titulo da campanha</span><input id="campaign-flow-title" data-campaign-flow-meta value="${escapeHtml(flowState.title)}" placeholder="Ex: Lancamento Shorts Abril" ${randomTitleOn ? 'disabled' : ''} /></label>
         <label class="campaign-check-row" data-disabled="${randomTitleAvailable ? 'false' : 'true'}"><input id="campaign-flow-random-title" data-campaign-flow-meta type="checkbox" ${randomTitleOn ? 'checked' : ''} ${randomTitleAvailable ? '' : 'disabled'} /><span>Gerar titulo da campanha por disparo da playlist.</span></label>
-        ${randomTitleOn ? `<label class="campaign-flow-field campaign-flow-field-wide"><span>Base para titulo aleatorio</span><input id="campaign-flow-title-seed" data-campaign-flow-meta value="${escapeHtml(flowState.titleSeed)}" placeholder="Ex: Bastidores do canal" /></label>` : ''}
+        <label class="campaign-flow-field campaign-flow-field-wide">
+          <span>Base para titulo aleatorio</span>
+          <input id="campaign-flow-title-seed" data-campaign-flow-meta data-min-words="12" value="${escapeHtml(flowState.titleSeed)}" placeholder="Ex: estrategia completa para automatizar postagens em multiplas plataformas todos os dias" />
+          <small class="campaign-field-warning" data-state="${thumbnailGate.baseReady ? 'ok' : 'warning'}">${thumbnailGate.baseReady ? `${formatNumber(thumbnailGate.baseWordCount)} palavras. Base suficiente para briefing.` : 'Preencha a Base para título aleatório com no mínimo 12 palavras para gerar um briefing melhor.'}</small>
+        </label>
         <label class="campaign-flow-field"><span>Titulo do video</span><input id="campaign-flow-video-title" data-campaign-flow-meta value="${escapeHtml(flowState.videoTitle)}" placeholder="Titulo publicado nas plataformas" /></label>
         <label class="campaign-flow-field">
           <span>Privacidade</span>
@@ -8765,6 +9061,49 @@ function renderCampaignFlowMetadataStep(context, flowState) {
           <label class="campaign-check-row"><input id="campaign-flow-instagram-share" data-campaign-flow-meta type="checkbox" ${flowState.instagramShareToFeed ? 'checked' : ''} /><span>Compartilhar Reel no feed.</span></label>
         ` : ''}
       </div>
+      <section class="campaign-thumbnail-panel">
+        <div class="campaign-thumbnail-head">
+          <div>
+            <span class="campaign-flow-eyebrow">Thumbnail</span>
+            <h3>Assistente de capa de video</h3>
+            <p>Monte uma direcao visual clara para a capa antes de salvar a campanha, usando a Base para titulo aleatorio como fonte principal.</p>
+          </div>
+          <span class="campaign-thumbnail-badge">Integrado ao fluxo</span>
+        </div>
+        <div class="campaign-cover-platform-wrap">
+          <div class="campaign-flow-panel-head compact">
+            <h3>Plataforma da capa</h3>
+            <p>Selecione uma ou mais plataformas para adaptar o briefing ao formato correto.</p>
+          </div>
+          <div class="campaign-cover-platform-grid">${coverPlatformCards}</div>
+        </div>
+        <div id="campaign-thumbnail-warning" class="campaign-thumbnail-warning" ${thumbnailWarnings.length > 0 ? '' : 'hidden'}>
+          ${thumbnailWarnings.map((message) => `<p>${escapeHtml(message)}</p>`).join('')}
+        </div>
+        <label class="campaign-check-row" data-disabled="${thumbnailGate.canEnable ? 'false' : 'true'}">
+          <input id="campaign-flow-thumbnail-assistant-enabled" data-campaign-flow-meta type="checkbox" ${thumbnailAssistantEnabled ? 'checked' : ''} ${thumbnailGate.canEnable ? '' : 'disabled'} />
+          <span>Ativar briefing e checklist para thumbnail desta campanha.</span>
+        </label>
+        ${thumbnailAssistantEnabled ? `
+          <div class="campaign-thumbnail-checklist">
+            ${thumbnailChecklist.map((item) => `
+              <div data-state="${item.state}">
+                <span>${escapeHtml(item.label)}</span>
+                <strong>${escapeHtml(item.value)}</strong>
+              </div>
+            `).join('')}
+          </div>
+          <textarea id="campaign-flow-thumbnail-brief" readonly rows="12">${escapeHtml(thumbnailBrief)}</textarea>
+          <div class="campaign-thumbnail-actions">
+            <button class="button button-secondary" type="button" data-action="copy-thumbnail-brief">Copiar briefing</button>
+            <a class="button button-secondary" data-link href="/workspace/videos">Enviar thumbnail</a>
+          </div>
+        ` : `
+          <div class="campaign-thumbnail-standby">
+            Ative para transformar a base de titulo aleatorio, plataformas, agendamento e destinos em um briefing de capa pronto para producao.
+          </div>
+        `}
+      </section>
       ${renderCampaignFlowFooter({ backHref: '/workspace/campanhas/Etapa3', nextHref: '/workspace/campanhas/Etapa5' })}
     </section>
   `);
@@ -8782,20 +9121,85 @@ function attachCampaignFlowMetadataStep() {
       privacy: document.querySelector('#campaign-flow-privacy')?.value ?? '',
       youtubePlaylistId: document.querySelector('#campaign-flow-youtube-playlist-id')?.value ?? '',
       thumbnailAssetId: document.querySelector('#campaign-flow-thumbnail-asset-id')?.value ?? '',
+      thumbnailCoverPlatforms: Array.from(document.querySelectorAll('input[name="campaign-flow-cover-platform"]:checked')).map((input) => input.value),
+      thumbnailAssistantEnabled: Boolean(document.querySelector('#campaign-flow-thumbnail-assistant-enabled')?.checked),
       instagramCaption: document.querySelector('#campaign-flow-instagram-caption')?.value ?? '',
       instagramShareToFeed: Boolean(document.querySelector('#campaign-flow-instagram-share')?.checked ?? true),
     });
   };
+  const syncThumbnailAssistantGate = () => {
+    const next = readCampaignFlowState();
+    const gate = getCampaignFlowThumbnailAssistantGate(next);
+    const warnings = [
+      !gate.baseReady ? 'Preencha a Base para título aleatório com no mínimo 12 palavras para gerar um briefing melhor.' : '',
+      !gate.hasCoverPlatform ? 'Selecione pelo menos uma plataforma: YouTube, TikTok ou Instagram.' : '',
+      (!gate.hasCampaignPlatform || !gate.hasDestination) ? 'Selecione pelo menos uma plataforma e um destino antes de ativar o briefing de capa.' : '',
+    ].filter(Boolean);
+    const seedWarning = document.querySelector('.campaign-field-warning');
+    if (seedWarning) {
+      seedWarning.setAttribute('data-state', gate.baseReady ? 'ok' : 'warning');
+      seedWarning.textContent = gate.baseReady
+        ? `${formatNumber(gate.baseWordCount)} palavras. Base suficiente para briefing.`
+        : 'Preencha a Base para título aleatório com no mínimo 12 palavras para gerar um briefing melhor.';
+    }
+    const warningBox = document.querySelector('#campaign-thumbnail-warning');
+    if (warningBox) {
+      warningBox.hidden = warnings.length === 0;
+      warningBox.innerHTML = warnings.map((message) => `<p>${escapeHtml(message)}</p>`).join('');
+    }
+    const toggle = document.querySelector('#campaign-flow-thumbnail-assistant-enabled');
+    if (toggle instanceof HTMLInputElement) {
+      toggle.disabled = !gate.canEnable;
+      if (!gate.canEnable) toggle.checked = false;
+      toggle.closest('.campaign-check-row')?.setAttribute('data-disabled', gate.canEnable ? 'false' : 'true');
+    }
+    if (!gate.canEnable && next.thumbnailAssistantEnabled) {
+      patchCampaignFlowState({ thumbnailAssistantEnabled: false });
+      void renderCampaignFlowPage(4);
+    }
+  };
   document.querySelectorAll('[data-campaign-flow-meta]').forEach((input) => {
-    input.addEventListener('input', collect);
+    input.addEventListener('input', () => {
+      collect();
+      if (input.id === 'campaign-flow-title-seed') syncThumbnailAssistantGate();
+    });
     input.addEventListener('change', () => {
       collect();
-      if (input.id === 'campaign-flow-random-title') void renderCampaignFlowPage(4);
+      if (
+        input.id === 'campaign-flow-random-title' ||
+        input.id === 'campaign-flow-thumbnail-assistant-enabled' ||
+        input.id === 'campaign-flow-thumbnail-asset-id' ||
+        input.name === 'campaign-flow-cover-platform'
+      ) void renderCampaignFlowPage(4);
+      else syncThumbnailAssistantGate();
     });
+  });
+  document.querySelector('[data-action="copy-thumbnail-brief"]')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    const brief = document.querySelector('#campaign-flow-thumbnail-brief')?.value ?? '';
+    if (!brief) return;
+    try {
+      await navigator.clipboard.writeText(brief);
+      setUiNotice('success', 'Briefing copiado', 'Use este briefing para criar a imagem e depois envie em Midia.');
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = brief;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      textarea.remove();
+      setUiNotice('success', 'Briefing copiado', 'Use este briefing para criar a imagem e depois envie em Midia.');
+    }
+    if (button instanceof HTMLButtonElement) {
+      setButtonBusy(button, true, 'Copiado');
+      setTimeout(() => setButtonBusy(button, false), 900);
+    }
   });
   attachCampaignFlowNextHandlers(() => {
     const next = readCampaignFlowState();
-    const hasCampaignTitle = (next.randomTitleEnabled && next.titleSeed.trim()) || next.title.trim();
+    const randomTitleUsable = next.sourceType === 'playlist' && next.schedulePatternEnabled && next.randomTitleEnabled;
+    const hasCampaignTitle = (randomTitleUsable && next.titleSeed.trim()) || next.title.trim();
+    if (randomTitleUsable && countCampaignFlowWords(next.titleSeed) < 12) return { ok: false, title: 'Base para titulo aleatorio', message: 'Preencha a Base para título aleatório com no mínimo 12 palavras para gerar um briefing melhor.' };
     if (!hasCampaignTitle) return { ok: false, title: 'Titulo da campanha', message: 'Informe um titulo fixo ou ative o titulo aleatorio com uma base.' };
     if (!next.videoTitle.trim() || !next.videoDescription.trim()) return { ok: false, title: 'Metadados obrigatorios', message: 'Titulo e descricao do video sao obrigatorios.' };
     return { ok: true };
@@ -8836,6 +9240,9 @@ function validateCampaignFlowReadyToSave(flowState, context) {
   }
   const randomTitleUsable = flowState.sourceType === 'playlist' && flowState.schedulePatternEnabled && flowState.randomTitleEnabled;
   const hasCampaignTitle = (randomTitleUsable && flowState.titleSeed.trim()) || flowState.title.trim();
+  if (randomTitleUsable && countCampaignFlowWords(flowState.titleSeed) < 12) {
+    return { ok: false, title: 'Base para titulo aleatorio', message: 'Preencha a Base para título aleatório com no mínimo 12 palavras para gerar um briefing melhor.' };
+  }
   if (!hasCampaignTitle) {
     return { ok: false, title: 'Titulo da campanha', message: 'Informe um titulo fixo ou uma base para titulo aleatorio na Etapa 4.' };
   }
@@ -8853,6 +9260,8 @@ function renderCampaignFlowReviewStep(context, flowState) {
   const selectedPlaylist = context.playlists.find((playlist) => playlist.id === flowState.playlistId);
   const scheduledLaunches = campaignFlowBuildScheduledLaunches(flowState);
   const blockedPlatforms = flowState.selectedPlatforms.filter((platform) => !isCampaignFlowPlatformAllowedByPlan(platform, context.account));
+  const thumbnailGate = getCampaignFlowThumbnailAssistantGate(flowState);
+  const thumbnailAssistantEnabled = flowState.thumbnailAssistantEnabled && thumbnailGate.canEnable;
   const reviewRows = [
     {
       label: 'Origem',
@@ -8884,6 +9293,13 @@ function renderCampaignFlowReviewStep(context, flowState) {
       value: scheduledLaunches.length > 0 ? `${scheduledLaunches.length} campanhas agendadas` : '1 campanha',
       editHref: '/workspace/campanhas/Etapa3',
     },
+    ...(thumbnailGate.hasCoverPlatform ? [{
+      label: 'Thumbnail assistida',
+      value: thumbnailAssistantEnabled
+        ? `Briefing para ${thumbnailGate.coverPlatforms.map(campaignFlowCoverPlatformLabel).join(', ')}`
+        : 'Opcional nao ativado',
+      editHref: '/workspace/campanhas/Etapa4',
+    }] : []),
   ];
 
   return renderCampaignFlowLayout(context, flowState, 5, `
@@ -8924,6 +9340,12 @@ function renderCampaignFlowReviewStep(context, flowState) {
         <p><strong>${escapeHtml(flowState.videoTitle || '-')}</strong></p>
         <p class="muted">${escapeHtml(flowState.videoDescription || '-')}</p>
         <p class="muted">Tags: ${escapeHtml(flowState.tags || 'sem tags')}</p>
+        ${thumbnailAssistantEnabled ? `
+          <div class="campaign-review-thumbnail">
+            <strong>Capa assistida por plataforma</strong>
+            <span>Briefing e checklist preparados para ${escapeHtml(thumbnailGate.coverPlatforms.map(campaignFlowCoverPlatformLabel).join(', '))}. Depois de criar a imagem, envie em Midia e selecione no campo Thumbnail quando aplicavel.</span>
+          </div>
+        ` : ''}
       </section>
       ${renderCampaignFlowFooter({
         backHref: '/workspace/campanhas/Etapa4',
@@ -9234,7 +9656,7 @@ async function renderCampaignComposerPage() {
           done: hasVideos,
           label: hasVideos ? 'Media library is ready' : 'Upload media first',
           hint: hasVideos ? `${formatNumber(videos.length)} video assets are available for campaign creation.` : 'You need at least one video in Media before saving a campaign.',
-          actionHtml: '<a class="button button-secondary" data-link href="/workspace/media">Open media</a>',
+          actionHtml: '<a class="button button-secondary" data-link href="/workspace/videos">Open videos</a>',
         },
         {
           done: hasChannels,
@@ -9249,7 +9671,7 @@ async function renderCampaignComposerPage() {
           title: 'No video assets available',
           message: 'The composer is ready, but you still need to upload at least one video before creating a campaign.',
           tone: 'warning',
-          actionsHtml: '<a class="button button-primary" data-link href="/workspace/media">Upload media</a>',
+          actionsHtml: '<a class="button button-primary" data-link href="/workspace/videos">Upload media</a>',
         }) : ''}
         <div class="grid-3">
           <article class="card">
@@ -11011,13 +11433,19 @@ async function renderRoute() {
         return;
       }
 
+      if (path === '/workspace/videos') {
+        await renderVideosPage();
+        return;
+      }
+
       if (path === '/workspace/media') {
-        await renderMediaPage();
+        const extra = window.location.search ? window.location.search.replace(/^\?/, '&') : '';
+        navigate(`/workspace/videos?view=library${extra}`, true);
         return;
       }
 
       if (path === '/workspace/playlists') {
-        await renderPlaylistsPage();
+        navigate('/workspace/videos?view=playlists', true);
         return;
       }
 

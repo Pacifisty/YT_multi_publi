@@ -1,5 +1,6 @@
 import type { AccountPlanType, AccountPlanDefinition, TokenPackDefinition } from './account-plan.service';
 import { paymentLogger } from '../common/payment-logger';
+import type { EmailService } from '../integrations/email/email-service';
 
 export type PaymentProvider = 'stripe' | 'mercadopago' | 'mock';
 export type PaymentStatus = 'pending' | 'processing' | 'paid' | 'failed' | 'cancelled' | 'refunded';
@@ -81,6 +82,9 @@ export interface PaymentServiceOptions {
   provider?: PaymentProviderAdapter;
   repository?: PaymentRepository;
   webhookDeduplicator?: any;
+  emailService?: EmailService;
+  accountPlanService?: any; // Optional to get plan definitions for emails
+  logger?: any;
   now?: () => Date;
   defaultSuccessUrl?: string;
   defaultCancelUrl?: string;
@@ -91,6 +95,9 @@ export class PaymentService {
   private readonly provider: PaymentProviderAdapter;
   private readonly repository: PaymentRepository;
   private readonly webhookDeduplicator: any;
+  private readonly emailService?: EmailService;
+  private readonly accountPlanService?: any;
+  private readonly logger?: any;
   private readonly now: () => Date;
   private readonly defaultSuccessUrl: string | undefined;
   private readonly defaultCancelUrl: string | undefined;
@@ -100,6 +107,9 @@ export class PaymentService {
     this.provider = options.provider ?? new MockPaymentProviderAdapter();
     this.repository = options.repository ?? new InMemoryPaymentRepository();
     this.webhookDeduplicator = options.webhookDeduplicator ?? null;
+    this.emailService = options.emailService;
+    this.accountPlanService = options.accountPlanService;
+    this.logger = options.logger;
     this.now = options.now ?? (() => new Date());
     this.defaultSuccessUrl = options.defaultSuccessUrl;
     this.defaultCancelUrl = options.defaultCancelUrl;
@@ -167,6 +177,50 @@ export class PaymentService {
     };
   }
 
+  private async notifyPaymentSuccess(intent: PaymentIntent): Promise<void> {
+    if (!this.emailService || intent.status !== 'paid') {
+      return;
+    }
+
+    try {
+      const { buildPaymentEmail } = await import('../integrations/email/email-templates');
+
+      let planName = 'Plan';
+      let tokensGranted = 0;
+
+      if (intent.purchase.kind === 'plan') {
+        planName = intent.purchase.planCode.toUpperCase();
+        // Get token count from account plan service if available
+        if (this.accountPlanService) {
+          const plans = this.accountPlanService.getPlans?.();
+          const plan = plans?.find((p: any) => p.code === intent.purchase.planCode);
+          tokensGranted = plan?.tokens ?? 1000;
+        } else {
+          // Fallback token counts
+          tokensGranted = intent.purchase.planCode === 'basic' ? 100 : intent.purchase.planCode === 'pro' ? 500 : 1000;
+        }
+      } else if (intent.purchase.kind === 'token_pack') {
+        tokensGranted = intent.purchase.tokens;
+        planName = `${tokensGranted} Tokens Pack`;
+      }
+
+      const costStr = `R$ ${(intent.amountBrl / 100).toFixed(2)}`;
+      const emailData = buildPaymentEmail(intent.email, {
+        planName,
+        tokensGranted,
+        totalCost: costStr,
+        userEmail: intent.email,
+      });
+      await this.emailService.send(emailData);
+    } catch (error) {
+      this.logger?.warn('Failed to send payment confirmation email', {
+        paymentId: intent.id,
+        email: intent.email,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   async getIntent(id: string): Promise<PaymentIntent | null> {
     return this.repository.findById(id);
   }
@@ -218,6 +272,11 @@ export class PaymentService {
       paymentLogger.logStatusUpdated(updated.id, oldStatus, updated.status, this.provider.name);
     }
 
+    // Send email notification if payment is now paid
+    if (updated) {
+      await this.notifyPaymentSuccess(updated);
+    }
+
     return updated;
   }
 
@@ -234,6 +293,8 @@ export class PaymentService {
 
     if (updated) {
       paymentLogger.logStatusUpdated(updated.id, intent.status, updated.status, this.provider.name);
+      // Send email notification if payment is now paid
+      await this.notifyPaymentSuccess(updated);
     }
 
     return updated;

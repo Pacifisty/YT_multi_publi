@@ -189,15 +189,23 @@ export class PaymentService {
       let tokensGranted = 0;
 
       if (intent.purchase.kind === 'plan') {
-        planName = intent.purchase.planCode.toUpperCase();
+        const planCode = intent.purchase.planCode;
+        planName = planCode.toUpperCase();
         // Get token count from account plan service if available
         if (this.accountPlanService) {
           const plans = this.accountPlanService.getPlans?.();
-          const plan = plans?.find((p: any) => p.code === intent.purchase.planCode);
+          const plan = plans?.find((p: any) => p.code === planCode);
           tokensGranted = plan?.tokens ?? 1000;
         } else {
           // Fallback token counts
-          tokensGranted = intent.purchase.planCode === 'basic' ? 100 : intent.purchase.planCode === 'pro' ? 500 : 1000;
+          const codeStr = String(planCode).toLowerCase();
+          if (codeStr === 'basic') {
+            tokensGranted = 100;
+          } else if (codeStr === 'pro') {
+            tokensGranted = 500;
+          } else {
+            tokensGranted = 1000;
+          }
         }
       } else if (intent.purchase.kind === 'token_pack') {
         tokensGranted = intent.purchase.tokens;

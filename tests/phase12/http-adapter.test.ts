@@ -287,7 +287,37 @@ describe('HTTP adapter — createRequestHandler', () => {
     expect(res._body).toContain('<meta name="robots" content="index,follow" />');
     expect(res._body).toContain('<link rel="canonical" href="https://platform.example/" />');
     expect(res._body).toContain('<script type="application/ld+json">');
-    expect(res._body).toContain('Publicacao multi plataforma');
+    expect(res._body).toContain('Publicação multi plataforma');
+    expect(res._body).toContain('<script src="/i18n.js"></script>');
+  });
+
+  test('serves frontend html in English when requested by query locale', async () => {
+    const app = mockApp();
+    const handler = createRequestHandler({ app });
+    const req = mockReq({ method: 'GET', url: '/?lang=en' });
+    const res = mockRes();
+
+    await handler(req, res as any);
+
+    expect(res._status).toBe(200);
+    expect(res._body).toContain('<html lang="en">');
+    expect(res._body).toContain('Plan and publish your videos on YouTube, TikTok and Instagram');
+    expect(res._headers['set-cookie']).toContain('pmp_locale=en');
+    expect(app.handleRequest).not.toHaveBeenCalled();
+  });
+
+  test('serves frontend html using persisted locale cookie', async () => {
+    const app = mockApp();
+    const handler = createRequestHandler({ app });
+    const req = mockReq({ method: 'GET', url: '/', headers: { cookie: 'pmp_locale=en' } });
+    const res = mockRes();
+
+    await handler(req, res as any);
+
+    expect(res._status).toBe(200);
+    expect(res._body).toContain('<html lang="en">');
+    expect(res._body).toContain('data-initial-locale="en"');
+    expect(app.handleRequest).not.toHaveBeenCalled();
   });
 
   test('marks private workspace documents as noindex', async () => {

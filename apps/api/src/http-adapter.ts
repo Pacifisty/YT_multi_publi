@@ -6,7 +6,13 @@ import { randomUUID } from 'node:crypto';
 import Busboy from 'busboy';
 import type { AppInstance, HttpRequest, HttpResponse } from './app';
 import type { AdminSession } from './auth/session.guard';
-import { isFrontendRoute, renderFrontendDocument, resolveFrontendAsset } from './frontend/ui-shell';
+import {
+  isFrontendRoute,
+  normalizeFrontendLocale,
+  renderFrontendDocument,
+  resolveFrontendAsset,
+  type FrontendLocale,
+} from './frontend/ui-shell';
 
 export interface RequestHandlerOptions {
   app: AppInstance;
@@ -112,6 +118,59 @@ function parseQuery(rawUrl: string): Record<string, string> {
   return query;
 }
 
+function parseCookieHeader(cookieHeader: string | undefined): Record<string, string> {
+  const cookies: Record<string, string> = {};
+  if (!cookieHeader) {
+    return cookies;
+  }
+
+  for (const part of cookieHeader.split(';')) {
+    const index = part.indexOf('=');
+    if (index === -1) continue;
+    const name = part.slice(0, index).trim();
+    const value = part.slice(index + 1).trim();
+    if (!name) continue;
+    try {
+      cookies[name] = decodeURIComponent(value);
+    } catch {
+      cookies[name] = value;
+    }
+  }
+  return cookies;
+}
+
+function resolveAcceptLanguageLocale(header: string | string[] | undefined): FrontendLocale | null {
+  const rawHeader = Array.isArray(header) ? header.join(',') : header;
+  if (!rawHeader) {
+    return null;
+  }
+
+  const firstSupported = rawHeader
+    .split(',')
+    .map((part) => part.split(';')[0]?.trim())
+    .find((part) => {
+      const normalized = part?.toLowerCase() ?? '';
+      return normalized === 'pt' || normalized.startsWith('pt-') || normalized === 'en' || normalized.startsWith('en-');
+    });
+
+  return firstSupported ? normalizeFrontendLocale(firstSupported) : null;
+}
+
+function resolveFrontendRequestLocale(req: IncomingMessage, query: Record<string, string>): FrontendLocale {
+  const queryLocale = query.lang ?? query.locale;
+  if (queryLocale) {
+    return normalizeFrontendLocale(queryLocale);
+  }
+
+  const cookies = parseCookieHeader(req.headers.cookie);
+  const cookieLocale = cookies.pmp_locale ?? cookies.ytmp_locale;
+  if (cookieLocale) {
+    return normalizeFrontendLocale(cookieLocale);
+  }
+
+  return resolveAcceptLanguageLocale(req.headers['accept-language']) ?? normalizeFrontendLocale(null);
+}
+
 function parseMediaFileId(path: string): string | null {
   const match = path.match(/^\/media-files\/([^/]+)$/);
   if (!match) {
@@ -197,7 +256,19 @@ export function createRequestHandler(
       }
 
       if (isFrontendRoute(path)) {
-        const html = renderFrontendDocument(path);
+        const locale = resolveFrontendRequestLocale(req, query);
+        const html = renderFrontendDocument(path, locale);
+        if (query.lang || query.locale) {
+          res.setHeader('set-cookie', serializeCookie({
+            name: 'pmp_locale',
+            value: encodeURIComponent(locale),
+            options: {
+              path: '/',
+              sameSite: 'Lax',
+              maxAge: 60 * 60 * 24 * 365,
+            },
+          }));
+        }
         res.setHeader('content-type', 'text/html; charset=utf-8');
         res.setHeader('cache-control', 'no-cache');
         res.writeHead(200);

@@ -1,0 +1,346 @@
+[
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900,
+      "scrollWidth": 1425,
+      "bodyScrollWidth": 1425
+    },
+    "path": "/workspace/dashboard",
+    "totalDocOverflow": -15,
+    "issueCount": 1,
+    "issues": [
+      {
+        "kind": "overflow-x",
+        "selector": "nav.nav.header-nav",
+        "className": "nav header-nav",
+        "width": 385,
+        "height": 57,
+        "scrollWidth": 556,
+        "clientWidth": 383,
+        "outsideRight": -690,
+        "outsideLeft": -365,
+        "text": "Dashboard Campanhas Accounts Videos Planos"
+      }
+    ]
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900,
+      "scrollWidth": 1425,
+      "bodyScrollWidth": 1425
+    },
+    "path": "/workspace/videos?view=library",
+    "totalDocOverflow": -15,
+    "issueCount": 1,
+    "issues": [
+      {
+        "kind": "overflow-x",
+        "selector": "nav.nav.header-nav",
+        "className": "nav header-nav",
+        "width": 385,
+        "height": 57,
+        "scrollWidth": 556,
+        "clientWidth": 383,
+        "outsideRight": -690,
+        "outsideLeft": -365,
+        "text": "Dashboard Campanhas Accounts Videos Planos"
+      }
+    ]
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900,
+      "scrollWidth": 1425,
+      "bodyScrollWidth": 1425
+    },
+    "path": "/workspace/videos?view=playlists",
+    "totalDocOverflow": -15,
+    "issueCount": 2,
+    "issues": [
+      {
+        "kind": "overflow-x",
+        "selector": "nav.nav.header-nav",
+        "className": "nav header-nav",
+        "width": 385,
+        "height": 57,
+        "scrollWidth": 556,
+        "clientWidth": 383,
+        "outsideRight": -690,
+        "outsideLeft": -365,
+        "text": "Dashboard Campanhas Accounts Videos Planos"
+      },
+      {
+        "kind": "overflow-x",
+        "selector": "#playlist-cockpit",
+        "className": "playlist-cockpit",
+        "width": 1335,
+        "height": 527,
+        "scrollWidth": 1466,
+        "clientWidth": 1333,
+        "outsideRight": -60,
+        "outsideLeft": -45,
+        "text": "PLAYLIST VAULT Organize, automatize, não repita. Pastas locais viram playlists. Cada vídeo é publicado uma vez e o siste"
+      }
+    ]
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900,
+      "scrollWidth": 1425,
+      "bodyScrollWidth": 1425
+    },
+    "path": "/workspace/campanhas",
+    "totalDocOverflow": -15,
+    "issueCount": 3,
+    "issues": [
+      {
+        "kind": "overflow-x",
+        "selector": "nav.nav.header-nav",
+        "className": "nav header-nav",
+        "width": 385,
+        "height": 57,
+        "scrollWidth": 556,
+        "clientWidth": 383,
+        "outsideRight": -690,
+        "outsideLeft": -365,
+        "text": "Dashboard Campanhas Accounts Videos Planos"
+      },
+      {
+        "kind": "overflow-x",
+        "selector": "#campaign-control-panel",
+        "className": "campaign-control-panel",
+        "width": 856,
+        "height": 720,
+        "scrollWidth": 1007,
+        "clientWidth": 854,
+        "outsideRight": -539,
+        "outsideLeft": -45,
+        "text": "CENTRO DE CAMPANHAS AO VIVO - 17:45 Rascunho Pronta Enviando Concluida Falhou NOVO FLUXO Criar campanha Campanhas por et"
+      },
+      {
+        "kind": "overflow-x",
+        "selector": "#mission-insights",
+        "className": "mission-insights",
+        "width": 461,
+        "height": 744,
+        "scrollWidth": 541,
+        "clientWidth": 459,
+        "outsideRight": -60,
+        "outsideLeft": -919,
+        "text": "INTELIGENCIA DA FILA 17:45 TAXA DE SUCESSO 75% 6 ok - 2 erro PROXIMO ENVIO Sem fila Agende uma campanha HOJE 0 envios ag"
+      }
+    ]
+  },
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900,
+      "scrollWidth": 1425,
+      "bodyScrollWidth": 1425
+    },
+    "path": "/workspace/accounts",
+    "totalDocOverflow": -15,
+    "issueCount": 2,
+    "issues": [
+      {
+        "kind": "overflow-x",
+        "selector": "nav.nav.header-nav",
+        "className": "nav header-nav",
+        "width": 385,
+        "height": 57,
+        "scrollWidth": 556,
+        "clientWidth": 383,
+        "outsideRight": -690,
+        "outsideLeft": -365,
+        "text": "Dashboard Campanhas Accounts Videos Planos"
+      },
+      {
+        "kind": "overflow-x",
+        "selector": "#accounts-cockpit",
+        "className": "accounts-cockpit",
+        "width": 1335,
+        "height": 479,
+        "scrollWidth": 1466,
+        "clientWidth": 1333,
+        "outsideRight": -60,
+        "outsideLeft": -45,
+        "text": "ACCOUNTS COMMAND Every publishing identity, one cockpit. Review health, reconnect providers and route campaigns without "
+      }
+    ]
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 1024,
+      "scrollWidth": 753,
+      "bodyScrollWidth": 753
+    },
+    "path": "/workspace/dashboard",
+    "totalDocOverflow": -15,
+    "issueCount": 0,
+    "issues": []
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 1024,
+      "scrollWidth": 753,
+      "bodyScrollWidth": 753
+    },
+    "path": "/workspace/videos?view=library",
+    "totalDocOverflow": -15,
+    "issueCount": 0,
+    "issues": []
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 1024,
+      "scrollWidth": 753,
+      "bodyScrollWidth": 753
+    },
+    "path": "/workspace/videos?view=playlists",
+    "totalDocOverflow": -15,
+    "issueCount": 1,
+    "issues": [
+      {
+        "kind": "overflow-x",
+        "selector": "#playlist-cockpit",
+        "className": "playlist-cockpit",
+        "width": 683,
+        "height": 1020,
+        "scrollWidth": 749,
+        "clientWidth": 681,
+        "outsideRight": -50,
+        "outsideLeft": -35,
+        "text": "PLAYLIST VAULT Organize, automatize, não repita. Pastas locais viram playlists. Cada vídeo é publicado uma vez e o siste"
+      }
+    ]
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 1024,
+      "scrollWidth": 753,
+      "bodyScrollWidth": 753
+    },
+    "path": "/workspace/campanhas",
+    "totalDocOverflow": -15,
+    "issueCount": 2,
+    "issues": [
+      {
+        "kind": "overflow-x",
+        "selector": "#campaign-control-panel",
+        "className": "campaign-control-panel",
+        "width": 683,
+        "height": 1284,
+        "scrollWidth": 798,
+        "clientWidth": 681,
+        "outsideRight": -50,
+        "outsideLeft": -35,
+        "text": "CENTRO DE CAMPANHAS AO VIVO - 17:45 Rascunho Pronta Enviando Concluida Falhou NOVO FLUXO Criar campanha Campanhas por et"
+      },
+      {
+        "kind": "overflow-x",
+        "selector": "#mission-insights",
+        "className": "mission-insights",
+        "width": 683,
+        "height": 536,
+        "scrollWidth": 798,
+        "clientWidth": 681,
+        "outsideRight": -50,
+        "outsideLeft": -35,
+        "text": "INTELIGENCIA DA FILA 17:45 TAXA DE SUCESSO 75% 6 ok - 2 erro PROXIMO ENVIO Sem fila Agende uma campanha HOJE 0 envios ag"
+      }
+    ]
+  },
+  {
+    "viewport": {
+      "width": 768,
+      "height": 1024,
+      "scrollWidth": 753,
+      "bodyScrollWidth": 753
+    },
+    "path": "/workspace/accounts",
+    "totalDocOverflow": -15,
+    "issueCount": 1,
+    "issues": [
+      {
+        "kind": "overflow-x",
+        "selector": "#accounts-cockpit",
+        "className": "accounts-cockpit",
+        "width": 683,
+        "height": 820,
+        "scrollWidth": 749,
+        "clientWidth": 681,
+        "outsideRight": -50,
+        "outsideLeft": -35,
+        "text": "ACCOUNTS COMMAND Every publishing identity, one cockpit. Review health, reconnect providers and route campaigns without "
+      }
+    ]
+  },
+  {
+    "viewport": {
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "bodyScrollWidth": 390
+    },
+    "path": "/login",
+    "totalDocOverflow": 0,
+    "issueCount": 0,
+    "issues": []
+  },
+  {
+    "viewport": {
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "bodyScrollWidth": 390
+    },
+    "path": "/login",
+    "totalDocOverflow": 0,
+    "issueCount": 0,
+    "issues": []
+  },
+  {
+    "viewport": {
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "bodyScrollWidth": 390
+    },
+    "path": "/login",
+    "totalDocOverflow": 0,
+    "issueCount": 0,
+    "issues": []
+  },
+  {
+    "viewport": {
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "bodyScrollWidth": 390
+    },
+    "path": "/login",
+    "totalDocOverflow": 0,
+    "issueCount": 0,
+    "issues": []
+  },
+  {
+    "viewport": {
+      "width": 390,
+      "height": 844,
+      "scrollWidth": 390,
+      "bodyScrollWidth": 390
+    },
+    "path": "/login",
+    "totalDocOverflow": 0,
+    "issueCount": 0,
+    "issues": []
+  }
+]

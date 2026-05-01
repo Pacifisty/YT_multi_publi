@@ -403,6 +403,25 @@ export class CampaignService {
     return { campaigns, total, limit, offset };
   }
 
+  async listAllCampaigns(filters?: { status?: string; search?: string; ownerEmail?: string }): Promise<CampaignRecord[]> {
+    let campaigns = await this.repository.findAllNewestFirst();
+
+    if (filters?.ownerEmail) {
+      campaigns = this.filterCampaignsByOwner(campaigns, filters.ownerEmail);
+    }
+
+    if (filters?.status) {
+      campaigns = campaigns.filter((campaign) => campaign.status === filters.status);
+    }
+
+    if (filters?.search) {
+      const term = filters.search.toLowerCase();
+      campaigns = campaigns.filter((campaign) => campaign.title.toLowerCase().includes(term));
+    }
+
+    return campaigns;
+  }
+
   async getCampaign(id: string, ownerEmail?: string): Promise<{ campaign: CampaignRecord } | null> {
     const campaign = await this.resolveCampaign(id, ownerEmail);
     if (!campaign) return null;

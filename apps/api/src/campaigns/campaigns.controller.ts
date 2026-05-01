@@ -241,6 +241,42 @@ function isDuplicateTargetChannelError(error: unknown): boolean {
   );
 }
 
+function isReauthRequiredTarget(target: CampaignTargetRecord): boolean {
+  return target.status === 'erro' && target.errorMessage === 'REAUTH_REQUIRED';
+}
+
+interface ReauthRequiredTargetSummary {
+  campaignId: string;
+  campaignTitle: string;
+  targetId: string;
+  platform: CampaignTargetPlatform;
+  destinationId: string;
+  destinationLabel: string | null;
+  connectedAccountId: string | null;
+  retryCount: number;
+  latestFailedJobId: string | null;
+}
+
+interface ReauthRequiredPlatformSummary {
+  platform: CampaignTargetPlatform;
+  targets: number;
+  campaigns: number;
+  accounts: number;
+}
+
+interface ReauthRequiredOverview {
+  totalTargets: number;
+  totalCampaigns: number;
+  platforms: ReauthRequiredPlatformSummary[];
+  targets: ReauthRequiredTargetSummary[];
+}
+
+interface ReauthRequiredRetryError {
+  campaignId: string;
+  targetId: string;
+  error: string;
+}
+
 export class CampaignsController {
   constructor(
     private readonly campaignService: CampaignService,
@@ -252,6 +288,15 @@ export class CampaignsController {
     private readonly auditService?: AuditEventService,
     private readonly accountPlanService?: AccountPlanService,
   ) {}
+
+  private async findReauthRequiredTargets(ownerEmail?: string): Promise<Array<{ campaign: CampaignRecord; target: CampaignTargetRecord }>> {
+    const campaigns = await this.campaignService.listAllCampaigns({ ownerEmail });
+    return campaigns.flatMap((campaign) => (
+      campaign.targets
+        .filter(isReauthRequiredTarget)
+        .map((target) => ({ campaign, target }))
+    ));
+  }
 
   async create(request: CampaignsRequest): Promise<ControllerResponse<{ campaign?: CampaignRecord; error?: string }>> {
     const guardResult = this.sessionGuard.check(request);
@@ -879,6 +924,153 @@ export class CampaignsController {
     }
 
     return { status: 200, body: { job: result } };
+  }
+
+  async getReauthRequiredOverview(request: CampaignsRequest): Promise<ControllerResponse<{ overview?: ReauthRequiredOverview; error?: string }>> {
+    const guardResult = this.sessionGuard.check(request);
+    if (!guardResult.allowed) {
+      return { status: guardResult.status, body: { error: guardResult.reason } };
+    }
+
+    const ownerEmail = request.session?.adminUser?.email;
+    const reauthTargets = await this.findReauthRequiredTargets(ownerEmail);
+    const platformOrder: CampaignTargetPlatform[] = ['youtube', 'tiktok', 'instagram'];
+    const platformMap = new Map<CampaignTargetPlatform, { targets: number; campaignIds: Set<string>; accountIds: Set<string> }>();
+
+    const targets = await Promise.all(reauthTargets.map(async ({ campaign, target }) => {
+      const existing = platformMap.get(target.platform) ?? {
+        targets: 0,
+        campaignIds: new Set<string>(),
+        accountIds: new Set<string>(),
+      };
+      existing.targets += 1;
+      existing.campaignIds.add(campaign.id);
+      if (target.connectedAccountId) {
+        existing.accountIds.add(target.connectedAccountId);
+      }
+      platformMap.set(target.platform, existing);
+
+      let latestFailedJobId: string | null = null;
+      if (this.jobService) {
+        const jobs = await this.jobService.getJobsForTarget(target.id);
+        latestFailedJobId = [...jobs].reverse().find((job) => job.status === 'failed')?.id ?? null;
+      }
+
+      return {
+        campaignId: campaign.id,
+        campaignTitle: campaign.title,
+        targetId: target.id,
+        platform: target.platform,
+        destinationId: target.destinationId,
+        destinationLabel: target.destinationLabel,
+        connectedAccountId: target.connectedAccountId,
+        retryCount: target.retryCount,
+        latestFailedJobId,
+      };
+    }));
+
+    const platforms = platformOrder
+      .filter((platform) => platformMap.has(platform))
+      .map((platform) => {
+        const summary = platformMap.get(platform)!;
+        return {
+          platform,
+          targets: summary.targets,
+          campaigns: summary.campaignIds.size,
+          accounts: summary.accountIds.size,
+        };
+      });
+
+    return {
+      status: 200,
+      body: {
+        overview: {
+          totalTargets: targets.length,
+          totalCampaigns: new Set(targets.map((target) => target.campaignId)).size,
+          platforms,
+          targets,
+        },
+      },
+    };
+  }
+
+  async retryReauthRequiredTargets(
+    request: CampaignsRequest,
+  ): Promise<ControllerResponse<{ jobs?: PublishJobRecord[]; retried?: number; skipped?: number; errors?: ReauthRequiredRetryError[]; error?: string }>> {
+    const guardResult = this.sessionGuard.check(request);
+    if (!guardResult.allowed) {
+      return { status: guardResult.status, body: { error: guardResult.reason } };
+    }
+
+    if (!this.jobService) {
+      return { status: 501, body: { error: 'Job service not available' } };
+    }
+
+    const ownerEmail = request.session?.adminUser?.email;
+    const reauthTargets = await this.findReauthRequiredTargets(ownerEmail);
+    const jobs: PublishJobRecord[] = [];
+    const errors: ReauthRequiredRetryError[] = [];
+    let skipped = 0;
+
+    for (const { campaign, target } of reauthTargets) {
+      if (target.status === 'enviando' || target.status === 'publicado') {
+        skipped += 1;
+        errors.push({
+          campaignId: campaign.id,
+          targetId: target.id,
+          error: 'Cannot retry a target that is already in progress or published',
+        });
+        continue;
+      }
+
+      const targetJobs = await this.jobService.getJobsForTarget(target.id);
+      const failedJob = [...targetJobs].reverse().find((job) => job.status === 'failed');
+      if (!failedJob) {
+        skipped += 1;
+        errors.push({
+          campaignId: campaign.id,
+          targetId: target.id,
+          error: 'No failed job to retry',
+        });
+        continue;
+      }
+
+      const result = await this.jobService.retry(failedJob.id);
+      if ('error' in result) {
+        skipped += 1;
+        errors.push({
+          campaignId: campaign.id,
+          targetId: target.id,
+          error: result.error,
+        });
+        continue;
+      }
+
+      await this.campaignService.updateTargetStatus(campaign.id, target.id, 'aguardando', {
+        errorMessage: null,
+        retryCount: result.attempt - 1,
+      });
+      jobs.push(result);
+
+      if (request.session?.adminUser?.email && this.auditService) {
+        await this.auditService.record({
+          eventType: 'retry_target',
+          actorEmail: request.session.adminUser.email,
+          campaignId: campaign.id,
+          targetId: target.id,
+        });
+      }
+    }
+
+    return {
+      status: 200,
+      body: {
+        jobs,
+        retried: jobs.length,
+        skipped,
+        errors,
+      },
+    };
   }
 
   async getTargetJobs(request: CampaignsRequest): Promise<ControllerResponse<{ jobs?: PublishJobRecord[]; error?: string }>> {

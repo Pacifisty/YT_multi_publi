@@ -187,6 +187,24 @@ export function createApiRouter(options: {
       handler: (req) => ctrl.getDashboard(req),
     },
     {
+      method: 'GET',
+      pattern: /^\/api\/campaigns\/reauth-required$/,
+      paramNames: [],
+      handler: (req) => ctrl.getReauthRequiredOverview(req),
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/campaigns\/reauth-required\/retry$/,
+      paramNames: [],
+      handler: async (req) => {
+        const response = await ctrl.retryReauthRequiredTargets(req);
+        if (response.status === 200) {
+          void backgroundProcessor?.kick();
+        }
+        return response;
+      },
+    },
+    {
       method: 'DELETE',
       pattern: /^\/api\/campaigns\/([^/]+)\/targets\/([^/]+)$/,
       paramNames: ['id', 'targetId'],

@@ -1,25 +1,65 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 
 interface FrontendAsset {
   contentType: string;
-  body: string;
+  body: string | Buffer;
 }
 
 const APP_JS_PATH = new URL('./public/app.js', import.meta.url);
 const APP_CSS_PATH = new URL('./public/app.css', import.meta.url);
+const I18N_JS_PATH = new URL('./public/i18n.js', import.meta.url);
 const SITE_NAME = 'Platform Multi Publisher';
-const SEO_TITLE = 'Platform Multi Publisher | Publique em YouTube, TikTok e Instagram';
-const SEO_DESCRIPTION = 'Automatize campanhas, midias e publicacoes em YouTube, TikTok e Instagram a partir de um unico workspace visual.';
-const SEO_KEYWORDS = [
-  'publicador multi plataforma',
-  'publicar no YouTube TikTok Instagram',
-  'automacao de campanhas de video',
-  'gerenciador de midias sociais',
-  'dashboard de publicacao',
-];
+const DEFAULT_LOCALE = 'pt-BR';
+const SUPPORTED_LOCALES = new Set(['pt-BR', 'en']);
+export type FrontendLocale = 'pt-BR' | 'en';
+
+const SEO_METADATA = {
+  'pt-BR': {
+    siteName: 'Platform Multi Publisher',
+    title: 'Platform Multi Publisher | Publique em YouTube, TikTok e Instagram',
+    description: 'Automatize campanhas, mídias e publicações no YouTube, TikTok e Instagram a partir de um único workspace visual.',
+    keywords: [
+      'publicador multi plataforma',
+      'publicar no YouTube TikTok Instagram',
+      'automação de campanhas de vídeo',
+      'gerenciador de mídias sociais',
+      'dashboard de publicação',
+    ],
+    initialTitle: 'Planeje e publique vídeos em YouTube, TikTok e Instagram',
+    initialText: 'Plataforma de publicação operacional com campanhas, automação e distribuição cross-platform.',
+    initialPublicSectionTitle: 'Publicação multi plataforma',
+    initialPublicSectionText: 'Crie campanhas para YouTube, TikTok e Instagram com biblioteca de mídias, destinos conectados, fila de jobs e dashboard operacional.',
+    initialIndexSectionTitle: 'Base técnica para indexação',
+    initialIndexSectionText: 'Página pública, sitemap XML, robots.txt, metadados, canonical e dados estruturados preparados para o Google Search Console.',
+  },
+  en: {
+    siteName: 'Platform Multi Publisher',
+    title: 'Platform Multi Publisher | Publish to YouTube, TikTok and Instagram',
+    description: 'Run publishing campaigns, media and scheduling workflows for YouTube, TikTok, and Instagram from one visual workspace.',
+    keywords: [
+      'multi-platform publishing',
+      'publish to YouTube TikTok Instagram',
+      'video publishing automation',
+      'social media publishing dashboard',
+      'campaign management',
+    ],
+    initialTitle: 'Plan and publish your videos on YouTube, TikTok and Instagram',
+    initialText: 'An operational publishing workflow with campaigns, automation and cross-platform distribution.',
+    initialPublicSectionTitle: 'Cross-platform publishing',
+    initialPublicSectionText: 'Build campaigns for YouTube, TikTok and Instagram with a media library, connected destinations, publish queue and operational dashboard.',
+    initialIndexSectionTitle: 'Technical SEO base',
+    initialIndexSectionText: 'Public page, XML sitemap, robots.txt, metadata, canonical and structured data prepared for Google Search Console.',
+  },
+};
 
 const APP_JS = readFileSync(APP_JS_PATH, 'utf-8');
 const APP_CSS = readFileSync(APP_CSS_PATH, 'utf-8');
+const FRONTEND_ASSET_VERSION = [
+  statSync(APP_JS_PATH).mtimeMs,
+  statSync(APP_CSS_PATH).mtimeMs,
+  statSync(I18N_JS_PATH).mtimeMs,
+].map((value) => Math.round(value)).join('.');
+const FRONTEND_STATIC_ASSETS = new Map<string, FrontendAsset>();
 
 function escapeHtml(value: string): string {
   return value
@@ -93,14 +133,15 @@ function buildSitemapXml(): string {
   ].join('\n');
 }
 
-function buildStructuredData(): string {
+function buildStructuredData(locale: FrontendLocale = DEFAULT_LOCALE): string {
+  const seo = SEO_METADATA[locale] ?? SEO_METADATA[DEFAULT_LOCALE];
   const json = JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
-    name: SITE_NAME,
+    name: seo.siteName,
     applicationCategory: 'BusinessApplication',
     operatingSystem: 'Web',
-    description: SEO_DESCRIPTION,
+    description: seo.description,
     url: buildAbsoluteUrl('/'),
     offers: {
       '@type': 'Offer',
@@ -108,33 +149,50 @@ function buildStructuredData(): string {
       priceCurrency: 'BRL',
     },
     featureList: [
-      'Publicacao em YouTube, TikTok e Instagram',
-      'Dashboard operacional de campanhas',
-      'Biblioteca de midias e thumbnails',
-      'Agendamento e acompanhamento de jobs',
-      'Gestao de contas conectadas',
+      'Publishing to YouTube, TikTok and Instagram',
+      'Operational campaign dashboard',
+      'Media and thumbnail library',
+      'Scheduling and job tracking',
+      'Connected account management',
     ],
   });
 
   return json.replaceAll('<', '\\u003c');
 }
 
-function renderInitialAppContent(path: string): string {
+export function normalizeFrontendLocale(rawLocale: string | null | undefined): FrontendLocale {
+  const normalized = String(rawLocale ?? '').trim().toLowerCase();
+  if (normalized === 'pt-br' || normalized === 'pt') {
+    return 'pt-BR';
+  }
+  if (normalized === 'en' || normalized.startsWith('en-')) {
+    return 'en';
+  }
+  return DEFAULT_LOCALE;
+}
+
+function getSeoForLocale(locale: FrontendLocale) {
+  return SEO_METADATA[locale];
+}
+
+function renderInitialAppContent(path: string, locale: FrontendLocale): string {
+  const seo = getSeoForLocale(locale);
   if (!shouldIndexPath(path)) {
     return '';
   }
-
+  const publicSectionLabel = locale === 'en' ? 'Main features' : 'Recursos principais';
+  const indexSectionLabel = locale === 'en' ? 'SEO base' : 'Base de SEO';
   return `
       <main class="seo-static-content">
-        <h1>${escapeHtml(SITE_NAME)}</h1>
-        <p>${escapeHtml(SEO_DESCRIPTION)}</p>
-        <section aria-label="Recursos principais">
-          <h2>Publicacao multi plataforma</h2>
-          <p>Crie campanhas para YouTube, TikTok e Instagram com biblioteca de midias, destinos conectados, fila de jobs e dashboard operacional.</p>
+        <h1>${escapeHtml(seo.initialTitle)}</h1>
+        <p>${escapeHtml(seo.initialText)}</p>
+        <section aria-label="${escapeHtml(publicSectionLabel)}">
+          <h2>${escapeHtml(seo.initialPublicSectionTitle)}</h2>
+          <p>${escapeHtml(seo.initialPublicSectionText)}</p>
         </section>
-        <section aria-label="Base de SEO">
-          <h2>Base tecnica para indexacao</h2>
-          <p>Pagina publica, sitemap XML, robots.txt, metadados, canonical e dados estruturados preparados para o Google Search Console.</p>
+        <section aria-label="${escapeHtml(indexSectionLabel)}">
+          <h2>${escapeHtml(seo.initialIndexSectionTitle)}</h2>
+          <p>${escapeHtml(seo.initialIndexSectionText)}</p>
         </section>
       </main>
     `;
@@ -156,11 +214,23 @@ export function resolveFrontendAsset(path: string): FrontendAsset | null {
     };
   }
 
+  if (path === '/i18n.js') {
+    return {
+      contentType: 'application/javascript; charset=utf-8',
+      body: readFileSync(I18N_JS_PATH, 'utf-8'),
+    };
+  }
+
   if (path === '/app.css') {
     return {
       contentType: 'text/css; charset=utf-8',
       body: APP_CSS,
     };
+  }
+
+  const staticAsset = FRONTEND_STATIC_ASSETS.get(path);
+  if (staticAsset) {
+    return staticAsset;
   }
 
   if (path === '/robots.txt') {
@@ -233,10 +303,12 @@ export function resolveFrontendAsset(path: string): FrontendAsset | null {
   return null;
 }
 
-export function renderFrontendDocument(path: string): string {
+export function renderFrontendDocument(path: string, locale: FrontendLocale = DEFAULT_LOCALE): string {
+  const safeLocale = normalizeFrontendLocale(locale);
   const initialPath = escapeHtml(path);
   const canonicalUrl = escapeHtml(buildAbsoluteUrl(shouldIndexPath(path) ? '/' : path));
   const robotsMeta = shouldIndexPath(path) ? 'index,follow' : 'noindex,nofollow';
+  const seo = getSeoForLocale(safeLocale);
   const tiktokVerification = process.env.TIKTOK_DEVELOPER_VERIFICATION || '';
   const tiktokMetaTag = tiktokVerification
     ? `    <meta name="tiktok-developers-site-verification" content="${escapeHtml(tiktokVerification)}" />\n`
@@ -245,37 +317,38 @@ export function renderFrontendDocument(path: string): string {
   const googleMetaTag = googleVerification
     ? `    <meta name="google-site-verification" content="${escapeHtml(googleVerification)}" />\n`
     : '';
-  const structuredData = buildStructuredData();
-  const initialContent = renderInitialAppContent(path);
+  const structuredData = buildStructuredData(safeLocale);
+  const initialContent = renderInitialAppContent(path, safeLocale);
   return `<!doctype html>
-<html lang="pt-BR">
+<html lang="${escapeHtml(safeLocale)}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>${escapeHtml(SEO_TITLE)}</title>
-    <meta name="description" content="${escapeHtml(SEO_DESCRIPTION)}" />
-    <meta name="keywords" content="${escapeHtml(SEO_KEYWORDS.join(', '))}" />
+    <title>${escapeHtml(seo.title)}</title>
+    <meta name="description" content="${escapeHtml(seo.description)}" />
+    <meta name="keywords" content="${escapeHtml(seo.keywords.join(', '))}" />
     <meta name="robots" content="${robotsMeta}" />
-    <meta name="application-name" content="${escapeHtml(SITE_NAME)}" />
+    <meta name="application-name" content="${escapeHtml(seo.siteName)}" />
     <meta name="theme-color" content="#0f766e" />
     <link rel="canonical" href="${canonicalUrl}" />
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="${escapeHtml(SITE_NAME)}" />
-    <meta property="og:title" content="${escapeHtml(SEO_TITLE)}" />
-    <meta property="og:description" content="${escapeHtml(SEO_DESCRIPTION)}" />
+    <meta property="og:site_name" content="${escapeHtml(seo.siteName)}" />
+    <meta property="og:title" content="${escapeHtml(seo.title)}" />
+    <meta property="og:description" content="${escapeHtml(seo.description)}" />
     <meta property="og:url" content="${canonicalUrl}" />
     <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="${escapeHtml(SEO_TITLE)}" />
-    <meta name="twitter:description" content="${escapeHtml(SEO_DESCRIPTION)}" />
+    <meta name="twitter:title" content="${escapeHtml(seo.title)}" />
+    <meta name="twitter:description" content="${escapeHtml(seo.description)}" />
 ${googleMetaTag}${tiktokMetaTag}    <script type="application/ld+json">${structuredData}</script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/app.css" />
+    <link rel="stylesheet" href="/app.css?v=${FRONTEND_ASSET_VERSION}" />
   </head>
-  <body data-initial-path="${initialPath}">
+    <body data-initial-path="${initialPath}" data-initial-locale="${escapeHtml(safeLocale)}">
     <div id="app">${initialContent}</div>
-    <script type="module" src="/app.js"></script>
+    <script src="/i18n.js?v=${FRONTEND_ASSET_VERSION}"></script>
+    <script type="module" src="/app.js?v=${FRONTEND_ASSET_VERSION}"></script>
   </body>
 </html>`;
 }

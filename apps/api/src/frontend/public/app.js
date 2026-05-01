@@ -43,16 +43,45 @@ const LOGO_STYLES = `
 </style>
 `;
 
+function renderPlatformLogo3d(platform, size = 32, extraClass = '') {
+  const p = String(platform ?? '').toLowerCase().trim();
+  const safePlatform = p === 'instagram' || p === 'tiktok' || p === 'youtube' ? p : 'youtube';
+  const label = safePlatform === 'youtube' ? 'YouTube' : safePlatform === 'tiktok' ? 'TikTok' : 'Instagram';
+  const pixelSize = Math.max(16, Math.min(96, Number(size) || 32));
+  const className = ['platform-logo-3d', `platform-logo-3d-${safePlatform}`, extraClass].filter(Boolean).join(' ');
+  const symbolHtml = safePlatform === 'youtube'
+    ? '<span class="platform-logo-play"></span>'
+    : safePlatform === 'tiktok'
+      ? `
+        <span class="platform-logo-note note-cyan"></span>
+        <span class="platform-logo-note note-pink"></span>
+        <span class="platform-logo-note note-main"></span>
+      `
+      : `
+        <span class="platform-logo-lens"></span>
+        <span class="platform-logo-dot"></span>
+      `;
+  return `
+    <span class="${escapeAttribute(className)}" style="--platform-logo-size:${pixelSize}px" role="img" aria-label="${escapeAttribute(label)}">
+      <span class="platform-logo-depth"></span>
+      <span class="platform-logo-face">
+        <span class="platform-logo-gloss"></span>
+        <span class="platform-logo-symbol">${symbolHtml}</span>
+      </span>
+    </span>
+  `;
+}
+
 function renderYouTubeLogo(size = 32) {
-  return `<svg class="logo-animated logo-youtube-animated" width="${size}" height="${size}" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="YouTube" style="will-change: transform, opacity;"><rect x="6" y="12" width="36" height="24" rx="4" ry="4" fill="#FF0000" /><path d="M 20 18 L 20 30 L 30 24 Z" fill="white" /></svg>`;
+  return renderPlatformLogo3d('youtube', size, 'logo-animated logo-youtube-animated');
 }
 
 function renderTikTokLogo(size = 32) {
-  return `<svg class="logo-animated logo-tiktok-animated" width="${size}" height="${size}" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TikTok" style="will-change: transform, opacity;"><rect x="16" y="6" width="2" height="28" fill="#000000" /><circle cx="17" cy="32" r="4" fill="#000000" /><circle cx="23" cy="28" r="4" fill="#000000" /><circle cx="24" cy="24" r="18" fill="none" stroke="#25F4EE" stroke-width="2.5" opacity="0.8" /></svg>`;
+  return renderPlatformLogo3d('tiktok', size, 'logo-animated logo-tiktok-animated');
 }
 
 function renderInstagramLogo(size = 32) {
-  return `<svg class="logo-animated logo-instagram-animated" width="${size}" height="${size}" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Instagram" style="will-change: transform, opacity, filter;"><defs><linearGradient id="instaGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#fd1d1d" /><stop offset="50%" stop-color="#f15245" /><stop offset="100%" stop-color="#d92e7f" /></linearGradient></defs><rect x="8" y="8" width="32" height="32" rx="8" ry="8" fill="url(#instaGrad)" /><circle cx="24" cy="24" r="10" fill="none" stroke="white" stroke-width="2.5" /><circle cx="24" cy="24" r="2.5" fill="white" /><circle cx="34" cy="14" r="1.5" fill="white" opacity="0.7" /></svg>`;
+  return renderPlatformLogo3d('instagram', size, 'logo-animated logo-instagram-animated');
 }
 
 function renderAnimatedLogoByPlatform(platform, size = 32) {
@@ -79,15 +108,65 @@ function escapeHtml(value) {
     .replaceAll("'", '&#39;');
 }
 
+function getI18nRuntime() {
+  return window.PMP_I18N && typeof window.PMP_I18N === 'object' ? window.PMP_I18N : null;
+}
+
+function readInitialLocale() {
+  const runtime = getI18nRuntime();
+  if (runtime?.resolveInitialLocale) {
+    return runtime.resolveInitialLocale(document.body?.dataset?.initialLocale);
+  }
+  const initialLocale = document.body?.dataset?.initialLocale || document.documentElement.lang;
+  return initialLocale === 'en' ? 'en' : 'pt-BR';
+}
+
+function getActiveLocale() {
+  const runtime = getI18nRuntime();
+  if (runtime?.getCurrentLocale) {
+    return runtime.getCurrentLocale();
+  }
+  return document.documentElement.lang === 'en' ? 'en' : 'pt-BR';
+}
+
+function t(key, values = {}) {
+  const runtime = getI18nRuntime();
+  const locale = state?.locale ?? getActiveLocale();
+  return runtime?.t ? runtime.t(locale, key, values) : String(key ?? '');
+}
+
+function applyLocaleTranslations() {
+  const runtime = getI18nRuntime();
+  const locale = state?.locale ?? getActiveLocale();
+  document.documentElement.lang = locale;
+  document.body.dataset.initialLocale = locale;
+  if (runtime?.applyLocale) {
+    runtime.applyLocale(locale, root);
+  }
+}
+
+function setAppLocale(locale, options = {}) {
+  const runtime = getI18nRuntime();
+  const normalized = runtime?.normalizeLocale ? runtime.normalizeLocale(locale) : (locale === 'en' ? 'en' : 'pt-BR');
+  state.locale = normalized;
+  if (runtime?.persistLocale) {
+    runtime.persistLocale(normalized);
+  }
+  applyLocaleTranslations();
+  if (options.rerender !== false) {
+    void renderRoute();
+  }
+}
+
 function formatDate(value) {
   if (!value) return '-';
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return String(value);
-  return parsed.toLocaleString();
+  return parsed.toLocaleString(getActiveLocale());
 }
 
 function formatNumber(value) {
-  return Number(value ?? 0).toLocaleString();
+  return Number(value ?? 0).toLocaleString(getActiveLocale());
 }
 
 function formatBytes(value) {
@@ -264,6 +343,7 @@ async function uploadMediaFiles(videoFile, thumbnailFile) {
 const BACKGROUND_THEME_STORAGE_KEY = 'ytmp-workspace-background-theme';
 const FONT_THEME_STORAGE_KEY = 'ytmp-font-theme';
 const OAUTH_PROVIDER_STORAGE_KEY = 'ytmp-pending-oauth-provider';
+const CAMPAIGN_REAUTH_RETURN_KEY = 'ytmp-campaign-reauth-return';
 const MEDIA_PREVIEW_SIZE_STORAGE_KEY = 'ytmp-media-preview-sizes';
 const DEFAULT_MEDIA_PREVIEW_SIZE = 'medium';
 const MEDIA_PREVIEW_SIZE_OPTIONS = [
@@ -1113,6 +1193,42 @@ const PLATFORM_THEME_OPTIONS = [
   },
 ];
 
+const PLAN_BACKGROUND_THEME_MAP = {
+  FREE: {
+    label: 'Free',
+    shortLabel: 'Free',
+    tone: 'info',
+    defaultTheme: 'minimal-off-white',
+    themeIds: ['minimal-off-white', 'graphite-gray', 'ice-blue', 'warm-beige'],
+    summary: 'Visual simples, leve e direto para começar sem excesso de contraste.',
+  },
+  BASIC: {
+    label: 'Básico',
+    shortLabel: 'Basic',
+    tone: 'success',
+    defaultTheme: 'soft-grid-light',
+    themeIds: ['soft-grid-light', 'clean-white', 'ocean', 'deep-black-blue'],
+    summary: 'Mais presença visual, mantendo leitura limpa para operação recorrente.',
+  },
+  PRO: {
+    label: 'Pro',
+    shortLabel: 'Pro',
+    tone: 'warning',
+    defaultTheme: 'platform-neon-night',
+    themeIds: ['platform-neon-night', 'platform-youtube-redline', 'platform-instagram-gradient', 'dark-cyan-glow', 'green-to-blue', 'purple-to-indigo'],
+    summary: 'Energia multicanal com contraste forte para fluxos YouTube, TikTok e Instagram.',
+  },
+  PREMIUM: {
+    label: 'Premium',
+    shortLabel: 'Premium',
+    tone: 'warning',
+    defaultTheme: 'mesh-gradient',
+    themeIds: ['mesh-gradient', 'frosted-glass', 'abstract-waves', 'premium-gray-noise', 'blue-to-purple', 'dark-purple-tech', 'pink-to-orange', 'sunset'],
+    summary: 'Backgrounds mais ricos, com camadas e acabamento premium para operação avançada.',
+  },
+};
+const PLAN_BACKGROUND_TIER_ORDER = ['FREE', 'BASIC', 'PRO', 'PREMIUM'];
+
 function readStoredBackgroundTheme() {
   try {
     const value = localStorage.getItem(BACKGROUND_THEME_STORAGE_KEY);
@@ -1151,6 +1267,27 @@ function writePendingOauthProvider(provider) {
       return;
     }
     localStorage.setItem(OAUTH_PROVIDER_STORAGE_KEY, provider);
+  } catch {
+    // Ignore storage errors in private/sandboxed browsers.
+  }
+}
+
+function readCampaignReauthReturnProvider() {
+  try {
+    const value = localStorage.getItem(CAMPAIGN_REAUTH_RETURN_KEY);
+    return value === 'youtube' || value === 'tiktok' || value === 'instagram' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCampaignReauthReturnProvider(provider) {
+  try {
+    if (!provider) {
+      localStorage.removeItem(CAMPAIGN_REAUTH_RETURN_KEY);
+      return;
+    }
+    localStorage.setItem(CAMPAIGN_REAUTH_RETURN_KEY, provider);
   } catch {
     // Ignore storage errors in private/sandboxed browsers.
   }
@@ -1249,6 +1386,8 @@ const api = {
   clone: (id, title) => apiRequest('POST', `/api/campaigns/${encodeURIComponent(id)}/clone`, title ? { title } : undefined),
   deleteCampaign: (id) => apiRequest('DELETE', `/api/campaigns/${encodeURIComponent(id)}`),
   retryTarget: (campaignId, targetId) => apiRequest('POST', `/api/campaigns/${encodeURIComponent(campaignId)}/targets/${encodeURIComponent(targetId)}/retry`),
+  campaignReauthRequired: () => apiRequest('GET', '/api/campaigns/reauth-required'),
+  retryReauthRequired: () => apiRequest('POST', '/api/campaigns/reauth-required/retry'),
   accounts: () => apiRequest('GET', '/api/accounts'),
   startGoogleOauth: () => apiRequest('GET', '/api/accounts/oauth/google/start'),
   startYouTubeOauth: () => apiRequest('GET', '/api/accounts/oauth/youtube/start'),
@@ -1283,6 +1422,7 @@ const api = {
 };
 
 const state = {
+  locale: readInitialLocale(),
   me: null,
   account: null,
   routeInFlight: false,
@@ -1328,6 +1468,94 @@ function applyBackgroundTheme(backgroundThemeId) {
     localStorage.setItem(BACKGROUND_THEME_STORAGE_KEY, selectedTheme.id);
   } catch {
     // noop: storage can be unavailable in hardened browser contexts
+  }
+}
+
+function normalizeAccountPlanId(planId) {
+  const normalized = String(planId ?? '').trim().toUpperCase();
+  return PLAN_BACKGROUND_THEME_MAP[normalized] ? normalized : 'FREE';
+}
+
+function getCurrentAccountPlanId() {
+  return normalizeAccountPlanId(state.account?.plan ?? state.account?.planCode ?? state.account?.planLabel);
+}
+
+function getPlanVisualConfig(planId = getCurrentAccountPlanId()) {
+  return PLAN_BACKGROUND_THEME_MAP[normalizeAccountPlanId(planId)] ?? PLAN_BACKGROUND_THEME_MAP.FREE;
+}
+
+function getBackgroundThemeOption(themeId) {
+  return BACKGROUND_THEME_OPTIONS.find((option) => option.id === themeId) ?? null;
+}
+
+function getPlanBackgroundTierIds(planId = getCurrentAccountPlanId()) {
+  const normalizedPlanId = normalizeAccountPlanId(planId);
+  const planIndex = PLAN_BACKGROUND_TIER_ORDER.indexOf(normalizedPlanId);
+  return PLAN_BACKGROUND_TIER_ORDER.slice(0, Math.max(planIndex, 0) + 1);
+}
+
+function getPlanBackgroundThemeIds(planId = getCurrentAccountPlanId(), options = {}) {
+  const normalizedPlanId = normalizeAccountPlanId(planId);
+  const tierIds = options.cumulative === false ? [normalizedPlanId] : getPlanBackgroundTierIds(normalizedPlanId);
+  const seenThemeIds = new Set();
+
+  return tierIds.flatMap((tierId) => {
+    const themeIds = PLAN_BACKGROUND_THEME_MAP[tierId]?.themeIds ?? [];
+    return themeIds.filter((themeId) => {
+      if (seenThemeIds.has(themeId)) {
+        return false;
+      }
+      seenThemeIds.add(themeId);
+      return Boolean(getBackgroundThemeOption(themeId));
+    });
+  });
+}
+
+function getThemeUnlockPlanId(themeId) {
+  return PLAN_BACKGROUND_TIER_ORDER.find((tierId) => (
+    PLAN_BACKGROUND_THEME_MAP[tierId]?.themeIds.includes(themeId)
+  )) ?? null;
+}
+
+function isBackgroundThemeAvailableForPlan(themeId, planId = getCurrentAccountPlanId()) {
+  return getPlanBackgroundThemeIds(planId).includes(themeId);
+}
+
+function getPlanBackgroundThemes(planId = getCurrentAccountPlanId(), options = {}) {
+  const normalizedPlanId = normalizeAccountPlanId(planId);
+  const themes = getPlanBackgroundThemeIds(normalizedPlanId, options)
+    .map((id) => getBackgroundThemeOption(id))
+    .filter(Boolean);
+  const selectedTheme = getSelectedBackgroundTheme();
+  const canIncludeSelected = options.includeSelected === true
+    && selectedTheme
+    && isBackgroundThemeAvailableForPlan(selectedTheme.id, normalizedPlanId);
+  if (canIncludeSelected && !themes.some((theme) => theme.id === selectedTheme.id)) {
+    themes.unshift(selectedTheme);
+  }
+  return themes;
+}
+
+function ensurePlanCompatibleBackground(planId = getCurrentAccountPlanId()) {
+  const normalizedPlanId = normalizeAccountPlanId(planId);
+  if (isBackgroundThemeAvailableForPlan(state.backgroundTheme, normalizedPlanId)) {
+    return false;
+  }
+
+  const config = getPlanVisualConfig(normalizedPlanId);
+  const fallbackThemeId = config.defaultTheme
+    ?? getPlanBackgroundThemeIds(normalizedPlanId)[0]
+    ?? BACKGROUND_THEME_OPTIONS[0]?.id;
+  if (fallbackThemeId) {
+    applyBackgroundTheme(fallbackThemeId);
+  }
+  return true;
+}
+
+function applyRecommendedBackgroundForPlan(planId) {
+  const config = getPlanVisualConfig(planId);
+  if (config.defaultTheme && state.backgroundTheme !== config.defaultTheme) {
+    applyBackgroundTheme(config.defaultTheme);
   }
 }
 
@@ -1383,25 +1611,76 @@ function updateMediaPreviewSize(assetId, previewSize) {
   writeStoredMediaPreviewSizes(state.mediaPreviewSizes);
 }
 
-function settingsPickerHtml(prefix) {
-  const selectedTheme = BACKGROUND_THEME_OPTIONS.find((option) => option.id === state.backgroundTheme) ?? BACKGROUND_THEME_OPTIONS[0];
+function renderLanguageOptionButtons(extraClass = '') {
+  const extraClasses = extraClass ? `${extraClass} ` : '';
+  return [
+    { locale: 'pt-BR', label: 'Português', shortLabel: 'PT' },
+    { locale: 'en', label: 'English', shortLabel: 'EN' },
+  ].map((option) => `
+    <button
+      type="button"
+      class="font-theme-button language-option-button ${extraClasses}${state.locale === option.locale ? 'active' : ''}"
+      data-locale-option="${option.locale}"
+      aria-pressed="${state.locale === option.locale ? 'true' : 'false'}"
+      title="${escapeHtml(option.label)}"
+    >
+      <span class="color-swatch language-swatch" aria-hidden="true">${escapeHtml(option.shortLabel)}</span>
+      <span class="color-label">${escapeHtml(option.label)}</span>
+    </button>
+  `).join('');
+}
+
+function renderFontThemeButtons(themeIds = ['black', 'lightgrey', 'turquoise', 'deeppink']) {
   const selectedFont = FONT_THEME_OPTIONS.find((option) => option.id === state.fontTheme) ?? FONT_THEME_OPTIONS[0];
-  const curatedThemeIds = ['platform-neon-night', 'deep-black-blue', 'clean-white'];
-  const curatedFontIds = ['black', 'lightgrey', 'turquoise', 'deeppink'];
-  const themePresets = curatedThemeIds
-    .map((id) => BACKGROUND_THEME_OPTIONS.find((option) => option.id === id))
-    .filter(Boolean);
-  if (!themePresets.some((option) => option.id === selectedTheme.id)) {
-    themePresets.unshift(selectedTheme);
-  }
-  const fontPresets = curatedFontIds
+  const fontPresets = themeIds
     .map((id) => FONT_THEME_OPTIONS.find((option) => option.id === id))
     .filter(Boolean);
   if (!fontPresets.some((option) => option.id === selectedFont.id)) {
     fontPresets.unshift(selectedFont);
   }
+  return fontPresets.map((option) => {
+    const isSelected = option.id === state.fontTheme ? ' active' : '';
+    return `
+      <button
+        type="button"
+        class="font-theme-button${isSelected}"
+        data-font-theme-id="${option.id}"
+        aria-pressed="${option.id === state.fontTheme ? 'true' : 'false'}"
+        title="${escapeHtml(option.label)}"
+        style="--color: ${escapeAttribute(option.color)}"
+      >
+        <span class="color-swatch"></span>
+        <span class="color-label">${escapeHtml(option.label)}</span>
+      </button>
+    `;
+  }).join('');
+}
 
-  const cardsHtml = themePresets.map((option) => {
+function renderCompactPlanThemeButtons(planId = getCurrentAccountPlanId(), limit = 4) {
+  const normalizedPlanId = normalizeAccountPlanId(planId);
+  const ownThemeIds = getPlanBackgroundThemeIds(normalizedPlanId, { cumulative: false });
+  const ownThemes = ownThemeIds
+    .map((id) => getBackgroundThemeOption(id))
+    .filter(Boolean);
+  const inheritedThemes = getPlanBackgroundThemes(normalizedPlanId)
+    .filter((option) => !ownThemeIds.includes(option.id));
+  const selectedTheme = getSelectedBackgroundTheme();
+  const themes = [
+    ...ownThemes,
+    ...inheritedThemes,
+  ];
+
+  if (
+    selectedTheme
+    && isBackgroundThemeAvailableForPlan(selectedTheme.id, normalizedPlanId)
+    && !themes.some((option) => option.id === selectedTheme.id)
+  ) {
+    themes.unshift(selectedTheme);
+  }
+
+  return themes.slice(0, limit).map((option) => {
+    const unlockPlanId = getThemeUnlockPlanId(option.id) ?? normalizedPlanId;
+    const unlockPlanConfig = getPlanVisualConfig(unlockPlanId);
     const selectedClass = option.id === state.backgroundTheme ? ' selected' : '';
     return `
       <button
@@ -1414,60 +1693,108 @@ function settingsPickerHtml(prefix) {
         <span class="style-preset-preview" aria-hidden="true"></span>
         <span class="style-preset-body">
           <strong>${escapeHtml(option.label)}</strong>
+          <small>${escapeHtml(unlockPlanConfig.shortLabel)} · ${escapeHtml(option.description)}</small>
+        </span>
+      </button>
+    `;
+  }).join('');
+}
+
+function renderPlanBackgroundCards(planId = getCurrentAccountPlanId()) {
+  return getPlanBackgroundThemes(planId).map((option) => {
+    const unlockPlanId = getThemeUnlockPlanId(option.id) ?? normalizeAccountPlanId(planId);
+    const unlockPlanConfig = getPlanVisualConfig(unlockPlanId);
+    const selectedClass = option.id === state.backgroundTheme ? ' selected' : '';
+    return `
+      <button
+        type="button"
+        class="background-card plan-background-card${selectedClass}"
+        data-background-theme-option="${option.id}"
+        aria-pressed="${option.id === state.backgroundTheme ? 'true' : 'false'}"
+        style="--background-preview:${escapeAttribute(option.pageBackground)}; --preset-accent:${escapeAttribute(option.primary)};"
+      >
+        <span class="background-card-preview" aria-hidden="true"></span>
+        <span class="background-card-body">
+          <span class="settings-card-title-row">
+            <strong>${escapeHtml(option.label)}</strong>
+            <span class="pill ${escapeHtml(unlockPlanConfig.tone)}">${escapeHtml(unlockPlanConfig.label)}</span>
+          </span>
+          <span class="background-card-type">${escapeHtml(option.type)} · ${escapeHtml(option.code)}</span>
           <small>${escapeHtml(option.description)}</small>
         </span>
       </button>
     `;
   }).join('');
+}
 
-  const fontOptionsHtml = fontPresets.map((option) => {
-    const isSelected = option.id === state.fontTheme ? ' active' : '';
-    return `
-      <button
-        type="button"
-        class="font-theme-button${isSelected}"
-        data-font-theme-id="${option.id}"
-        aria-pressed="${option.id === state.fontTheme ? 'true' : 'false'}"
-        title="${escapeHtml(option.label)}"
-        style="--color: ${option.color}"
-      >
-        <span class="color-swatch"></span>
-        <span class="color-label">${escapeHtml(option.label)}</span>
-      </button>
-    `;
-  }).join('');
+function settingsPickerHtml(prefix) {
+  const selectedTheme = getSelectedBackgroundTheme();
+  const selectedFont = FONT_THEME_OPTIONS.find((option) => option.id === state.fontTheme) ?? FONT_THEME_OPTIONS[0];
+  const planId = getCurrentAccountPlanId();
+  const planConfig = getPlanVisualConfig(planId);
+  const cardsHtml = renderCompactPlanThemeButtons(planId);
+  const fontOptionsHtml = renderFontThemeButtons();
+  const languageOptionsHtml = renderLanguageOptionButtons();
 
   return `
     <details class="settings-picker compact-settings">
-      <summary class="theme-toggle-btn">
-        Settings
-        <span class="background-picker-current">${escapeHtml(selectedTheme.label)}</span>
+      <summary class="theme-toggle-btn" aria-label="Abrir configurações">
+        <span class="header-control-icon">${renderNeonMediaIcon('processing', 'chip', { state: 'processing' })}</span>
+        <span class="theme-toggle-copy">
+          <span class="theme-toggle-label">Configurações</span>
+          <span class="background-picker-current">${escapeHtml(selectedTheme.label)}</span>
+        </span>
       </summary>
       <div class="settings-panel settings-panel-compact">
         <div
-          class="settings-preview-card"
+          class="settings-preview-card settings-preview-card-plan"
           style="--background-preview:${escapeAttribute(selectedTheme.pageBackground)}; --preset-accent:${escapeAttribute(selectedTheme.primary)}; --text-preview:${escapeAttribute(selectedFont.color)};"
         >
-          <span>Workspace visual</span>
+          <span>Visual do workspace</span>
           <strong>${escapeHtml(selectedTheme.label)}</strong>
-          <small>${escapeHtml(selectedTheme.type)} / ${escapeHtml(selectedFont.label)}</small>
+          <small>${escapeHtml(planConfig.label)} · ${escapeHtml(selectedFont.label)}</small>
+        </div>
+        <div class="settings-panel-actions">
+          <a class="settings-panel-action" data-link href="/workspace/configuracoes">
+            ${renderNeonMediaIcon('storage', 'chip', { state: 'info' })}
+            <span>
+              <strong>Abrir configurações</strong>
+              <small>Perfil, idioma e plataforma</small>
+            </span>
+          </a>
+          <a class="settings-panel-action" data-link href="/workspace/perfil">
+            ${renderNeonMediaIcon('available', 'chip', { state: 'success' })}
+            <span>
+              <strong>Meu perfil</strong>
+              <small>Conta e preferências</small>
+            </span>
+          </a>
         </div>
         <div class="settings-section">
           <div class="settings-section-header">
-            <strong>Visual mode</strong>
-            <span class="muted">3 presets</span>
+            <strong>Background do plano</strong>
+            <span class="muted">${escapeHtml(planConfig.label)}</span>
           </div>
-          <div class="style-preset-grid">
+          <div class="style-preset-grid style-preset-grid-plan">
             ${cardsHtml}
           </div>
         </div>
         <div class="settings-section">
           <div class="settings-section-header">
-            <strong>Text tint</strong>
-            <span class="muted">4 choices</span>
+            <strong>Cor do texto</strong>
+            <span class="muted">4 opções</span>
           </div>
           <div class="font-theme-grid font-theme-grid-compact">
             ${fontOptionsHtml}
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-section-header">
+            <strong>Idioma</strong>
+            <span class="muted">Português / English</span>
+          </div>
+          <div class="font-theme-grid font-theme-grid-compact language-grid">
+            ${languageOptionsHtml}
           </div>
         </div>
       </div>
@@ -1752,16 +2079,22 @@ function activeTab(pathname) {
   ) return 'videos';
   if (pathname.startsWith('/workspace/campanhas')) return 'campanhas';
   if (pathname.startsWith('/workspace/planos')) return 'planos';
+  if (pathname.startsWith('/workspace/configuracoes') || pathname.startsWith('/workspace/perfil')) return 'settings';
   return 'dashboard';
 }
 
 function renderWorkspaceShell(options) {
+  if (state.account) {
+    ensurePlanCompatibleBackground();
+  }
+
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', href: '/workspace/dashboard' },
     { id: 'campanhas', label: 'Campanhas', href: '/workspace/campanhas' },
     { id: 'accounts', label: 'Accounts', href: '/workspace/accounts' },
     { id: 'videos', label: 'Videos', href: '/workspace/videos' },
     { id: 'planos', label: 'Planos', href: '/workspace/planos' },
+    { id: 'settings', label: 'Configurações', href: '/workspace/configuracoes' },
   ];
   const pathname = window.location.pathname;
   const currentTab = activeTab(pathname);
@@ -1879,18 +2212,18 @@ function renderWorkspaceShell(options) {
               <svg class="pmp-logo-svg" viewBox="0 0 100 100" role="img">
                 <defs>
                   <linearGradient id="pmpRing" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#3b82f6" />
-                    <stop offset="55%" stop-color="#6366f1" />
-                    <stop offset="100%" stop-color="#a855f7" />
+                    <stop offset="0%" stop-color="#67e8f9" />
+                    <stop offset="52%" stop-color="#22d3ee" />
+                    <stop offset="100%" stop-color="#3b82f6" />
                   </linearGradient>
                   <linearGradient id="pmpLetters" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#22d3ee" />
-                    <stop offset="50%" stop-color="#6366f1" />
-                    <stop offset="100%" stop-color="#c084fc" />
+                    <stop offset="0%" stop-color="#f8fafc" />
+                    <stop offset="42%" stop-color="#67e8f9" />
+                    <stop offset="100%" stop-color="#22d3ee" />
                   </linearGradient>
                   <radialGradient id="pmpInnerGlow" cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" stop-color="rgba(99,102,241,0.35)" />
-                    <stop offset="60%" stop-color="rgba(99,102,241,0.05)" />
+                    <stop offset="0%" stop-color="rgba(34,211,238,0.28)" />
+                    <stop offset="62%" stop-color="rgba(59,130,246,0.05)" />
                     <stop offset="100%" stop-color="transparent" />
                   </radialGradient>
                   <filter id="pmpGlow" x="-30%" y="-30%" width="160%" height="160%">
@@ -1901,8 +2234,8 @@ function renderWorkspaceShell(options) {
                     </feMerge>
                   </filter>
                 </defs>
-                <circle cx="50" cy="50" r="46" fill="url(#pmpInnerGlow)" />
-                <circle class="pmp-logo-ring" cx="50" cy="50" r="44" fill="none" stroke="url(#pmpRing)" stroke-width="2.5" />
+                <rect x="6" y="6" width="88" height="88" rx="24" fill="url(#pmpInnerGlow)" />
+                <rect class="pmp-logo-ring" x="8" y="8" width="84" height="84" rx="22" fill="none" stroke="url(#pmpRing)" stroke-width="2.8" />
                 <g class="pmp-logo-share" stroke="url(#pmpLetters)" stroke-width="1.8" fill="none" stroke-linecap="round">
                   <circle cx="42" cy="26" r="2.4" fill="url(#pmpLetters)" />
                   <circle cx="58" cy="26" r="2.4" fill="url(#pmpLetters)" />
@@ -1933,12 +2266,12 @@ function renderWorkspaceShell(options) {
           <div class="header-actions">
             ${tokenHtml}
             ${settingsPicker}
-            <div class="header-account-chip" title="${escapeHtml(accountTitle)}">
+            <a class="header-account-chip" data-link href="/workspace/perfil" title="${escapeHtml(accountTitle)}" aria-label="Abrir perfil">
               <div class="header-user-block">
                 <span class="user-email">${escapeHtml(state.me?.email ?? '')}</span>
                 ${planLabel ? `<span class="header-plan-badge">Plano ${escapeHtml(planLabel)}</span>` : ''}
               </div>
-            </div>
+            </a>
             <button id="logout-btn" class="logout-btn" type="button">Logout</button>
           </div>
         </div>
@@ -1989,6 +2322,15 @@ function renderWorkspaceShell(options) {
     });
   });
 
+  document.querySelectorAll('[data-locale-option]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const locale = button.getAttribute('data-locale-option');
+      if (locale) {
+        setAppLocale(locale);
+      }
+    });
+  });
+
   bindBackgroundPicker(() => {
     void renderRoute();
   });
@@ -1996,7 +2338,7 @@ function renderWorkspaceShell(options) {
 }
 
 function formatClockLabel(date = new Date()) {
-  return date.toLocaleTimeString([], {
+  return date.toLocaleTimeString(getActiveLocale(), {
     hour: '2-digit',
     minute: '2-digit',
   });
@@ -2004,41 +2346,8 @@ function formatClockLabel(date = new Date()) {
 
 function renderPlatformGlyph(platform, extraClass = '') {
   const className = ['platform-glyph', extraClass].filter(Boolean).join(' ');
-
-  switch (platform) {
-    case 'tiktok':
-      return `
-        <span class="${className}" aria-hidden="true">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <rect x="2.5" y="2.5" width="19" height="19" rx="5.5" fill="#0a0a0f" />
-            <path d="M11.8 6.2v7.1a2.3 2.3 0 1 1-2.3-2.2c.2 0 .5 0 .7.1V8.8a4.7 4.7 0 1 0 4.5 4.7V9.2c1 .8 2.2 1.2 3.4 1.2V8.3a4 4 0 0 1-3.6-2.1h-2.7z" fill="#ffffff" />
-            <path d="M14.8 6.1c.4 1 .9 1.7 1.7 2.3v1.4a5.7 5.7 0 0 1-1.7-.8v4.6a3.9 3.9 0 0 1-3.9 4 4 4 0 0 1-2.1-.6 4 4 0 0 0 3.1 1.4 4 4 0 0 0 4-4V9.8c.5.4 1 .7 1.6.9V8.9c-1-.3-1.9-1-2.6-1.9z" fill="#25f4ee" opacity="0.95" />
-            <path d="M13.8 6.1v7.2a2.9 2.9 0 0 1-4.4 2.5 2.3 2.3 0 0 0 3.1-2.1V6.1h1.3z" fill="#fe2c55" opacity="0.92" />
-          </svg>
-        </span>
-      `;
-    case 'instagram':
-      return `
-        <span class="${className}" aria-hidden="true">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <rect x="3" y="3" width="18" height="18" rx="5.4" fill="#d62976" />
-            <path d="M5.7 17.4c2.7 1.5 6.7 1.8 9.5.4 2.4-1.2 3.4-3.3 3.7-5.6" fill="none" stroke="#feda75" stroke-width="2" stroke-linecap="round" opacity="0.9" />
-            <circle cx="12" cy="12" r="4" fill="none" stroke="#ffffff" stroke-width="2" />
-            <circle cx="16.8" cy="7.2" r="1.2" fill="#ffffff" />
-          </svg>
-        </span>
-      `;
-    case 'youtube':
-    default:
-      return `
-        <span class="${className}" aria-hidden="true">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <rect x="2.5" y="4.5" width="19" height="15" rx="5" fill="#ff0033" />
-            <path d="M10 8.6l5.6 3.4-5.6 3.4V8.6z" fill="#ffffff" />
-          </svg>
-        </span>
-      `;
-  }
+  const size = String(extraClass).split(/\s+/).includes('small') ? 22 : 32;
+  return renderPlatformLogo3d(platform, size, className);
 }
 
 function renderGoogleGlyph(extraClass = '') {
@@ -3100,6 +3409,184 @@ function renderWorkspacePlanCard(option, account) {
   `;
 }
 
+async function renderSettingsPage() {
+  await ensureAccountPlan();
+  const account = state.account;
+  const planId = getCurrentAccountPlanId();
+  const planConfig = getPlanVisualConfig(planId);
+  const selectedTheme = getSelectedBackgroundTheme();
+  const selectedFont = FONT_THEME_OPTIONS.find((option) => option.id === state.fontTheme) ?? FONT_THEME_OPTIONS[0];
+  const tokenCount = account?.tokens ?? 0;
+
+  renderWorkspaceShell({
+    title: 'Configurações',
+    subtitle: 'Controle visual, idioma, perfil e preferências da plataforma.',
+    contentHtml: `
+      <section class="settings-hub-hero card">
+        <div class="settings-hub-hero-copy">
+          <span class="settings-hub-kicker">Centro de controle</span>
+          <h2>Preferências da plataforma</h2>
+          <p class="muted">${escapeHtml(planConfig.summary)}</p>
+          <div class="settings-hub-meta-row">
+            <span class="pill ${escapeHtml(planConfig.tone)}">Plano ${escapeHtml(account?.planLabel ?? planConfig.label)}</span>
+            <span class="pill info">${formatNumber(tokenCount)} tokens</span>
+            <span class="pill info">${escapeHtml(state.locale)}</span>
+          </div>
+        </div>
+        <div
+          class="settings-hub-visual"
+          style="--background-preview:${escapeAttribute(selectedTheme.pageBackground)}; --preset-accent:${escapeAttribute(selectedTheme.primary)};"
+        >
+          ${renderNeonMediaIcon('storage', 'hero', { state: 'processing' })}
+          <strong>${escapeHtml(selectedTheme.label)}</strong>
+          <small>${escapeHtml(planConfig.label)} · ${escapeHtml(selectedFont.label)}</small>
+        </div>
+      </section>
+
+      <section class="settings-hub-grid">
+        <a class="settings-hub-card settings-hub-link-card" data-link href="/workspace/perfil">
+          <span class="settings-hub-card-icon">${renderNeonMediaIcon('available', 'stat', { state: 'success' })}</span>
+          <span class="settings-hub-card-copy">
+            <strong>Painel do perfil</strong>
+            <small>Dados da conta, plano ativo, tokens e preferências persistidas.</small>
+          </span>
+        </a>
+
+        <article class="settings-hub-card">
+          <span class="settings-hub-card-icon">${renderNeonMediaIcon('playlist', 'stat', { state: 'info' })}</span>
+          <div class="settings-hub-card-copy">
+            <strong>Idioma da plataforma</strong>
+            <small>Alterna todos os textos visíveis, labels, titles e aria-labels entre pt-BR e en.</small>
+          </div>
+          <div class="font-theme-grid font-theme-grid-compact language-grid language-grid-wide">
+            ${renderLanguageOptionButtons()}
+          </div>
+        </article>
+
+        <article class="settings-hub-card settings-hub-card-wide">
+          <div class="settings-hub-card-head">
+            <span class="settings-hub-card-icon">${renderNeonMediaIcon('thumbnail', 'stat', { state: 'processing' })}</span>
+            <span class="settings-hub-card-copy">
+              <strong>Backgrounds do seu plano</strong>
+              <small>Free começa simples; planos pagos liberam visuais mais ricos e com mais contraste.</small>
+            </span>
+          </div>
+          <div class="background-grid background-grid-plan">
+            ${renderPlanBackgroundCards(planId)}
+          </div>
+        </article>
+
+        <article class="settings-hub-card">
+          <span class="settings-hub-card-icon">${renderNeonMediaIcon('star', 'stat', { state: 'success' })}</span>
+          <div class="settings-hub-card-copy">
+            <strong>Cor do texto</strong>
+            <small>Ajusta o tom principal dos textos de interface sem mudar o layout.</small>
+          </div>
+          <div class="font-theme-grid font-theme-grid-compact">
+            ${renderFontThemeButtons()}
+          </div>
+        </article>
+
+        <article class="settings-hub-card">
+          <span class="settings-hub-card-icon">${renderNeonMediaIcon('folder', 'stat', { state: 'warning' })}</span>
+          <div class="settings-hub-card-copy">
+            <strong>Plano e faturamento</strong>
+            <small>Gerencie upgrade, downgrade e compra de tokens avulsos.</small>
+          </div>
+          <a class="button button-secondary" data-link href="/workspace/planos">Abrir planos</a>
+        </article>
+      </section>
+    `,
+  });
+}
+
+async function renderProfilePage() {
+  await ensureAccountPlan();
+  const account = state.account;
+  const selectedTheme = getSelectedBackgroundTheme();
+  const selectedFont = FONT_THEME_OPTIONS.find((option) => option.id === state.fontTheme) ?? FONT_THEME_OPTIONS[0];
+  const planConfig = getPlanVisualConfig();
+  const displayName = state.me?.fullName || state.me?.name || 'Operador';
+  const email = state.me?.email || '-';
+
+  renderWorkspaceShell({
+    title: 'Perfil',
+    subtitle: 'Conta, plano, tokens e preferências da plataforma.',
+    actionsHtml: '<a class="button button-secondary" data-link href="/workspace/configuracoes">Configurações</a>',
+    contentHtml: `
+      <section class="settings-profile-layout">
+        <article class="card settings-profile-card">
+          <div class="settings-profile-avatar" aria-hidden="true">
+            ${renderNeonMediaIcon('available', 'hero', { state: 'success' })}
+          </div>
+          <div class="settings-profile-copy">
+            <span class="settings-hub-kicker">Perfil</span>
+            <h2>${escapeHtml(displayName)}</h2>
+            <p class="muted">${escapeHtml(email)}</p>
+          </div>
+          <div class="settings-profile-stats">
+            <div>
+              <span>Plano</span>
+              <strong>${escapeHtml(account?.planLabel ?? planConfig.label)}</strong>
+            </div>
+            <div>
+              <span>Tokens</span>
+              <strong>${formatNumber(account?.tokens ?? 0)}</strong>
+            </div>
+            <div>
+              <span>Idioma</span>
+              <strong>${escapeHtml(state.locale)}</strong>
+            </div>
+          </div>
+        </article>
+
+        <article class="card settings-profile-panel">
+          <div class="settings-hub-card-head">
+            <span class="settings-hub-card-icon">${renderNeonMediaIcon('playlist', 'stat', { state: 'info' })}</span>
+            <span class="settings-hub-card-copy">
+              <strong>Idioma</strong>
+              <small>Escolha o idioma da interface da plataforma.</small>
+            </span>
+          </div>
+          <div class="font-theme-grid font-theme-grid-compact language-grid language-grid-wide">
+            ${renderLanguageOptionButtons()}
+          </div>
+        </article>
+
+        <article class="card settings-profile-panel">
+          <div class="settings-hub-card-head">
+            <span class="settings-hub-card-icon">${renderNeonMediaIcon('thumbnail', 'stat', { state: 'processing' })}</span>
+            <span class="settings-hub-card-copy">
+              <strong>Aparência atual</strong>
+              <small>${escapeHtml(selectedTheme.label)} · ${escapeHtml(selectedFont.label)}</small>
+            </span>
+          </div>
+          <div class="settings-current-visual" style="--background-preview:${escapeAttribute(selectedTheme.pageBackground)}; --preset-accent:${escapeAttribute(selectedTheme.primary)};">
+            <span></span>
+            <strong>${escapeHtml(selectedTheme.label)}</strong>
+          </div>
+          <a class="button button-secondary" data-link href="/workspace/configuracoes">Editar aparência</a>
+        </article>
+
+        <article class="card settings-profile-panel">
+          <div class="settings-hub-card-head">
+            <span class="settings-hub-card-icon">${renderNeonMediaIcon('storage', 'stat', { state: 'success' })}</span>
+            <span class="settings-hub-card-copy">
+              <strong>Preferências da plataforma</strong>
+              <small>Configurações visuais salvas neste navegador.</small>
+            </span>
+          </div>
+          <ul class="settings-profile-list">
+            <li><span>Background</span><strong>${escapeHtml(selectedTheme.label)}</strong></li>
+            <li><span>Cor do texto</span><strong>${escapeHtml(selectedFont.label)}</strong></li>
+            <li><span>Plano visual</span><strong>${escapeHtml(planConfig.label)}</strong></li>
+          </ul>
+        </article>
+      </section>
+    `,
+  });
+}
+
 async function renderPlanosPage(options = {}) {
   renderWorkspaceShell({
     title: 'Planos',
@@ -3210,6 +3697,7 @@ async function renderPlanosPage(options = {}) {
 
         state.account = selectResult.body?.account ?? state.account;
         await ensureAccountPlan(true);
+        applyRecommendedBackgroundForPlan(planId);
         await renderPlanosPage({ success: `Plano ${planId} ativado com sucesso!` });
         return;
       }
@@ -3247,6 +3735,7 @@ async function renderPlanosPage(options = {}) {
       }
 
       await ensureAccountPlan(true);
+      applyRecommendedBackgroundForPlan(planId);
       await renderPlanosPage({ success: `Plano ${planId} ativado com sucesso!` });
     });
   });
@@ -3355,6 +3844,7 @@ async function renderPlanSelectionPage(options = {}) {
 
       state.me = selectResult.body?.user ?? { ...state.me, needsPlanSelection: false };
       state.account = selectResult.body?.account ?? state.account;
+      applyRecommendedBackgroundForPlan(planId);
       setUiNotice('success', 'Plan selected', `The ${planId} plan is now active for your account.`);
       navigate('/workspace/dashboard', true);
     });
@@ -3397,7 +3887,10 @@ async function ensureAuthenticated() {
 }
 
 async function ensureAccountPlan(forceRefresh = false) {
-  if (!forceRefresh && state.account) return state.account;
+  if (!forceRefresh && state.account) {
+    ensurePlanCompatibleBackground();
+    return state.account;
+  }
   const result = await api.accountPlanSummary();
   if (result.ok) {
     state.account = result.body?.account ?? null;
@@ -3406,6 +3899,9 @@ async function ensureAccountPlan(forceRefresh = false) {
       if (monthlyResult.ok && monthlyResult.body?.claimed) {
         state.account = monthlyResult.body?.account ?? state.account;
       }
+    }
+    if (state.account) {
+      ensurePlanCompatibleBackground();
     }
   }
   return state.account;
@@ -3523,17 +4019,17 @@ function renderPublicLandingPage() {
               </div>
               <div class="public-preview-panels">
                 <article data-landing-panel="youtube">
-                  <span class="platform-dot youtube"></span>
+                  ${renderPlatformLogo3d('youtube', 34, 'platform-dot-logo')}
                   <h2>YouTube</h2>
                   <p>Videos, Shorts, thumbnails, playlists e destinos do canal no mesmo fluxo de campanha.</p>
                 </article>
                 <article data-landing-panel="tiktok" hidden>
-                  <span class="platform-dot tiktok"></span>
+                  ${renderPlatformLogo3d('tiktok', 34, 'platform-dot-logo')}
                   <h2>TikTok</h2>
                   <p>Publicacoes curtas, privacidade, fila de envio e reautenticacao acompanhadas pelo dashboard.</p>
                 </article>
                 <article data-landing-panel="instagram" hidden>
-                  <span class="platform-dot instagram"></span>
+                  ${renderPlatformLogo3d('instagram', 34, 'platform-dot-logo')}
                   <h2>Instagram</h2>
                   <p>Reels com legenda, conta conectada e status de publicacao vistos junto das outras redes.</p>
                 </article>
@@ -3555,17 +4051,17 @@ function renderPublicLandingPage() {
           </div>
           <div class="public-feature-grid">
             <article>
-              <span class="platform-dot youtube"></span>
+              ${renderPlatformLogo3d('youtube', 38, 'platform-dot-logo')}
               <h3>YouTube</h3>
               <p>Controle canais, playlists, thumbnails e publicacoes com historico de jobs.</p>
             </article>
             <article>
-              <span class="platform-dot tiktok"></span>
+              ${renderPlatformLogo3d('tiktok', 38, 'platform-dot-logo')}
               <h3>TikTok</h3>
               <p>Centralize conta, privacidade, tentativas de envio e bloqueios de autenticacao.</p>
             </article>
             <article>
-              <span class="platform-dot instagram"></span>
+              ${renderPlatformLogo3d('instagram', 38, 'platform-dot-logo')}
               <h3>Instagram</h3>
               <p>Leve Reels para dentro do mesmo planejamento usado pelas outras plataformas.</p>
             </article>
@@ -4351,9 +4847,9 @@ function renderRankBadge(index) {
 }
 
 const CHANNEL_KPI_ICONS = {
-  youtube: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2C0 8.1 0 12 0 12s0 3.9.5 5.8a3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1c.5-1.9.5-5.8.5-5.8s0-3.9-.5-5.8ZM9.6 15.6V8.4l6.2 3.6-6.2 3.6Z"/></svg>',
-  tiktok: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M19.6 6.7a5.4 5.4 0 0 1-3.2-1.6 5.3 5.3 0 0 1-1.4-3.7h-3.5v13.4a2.9 2.9 0 1 1-2.1-2.8V8.4a6.4 6.4 0 1 0 5.7 6.4V8.6a8.6 8.6 0 0 0 4.5 1.5V6.7Z"/></svg>',
-  instagram: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="0.9" fill="currentColor" stroke="none"/></svg>',
+  youtube: renderPlatformLogo3d('youtube', 42, 'od-channel-platform-logo'),
+  tiktok: renderPlatformLogo3d('tiktok', 42, 'od-channel-platform-logo'),
+  instagram: renderPlatformLogo3d('instagram', 42, 'od-channel-platform-logo'),
 };
 
 function renderDeltaArrow(direction) {
@@ -5327,6 +5823,7 @@ async function renderAccountsPage() {
   const syncChannelsCount = query.get('syncChannels');
   const syncMessage = (query.get('syncMessage') ?? '').trim();
   const oauthProviderLabel = getProviderLabel(oauthProvider);
+  const reauthReturnProvider = readCampaignReauthReturnProvider();
 
   const channelResponses = await Promise.all(accounts.map((account) => api.accountChannels(account.id)));
   const channelsByAccountId = new Map();
@@ -5551,6 +6048,17 @@ async function renderAccountsPage() {
         <p>${escapeHtml(syncMessage || 'The OAuth callback completed successfully.')}</p>
       </div>
     `);
+    if (reauthReturnProvider) {
+      notices.push(`
+        <div class="notice success">
+          <h4>Conta pronta para recuperar campanhas</h4>
+          <p>Volte para Campanhas e execute o retry em lote dos destinos que estavam em REAUTH_REQUIRED.</p>
+          <div class="inline-actions">
+            <a class="button button-primary" data-link href="/workspace/campanhas?reauth=resume">Reprocessar campanhas</a>
+          </div>
+        </div>
+      `);
+    }
   }
   if (oauth === 'error') {
     notices.push(`
@@ -6205,37 +6713,100 @@ function attachVideoPreviewListeners(assetMap) {
   });
 }
 
+const NEON_MEDIA_ICON_KINDS = new Set([
+  'library',
+  'playlist',
+  'video',
+  'thumbnail',
+  'storage',
+  'clock',
+  'folder',
+  'available',
+  'published',
+  'star',
+  'add',
+  'error',
+  'warning',
+  'processing',
+  'disabled',
+]);
+
+const NEON_MEDIA_ICON_STATE_BY_KIND = {
+  available: 'success',
+  published: 'success',
+  star: 'success',
+  add: 'warning',
+  error: 'error',
+  warning: 'warning',
+  clock: 'processing',
+  processing: 'processing',
+  disabled: 'disabled',
+};
+
+function normalizeNeonIconState(kind, tone) {
+  const normalizedTone = String(tone ?? '').toLowerCase().trim();
+  if (['success', 'ready', 'completed', 'available', 'published', 'active', 'connected', 'ok'].includes(normalizedTone)) return 'success';
+  if (['danger', 'error', 'failed', 'failure', 'erro', 'falhou'].includes(normalizedTone)) return 'error';
+  if (['warning', 'warn', 'attention', 'pending', 'queued', 'draft', 'aguardando'].includes(normalizedTone)) return 'warning';
+  if (['processing', 'loading', 'launching', 'syncing', 'enviando', 'running'].includes(normalizedTone)) return 'processing';
+  if (['disabled', 'inactive', 'locked', 'blocked', 'unavailable', 'indisponivel'].includes(normalizedTone)) return 'disabled';
+  if (['info', 'default', 'neutral'].includes(normalizedTone)) return 'info';
+  return NEON_MEDIA_ICON_STATE_BY_KIND[kind] ?? 'info';
+}
+
+function renderNeonMediaIcon(kind = 'library', size = 'md', options = {}) {
+  const requestedKind = String(kind ?? '').toLowerCase().trim();
+  const safeKind = NEON_MEDIA_ICON_KINDS.has(requestedKind) ? requestedKind : 'library';
+  const requestedState = typeof options === 'string' ? options : options?.state ?? options?.tone;
+  const iconState = normalizeNeonIconState(safeKind, requestedState);
+  return `
+    <span class="neon-media-icon neon-media-icon-${safeKind} neon-media-icon-${escapeHtml(size)}" data-icon-kind="${escapeAttribute(safeKind)}" data-icon-state="${escapeAttribute(iconState)}" aria-hidden="true">
+      <span class="neon-media-icon-glow"></span>
+      <span class="neon-media-icon-canvas">
+        <span class="neon-media-shape neon-media-frame"></span>
+        <span class="neon-media-shape neon-media-folder-tab"></span>
+        <span class="neon-media-shape neon-media-tile tile-a"></span>
+        <span class="neon-media-shape neon-media-tile tile-b"></span>
+        <span class="neon-media-shape neon-media-tile tile-c"></span>
+        <span class="neon-media-shape neon-media-tile tile-d"></span>
+        <span class="neon-media-shape neon-media-bullet bullet-a"></span>
+        <span class="neon-media-shape neon-media-bullet bullet-b"></span>
+        <span class="neon-media-shape neon-media-bullet bullet-c"></span>
+        <span class="neon-media-shape neon-media-line line-a"></span>
+        <span class="neon-media-shape neon-media-line line-b"></span>
+        <span class="neon-media-shape neon-media-line line-c"></span>
+        <span class="neon-media-shape neon-media-play"></span>
+        <span class="neon-media-shape neon-media-plus-x"></span>
+        <span class="neon-media-shape neon-media-plus-y"></span>
+        <span class="neon-media-shape neon-media-check-a"></span>
+        <span class="neon-media-shape neon-media-check-b"></span>
+        <span class="neon-media-shape neon-media-star"></span>
+        <span class="neon-media-shape neon-media-clock-hand"></span>
+        <span class="neon-media-shape neon-media-spinner"></span>
+        <span class="neon-media-shape neon-media-warning-mark"></span>
+        <span class="neon-media-shape neon-media-warning-dot"></span>
+        <span class="neon-media-shape neon-media-lock-shackle"></span>
+        <span class="neon-media-shape neon-media-lock-body"></span>
+      </span>
+    </span>
+  `;
+}
+
 function renderVideosViewSwitcher({ activeView, libraryHref, playlistsHref, libraryCount, playlistsCount }) {
   const libraryActive = activeView === 'library';
   const playlistsActive = activeView === 'playlists';
   const libCountHtml = Number.isFinite(libraryCount) ? `<span class="videos-view-tab-count">${formatNumber(libraryCount)}</span>` : '';
   const plCountHtml = Number.isFinite(playlistsCount) ? `<span class="videos-view-tab-count">${formatNumber(playlistsCount)}</span>` : '';
 
-  const assetLibrarySvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-    <rect x="3" y="3" width="7" height="7" rx="1"/>
-    <rect x="14" y="3" width="7" height="7" rx="1"/>
-    <rect x="3" y="14" width="7" height="7" rx="1"/>
-    <rect x="14" y="14" width="7" height="7" rx="1"/>
-  </svg>`;
-
-  const playlistSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-    <line x1="8" y1="6" x2="21" y2="6"/>
-    <line x1="8" y1="12" x2="21" y2="12"/>
-    <line x1="8" y1="18" x2="21" y2="18"/>
-    <rect x="3" y="5" width="2" height="2" rx="0.5" fill="currentColor"/>
-    <rect x="3" y="11" width="2" height="2" rx="0.5" fill="currentColor"/>
-    <rect x="3" y="17" width="2" height="2" rx="0.5" fill="currentColor"/>
-  </svg>`;
-
   return `
     <nav class="videos-view-switcher" role="tablist" aria-label="Visualização de vídeos">
       <a class="videos-view-tab ${libraryActive ? 'is-active' : ''}" role="tab" aria-selected="${libraryActive ? 'true' : 'false'}" data-link href="${escapeHtml(libraryHref)}">
-        <span class="videos-view-tab-icon" aria-hidden="true">${assetLibrarySvg}</span>
+        <span class="videos-view-tab-icon" aria-hidden="true">${renderNeonMediaIcon('library', 'tab')}</span>
         <span class="videos-view-tab-label">Asset library</span>
         ${libCountHtml}
       </a>
       <a class="videos-view-tab ${playlistsActive ? 'is-active' : ''}" role="tab" aria-selected="${playlistsActive ? 'true' : 'false'}" data-link href="${escapeHtml(playlistsHref)}">
-        <span class="videos-view-tab-icon" aria-hidden="true">${playlistSvg}</span>
+        <span class="videos-view-tab-icon" aria-hidden="true">${renderNeonMediaIcon('playlist', 'tab')}</span>
         <span class="videos-view-tab-label">Playlists</span>
         ${plCountHtml}
       </a>
@@ -6313,12 +6884,13 @@ async function renderMediaPage(options = {}) {
   const liveClock = formatClockLabel();
 
   const metricsHtml = [
-    { label: 'Assets', value: formatNumber(filteredAssets.length), hint: `of ${formatNumber(assets.length)} total`, tone: 'info' },
-    { label: 'Storage', value: formatBytes(totalSize), hint: `${formatNumber(totalSize)} bytes`, tone: 'info' },
-    { label: 'Duration', value: formatDurationSeconds(totalDurationSeconds), hint: 'Combined media duration', tone: 'info' },
-    { label: 'Linked Thumbnails', value: formatNumber(linkedThumbnailAssets), hint: 'Video with thumbnail or thumbnail linked to video', tone: 'success' },
+    { icon: 'library', label: 'Assets', value: formatNumber(filteredAssets.length), hint: `of ${formatNumber(assets.length)} total`, tone: 'info' },
+    { icon: 'storage', label: 'Storage', value: formatBytes(totalSize), hint: `${formatNumber(totalSize)} bytes`, tone: 'info' },
+    { icon: 'clock', label: 'Duration', value: formatDurationSeconds(totalDurationSeconds), hint: 'Combined media duration', tone: 'info' },
+    { icon: 'thumbnail', label: 'Linked Thumbnails', value: formatNumber(linkedThumbnailAssets), hint: 'Video with thumbnail or thumbnail linked to video', tone: 'success' },
   ].map((card) => `
     <article class="platform-dashboard-stat" data-tone="${escapeHtml(card.tone)}">
+      <span class="platform-dashboard-stat-icon">${renderNeonMediaIcon(card.icon, 'chip', card.tone)}</span>
       <span class="platform-dashboard-stat-label">${escapeHtml(card.label)}</span>
       <strong>${escapeHtml(card.value)}</strong>
       <span class="platform-dashboard-stat-detail">${escapeHtml(card.hint)}</span>
@@ -6375,6 +6947,7 @@ async function renderMediaPage(options = {}) {
         })
       : '';
   const mediaCardsHtml = filteredAssets.map((asset) => {
+    const assetIconKind = asset.asset_type === 'thumbnail' ? 'thumbnail' : asset.asset_type === 'video' ? 'video' : 'storage';
     const formatPill = asset.asset_type === 'video'
       ? statusPill(getVideoPublishFormatLabel(getVideoPublishFormat(asset)))
       : '';
@@ -6387,10 +6960,13 @@ async function renderMediaPage(options = {}) {
     return `
       <article class="platform-media-card">
         <div class="platform-media-card-head">
-          <div>
-            <span class="platform-dashboard-kicker">${escapeHtml(asset.asset_type ?? 'asset')}</span>
-            <h3>${escapeHtml(asset.original_name)}</h3>
-            <p>${escapeHtml(asset.mime_type ?? 'Unknown format')} · ${escapeHtml(formatDate(asset.created_at))}</p>
+          <div class="platform-media-card-titleline">
+            <span class="platform-media-card-kind-icon">${renderNeonMediaIcon(assetIconKind, 'chip')}</span>
+            <div>
+              <span class="platform-dashboard-kicker">${escapeHtml(asset.asset_type ?? 'asset')}</span>
+              <h3>${escapeHtml(asset.original_name)}</h3>
+              <p>${escapeHtml(asset.mime_type ?? 'Unknown format')} · ${escapeHtml(formatDate(asset.created_at))}</p>
+            </div>
           </div>
           <div class="inline-actions">
             ${statusPill(asset.asset_type ?? 'video')}
@@ -6463,37 +7039,53 @@ async function renderMediaPage(options = {}) {
             <h2 class="media-hero-title">Keep every video and thumbnail launch-ready.</h2>
             <p class="media-hero-subtitle">Upload assets once, reuse them across YouTube and TikTok campaigns.</p>
           </div>
+          <div class="media-hero-neon-stage" aria-hidden="true">
+            <div class="media-hero-neon-main">
+              ${renderNeonMediaIcon('library', 'hero')}
+              <div class="media-hero-neon-copy">
+                <span>VAULT STATUS</span>
+                <strong>${formatNumber(filteredAssets.length)} assets prontos</strong>
+              </div>
+            </div>
+            <div class="media-hero-pipeline">
+              <span>Upload</span>
+              <i></i>
+              <span>Preview</span>
+              <i></i>
+              <span>Campaign</span>
+            </div>
+          </div>
           <div class="media-hero-tiles">
             <button type="button" class="media-hero-tile" data-media-filter="all" data-active="${typeFilter === 'all' ? 'true' : 'false'}">
-              <div class="media-hero-tile-icon">📦</div>
+              <div class="media-hero-tile-icon">${renderNeonMediaIcon('library', 'tile')}</div>
               <div class="media-hero-tile-info">
                 <span class="media-hero-tile-label">All assets</span>
                 <strong class="media-hero-tile-value" data-counter="${filteredAssets.length}">0</strong>
               </div>
             </button>
             <button type="button" class="media-hero-tile" data-media-filter="video" data-active="${typeFilter === 'video' ? 'true' : 'false'}">
-              <div class="media-hero-tile-icon">🎬</div>
+              <div class="media-hero-tile-icon">${renderNeonMediaIcon('video', 'tile')}</div>
               <div class="media-hero-tile-info">
                 <span class="media-hero-tile-label">Videos</span>
                 <strong class="media-hero-tile-value" data-counter="${videoAssetsCount}">0</strong>
               </div>
             </button>
             <button type="button" class="media-hero-tile" data-media-filter="thumbnail" data-active="${typeFilter === 'thumbnail' ? 'true' : 'false'}">
-              <div class="media-hero-tile-icon">🖼️</div>
+              <div class="media-hero-tile-icon">${renderNeonMediaIcon('thumbnail', 'tile')}</div>
               <div class="media-hero-tile-info">
                 <span class="media-hero-tile-label">Thumbnails</span>
                 <strong class="media-hero-tile-value" data-counter="${thumbnailAssetsCount}">0</strong>
               </div>
             </button>
             <div class="media-hero-tile media-hero-tile-static">
-              <div class="media-hero-tile-icon">💾</div>
+              <div class="media-hero-tile-icon">${renderNeonMediaIcon('storage', 'tile')}</div>
               <div class="media-hero-tile-info">
                 <span class="media-hero-tile-label">Stored</span>
                 <strong class="media-hero-tile-value-static">${formatBytes(totalSize)}</strong>
               </div>
             </div>
             <div class="media-hero-tile media-hero-tile-static">
-              <div class="media-hero-tile-icon">⏱️</div>
+              <div class="media-hero-tile-icon">${renderNeonMediaIcon('clock', 'tile')}</div>
               <div class="media-hero-tile-info">
                 <span class="media-hero-tile-label">Playback</span>
                 <strong class="media-hero-tile-value-static">${escapeHtml(formatDurationSeconds(totalDurationSeconds))}</strong>
@@ -6519,11 +7111,17 @@ async function renderMediaPage(options = {}) {
           <form id="media-upload-form">
             <div class="media-upload-zone">
               <div class="media-upload-zone-header">
-                <span class="media-upload-zone-icon">📁</span>
+                <span class="media-upload-zone-icon">${renderNeonMediaIcon('folder', 'upload')}</span>
                 <div>
                   <p class="media-upload-zone-title">Add video to library</p>
                   <p class="media-upload-zone-sub">MP4 or MOV · Thumbnail is optional</p>
                 </div>
+              </div>
+              <div class="media-upload-pipeline" aria-hidden="true">
+                <span>${renderNeonMediaIcon('folder', 'chip')} Upload</span>
+                <span>${renderNeonMediaIcon('video', 'chip')} Video</span>
+                <span>${renderNeonMediaIcon('thumbnail', 'chip')} Capa</span>
+                <span>${renderNeonMediaIcon('clock', 'chip')} Campanha</span>
               </div>
               <div class="form-grid">
                 <label>
@@ -6567,6 +7165,11 @@ async function renderMediaPage(options = {}) {
               <a class="button button-secondary" data-link href="${escapeHtml(libraryHref)}">Clear</a>
             </div>
           </form>
+          <div class="media-filter-signal-row">
+            <span>${renderNeonMediaIcon('library', 'chip')} Biblioteca indexada</span>
+            <span>${renderNeonMediaIcon('storage', 'chip')} Arquivos organizados</span>
+            <span>${renderNeonMediaIcon('thumbnail', 'chip')} Capas vinculadas</span>
+          </div>
           <div class="platform-page-summary-grid">
             <article class="platform-page-summary-card">
               <span>Videos</span>
@@ -6598,10 +7201,6 @@ async function renderMediaPage(options = {}) {
 
   void backfillMissingMediaDurations(assets);
 
-  const mediaUploadZoneIcon = document.querySelector('.media-upload-zone-icon');
-  if (mediaUploadZoneIcon) {
-    mediaUploadZoneIcon.textContent = 'LIB';
-  }
   const mediaUploadZoneSub = document.querySelector('.media-upload-zone-sub');
   if (mediaUploadZoneSub) {
     mediaUploadZoneSub.textContent = 'MP4 or MOV - Thumbnail is optional';
@@ -6767,19 +7366,189 @@ async function renderMediaPage(options = {}) {
 function campaignActionButtons(campaign) {
   const targetCount = Number(campaign.targetCount ?? campaign.targets?.length ?? 0);
   const buttons = [
-    `<a class="button button-secondary" data-link href="/workspace/campanhas/${encodeURIComponent(campaign.id)}">View</a>`,
-    `<button class="button button-secondary" type="button" data-action="clone-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Clone</button>`,
+    `<a class="button button-secondary" data-link href="/workspace/campanhas/${encodeURIComponent(campaign.id)}">Abrir</a>`,
+    `<button class="button button-secondary" type="button" data-action="clone-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Duplicar</button>`,
   ];
   if (campaign.status === 'draft' && targetCount > 0) {
-    buttons.push(`<button class="button button-secondary" type="button" data-action="mark-ready" data-campaign-id="${escapeHtml(campaign.id)}">Mark ready</button>`);
+    buttons.push(`<button class="button button-secondary" type="button" data-action="mark-ready" data-campaign-id="${escapeHtml(campaign.id)}">Marcar pronta</button>`);
   }
   if (campaign.status === 'ready' && targetCount > 0) {
-    buttons.push(`<button class="button button-primary" type="button" data-action="launch-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Launch</button>`);
+    buttons.push(`<button class="button button-primary" type="button" data-action="launch-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Lancar</button>`);
   }
   if (campaign.status === 'draft' || campaign.status === 'ready') {
-    buttons.push(`<button class="button button-danger" type="button" data-action="delete-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Delete</button>`);
+    buttons.push(`<button class="button button-danger" type="button" data-action="delete-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Excluir</button>`);
   }
-  return `<div class="inline-actions">${buttons.join('')}</div>`;
+  return `<div class="inline-actions campaign-action-group">${buttons.join('')}</div>`;
+}
+
+function getCampaignStatusMeta(status) {
+  const normalized = String(status ?? 'draft').toLowerCase();
+  const map = {
+    draft: { label: 'Rascunho', detail: 'Ainda editavel', tone: 'draft', icon: 'folder' },
+    ready: { label: 'Pronta', detail: 'Pode lancar', tone: 'ready', icon: 'available' },
+    launching: { label: 'Enviando', detail: 'Na fila agora', tone: 'launching', icon: 'published' },
+    completed: { label: 'Concluida', detail: 'Publicada', tone: 'completed', icon: 'star' },
+    failed: { label: 'Falhou', detail: 'Precisa revisar', tone: 'failed', icon: 'error' },
+  };
+  return map[normalized] ?? { label: normalizeLabel(normalized), detail: 'Status da campanha', tone: 'draft', icon: 'storage' };
+}
+
+function getCampaignPlatformList(campaign) {
+  const platforms = new Set();
+  (Array.isArray(campaign?.targets) ? campaign.targets : []).forEach((target) => {
+    const platform = String(target?.platform ?? '').toLowerCase();
+    if (CAMPAIGN_FLOW_PLATFORMS.includes(platform)) platforms.add(platform);
+  });
+  return Array.from(platforms);
+}
+
+function renderCampaignPlatformStack(campaign) {
+  const platforms = getCampaignPlatformList(campaign);
+  if (platforms.length === 0) {
+    return `<span class="campaign-platform-stack is-empty">${renderNeonMediaIcon('storage', 'mini')}<span class="campaign-platform-stack-label">Sem plataforma</span></span>`;
+  }
+  return `
+    <span class="campaign-platform-stack" aria-label="Plataformas da campanha">
+      ${platforms.map((platform) => renderPlatformLogo3d(platform, 30, 'campaign-platform-logo')).join('')}
+      <span class="campaign-platform-stack-label">${platforms.map(getCampaignFlowPlatformLabel).join(', ')}</span>
+    </span>
+  `;
+}
+
+function renderCampaignOutcomeChips(summary) {
+  return `
+    <div class="campaign-outcome-chips">
+      <span data-state="published"><strong>${formatNumber(summary.published)}</strong> publicados</span>
+      <span data-state="failed"><strong>${formatNumber(summary.failed)}</strong> erros</span>
+      <span data-state="pending"><strong>${formatNumber(summary.pending)}</strong> pendentes</span>
+      ${summary.reauthRequired > 0 ? `<span data-state="reauth"><strong>${formatNumber(summary.reauthRequired)}</strong> reconectar</span>` : ''}
+    </div>
+  `;
+}
+
+function renderCampaignProgress(summary) {
+  const total = Math.max(1, Number(summary.total ?? 0));
+  const publishedPct = Math.min(100, (Number(summary.published ?? 0) / total) * 100);
+  const failedPct = Math.min(100, (Number(summary.failed ?? 0) / total) * 100);
+  return `
+    <div class="campaign-progress">
+      <div class="campaign-progress-label">
+        <span>Progresso de destinos</span>
+        <strong>${formatNumber(summary.published)} / ${formatNumber(summary.total)}</strong>
+      </div>
+      <div class="campaign-progress-track" aria-hidden="true">
+        <span class="campaign-progress-fill published" style="--w:${publishedPct}%"></span>
+        <span class="campaign-progress-fill failed" style="--w:${failedPct}%"></span>
+      </div>
+    </div>
+  `;
+}
+
+function normalizeCampaignReauthOverview(rawOverview, fallbackTotal = 0) {
+  const overview = rawOverview && typeof rawOverview === 'object' ? rawOverview : {};
+  const platforms = Array.isArray(overview.platforms)
+    ? overview.platforms
+        .map((item) => ({
+          platform: String(item.platform ?? '').toLowerCase(),
+          targets: Number(item.targets ?? 0),
+          campaigns: Number(item.campaigns ?? 0),
+          accounts: Number(item.accounts ?? 0),
+        }))
+        .filter((item) => CAMPAIGN_FLOW_PLATFORMS.includes(item.platform) && item.targets > 0)
+    : [];
+  const targets = Array.isArray(overview.targets) ? overview.targets : [];
+  return {
+    totalTargets: Number(overview.totalTargets ?? fallbackTotal ?? 0),
+    totalCampaigns: Number(overview.totalCampaigns ?? 0),
+    platforms,
+    targets,
+  };
+}
+
+function renderCampaignReauthPanel(overview, options = {}) {
+  if (!overview || Number(overview.totalTargets ?? 0) <= 0) {
+    return '';
+  }
+
+  const resumeProvider = options.resumeProvider ?? null;
+  const platformRows = overview.platforms.length > 0
+    ? overview.platforms.map((item) => {
+        const label = getCampaignFlowPlatformLabel(item.platform);
+        return `
+          <article class="campaign-reauth-platform-card" data-platform="${escapeHtml(item.platform)}">
+            <div class="campaign-reauth-platform-main">
+              ${renderPlatformLogo3d(item.platform, 38, 'campaign-reauth-platform-logo')}
+              <div>
+                <strong>${escapeHtml(label)}</strong>
+                <span>${formatNumber(item.targets)} destinos em ${formatNumber(item.campaigns)} campanhas</span>
+              </div>
+            </div>
+            <button class="button button-secondary button-sm" type="button" data-action="campaign-reauth-oauth" data-platform="${escapeHtml(item.platform)}">
+              Reconectar ${escapeHtml(label)}
+            </button>
+          </article>
+        `;
+      }).join('')
+    : `
+      <article class="campaign-reauth-platform-card">
+        <div class="campaign-reauth-platform-main">
+          ${renderNeonMediaIcon('error', 'mini')}
+          <div>
+            <strong>Destinos bloqueados</strong>
+            <span>${formatNumber(overview.totalTargets)} precisam de reconexao</span>
+          </div>
+        </div>
+      </article>
+    `;
+
+  const firstTargets = overview.targets.slice(0, 3);
+  const targetsPreview = firstTargets.length > 0
+    ? `
+      <div class="campaign-reauth-target-preview">
+        ${firstTargets.map((target) => `
+          <span>
+            ${renderPlatformLogo3d(target.platform, 22, 'campaign-reauth-mini-logo')}
+            ${escapeHtml(target.destinationLabel ?? target.destinationId ?? target.targetId)}
+          </span>
+        `).join('')}
+        ${overview.targets.length > firstTargets.length ? `<span>+${formatNumber(overview.targets.length - firstTargets.length)} outros</span>` : ''}
+      </div>
+    `
+    : '';
+
+  return `
+    <section class="campaign-reauth-panel" data-state="${resumeProvider ? 'resume' : 'pending'}">
+      <div class="campaign-reauth-head">
+        <div class="campaign-reauth-icon" aria-hidden="true">${renderNeonMediaIcon('error', 'stat')}</div>
+        <div>
+          <span class="campaign-reauth-kicker">${resumeProvider ? 'CONTA RECONECTADA' : 'RECUPERACAO DE CONTAS'}</span>
+          <h3>${formatNumber(overview.totalTargets)} destinos pedem reauth</h3>
+          <p>${resumeProvider
+            ? `A reconexao de ${getCampaignFlowPlatformLabel(resumeProvider)} foi iniciada. Use o retry em lote para voltar esses destinos para a fila.`
+            : 'Reconecte a plataforma afetada e depois reenvie todos os destinos que estavam bloqueados por REAUTH_REQUIRED.'}</p>
+        </div>
+      </div>
+      <div class="campaign-reauth-body">
+        <div class="campaign-reauth-platform-grid">
+          ${platformRows}
+        </div>
+        <div class="campaign-reauth-summary">
+          <div class="campaign-reauth-summary-row">
+            <span>Campanhas afetadas</span>
+            <strong>${formatNumber(overview.totalCampaigns)}</strong>
+          </div>
+          <div class="campaign-reauth-summary-row">
+            <span>Destinos bloqueados</span>
+            <strong>${formatNumber(overview.totalTargets)}</strong>
+          </div>
+          ${targetsPreview}
+          <button class="button button-primary" type="button" data-action="retry-reauth-required">
+            Tentar novamente todos reconectados
+          </button>
+        </div>
+      </div>
+    </section>
+  `;
 }
 
 function buildRadarPoints(statusTotals) {
@@ -6866,9 +7635,13 @@ function animateCampaignControl() {
       panel.querySelectorAll('.radar-dot').forEach((d) => {
         d.classList.toggle('radar-dot-active', d.getAttribute('data-status') === status);
       });
+      panel.querySelectorAll('.campaign-control-status-card').forEach((card) => {
+        card.classList.toggle('is-highlighted', card.getAttribute('data-status') === status);
+      });
     });
     el.addEventListener('mouseleave', () => {
       panel.querySelectorAll('.radar-dot').forEach((d) => d.classList.remove('radar-dot-active'));
+      panel.querySelectorAll('.campaign-control-status-card').forEach((card) => card.classList.remove('is-highlighted'));
     });
   });
 
@@ -6988,12 +7761,13 @@ async function renderPlaylistsPage(options = {}) {
   const ringOffset = ringCircumference * (1 - usagePct / 100);
 
   const metricsHtml = [
-    { label: 'Playlists', value: formatNumber(playlists.length), hint: 'Total de playlists criadas', tone: 'info' },
-    { label: 'Videos', value: formatNumber(totalVideos), hint: 'Videos distribuidos em playlists', tone: 'info' },
-    { label: 'Ja usados', value: formatNumber(totalUsed), hint: 'Videos que ja foram postados via Auto', tone: 'success' },
-    { label: 'Disponiveis', value: formatNumber(totalVideos - totalUsed), hint: 'Ainda nao postados', tone: totalVideos - totalUsed > 0 ? 'info' : 'warning' },
+    { icon: 'playlist', label: 'Playlists', value: formatNumber(playlists.length), hint: 'Total de playlists criadas', tone: 'info' },
+    { icon: 'video', label: 'Videos', value: formatNumber(totalVideos), hint: 'Videos distribuidos em playlists', tone: 'info' },
+    { icon: 'clock', label: 'Ja usados', value: formatNumber(totalUsed), hint: 'Videos que ja foram postados via Auto', tone: 'success' },
+    { icon: 'folder', label: 'Disponiveis', value: formatNumber(totalVideos - totalUsed), hint: 'Ainda nao postados', tone: totalVideos - totalUsed > 0 ? 'info' : 'warning' },
   ].map((card) => `
     <article class="platform-dashboard-stat" data-tone="${escapeHtml(card.tone)}">
+      <span class="platform-dashboard-stat-icon">${renderNeonMediaIcon(card.icon, 'chip', card.tone)}</span>
       <span class="platform-dashboard-stat-label">${escapeHtml(card.label)}</span>
       <strong>${escapeHtml(card.value)}</strong>
       <span class="platform-dashboard-stat-detail">${escapeHtml(card.hint)}</span>
@@ -7010,10 +7784,13 @@ async function renderPlaylistsPage(options = {}) {
         return `
           <article class="platform-media-card">
             <div class="platform-media-card-head">
-              <div>
-                <span class="platform-dashboard-kicker">playlist</span>
-                <h3>${escapeHtml(pl.name)}</h3>
-                <p>${escapeHtml(pl.folderPath || 'Pasta manual')} · ${escapeHtml(formatDate(pl.createdAt))}</p>
+              <div class="platform-media-card-titleline">
+                <span class="platform-media-card-kind-icon">${renderNeonMediaIcon('playlist', 'chip')}</span>
+                <div>
+                  <span class="platform-dashboard-kicker">playlist</span>
+                  <h3>${escapeHtml(pl.name)}</h3>
+                  <p>${escapeHtml(pl.folderPath || 'Pasta manual')} · ${escapeHtml(formatDate(pl.createdAt))}</p>
+                </div>
               </div>
               <div class="inline-actions">
                 ${statusPill(`${formatNumber(itemCount)} videos`)}
@@ -7021,10 +7798,11 @@ async function renderPlaylistsPage(options = {}) {
               </div>
             </div>
             <div class="platform-media-card-body">
-              <div class="platform-media-card-preview" style="display:flex;align-items:center;justify-content:center;min-height:80px;background:var(--surface-muted);border-radius:6px;">
-                <div style="text-align:center;padding:1rem;">
-                  <div style="font-size:2rem;font-weight:800;color:var(--primary);">${formatNumber(itemCount)}</div>
-                  <div class="muted" style="font-size:0.8rem;">videos</div>
+              <div class="platform-media-card-preview playlist-neon-preview">
+                ${renderNeonMediaIcon('playlist', 'card')}
+                <div class="playlist-neon-preview-count">
+                  <strong>${formatNumber(itemCount)}</strong>
+                  <span>videos</span>
                 </div>
               </div>
               <div class="platform-media-card-meta">
@@ -7117,7 +7895,7 @@ async function renderPlaylistsPage(options = {}) {
           </article>
 
           <article class="playlist-cockpit-stat-big" data-tone="primary">
-            <div class="playlist-cockpit-stat-big-icon">📁</div>
+            <div class="playlist-cockpit-stat-big-icon">${renderNeonMediaIcon('playlist', 'stat')}</div>
             <div class="playlist-cockpit-stat-big-info">
               <span class="playlist-cockpit-stat-big-label">Playlists</span>
               <strong class="playlist-cockpit-stat-big-value" data-counter="${playlists.length}">0</strong>
@@ -7126,7 +7904,7 @@ async function renderPlaylistsPage(options = {}) {
           </article>
 
           <article class="playlist-cockpit-stat-big" data-tone="success">
-            <div class="playlist-cockpit-stat-big-icon">🎬</div>
+            <div class="playlist-cockpit-stat-big-icon">${renderNeonMediaIcon('video', 'stat')}</div>
             <div class="playlist-cockpit-stat-big-info">
               <span class="playlist-cockpit-stat-big-label">Vídeos</span>
               <strong class="playlist-cockpit-stat-big-value" data-counter="${totalVideos}">0</strong>
@@ -7137,7 +7915,7 @@ async function renderPlaylistsPage(options = {}) {
 
         <div class="playlist-cockpit-mini-row">
           <article class="playlist-cockpit-mini" data-tone="info">
-            <div class="playlist-cockpit-mini-icon">✅</div>
+            <div class="playlist-cockpit-mini-icon">${renderNeonMediaIcon('available', 'mini')}</div>
             <div class="playlist-cockpit-mini-info">
               <span class="playlist-cockpit-mini-label">Disponíveis</span>
               <strong class="playlist-cockpit-mini-value" data-counter="${totalAvailable}">0</strong>
@@ -7145,7 +7923,7 @@ async function renderPlaylistsPage(options = {}) {
             </div>
           </article>
           <article class="playlist-cockpit-mini" data-tone="warning">
-            <div class="playlist-cockpit-mini-icon">📤</div>
+            <div class="playlist-cockpit-mini-icon">${renderNeonMediaIcon('published', 'mini')}</div>
             <div class="playlist-cockpit-mini-info">
               <span class="playlist-cockpit-mini-label">Já publicados</span>
               <strong class="playlist-cockpit-mini-value" data-counter="${totalUsed}">0</strong>
@@ -7153,7 +7931,7 @@ async function renderPlaylistsPage(options = {}) {
             </div>
           </article>
           <article class="playlist-cockpit-mini" data-tone="info">
-            <div class="playlist-cockpit-mini-icon">📚</div>
+            <div class="playlist-cockpit-mini-icon">${renderNeonMediaIcon('library', 'mini')}</div>
             <div class="playlist-cockpit-mini-info">
               <span class="playlist-cockpit-mini-label">Library</span>
               <strong class="playlist-cockpit-mini-value" data-counter="${libraryAssets}">0</strong>
@@ -7161,7 +7939,7 @@ async function renderPlaylistsPage(options = {}) {
             </div>
           </article>
           <article class="playlist-cockpit-mini" data-tone="success">
-            <div class="playlist-cockpit-mini-icon">⭐</div>
+            <div class="playlist-cockpit-mini-icon">${renderNeonMediaIcon('star', 'mini')}</div>
             <div class="playlist-cockpit-mini-info">
               <span class="playlist-cockpit-mini-label">Maior playlist</span>
               <strong class="playlist-cockpit-mini-value playlist-cockpit-mini-text">${escapeHtml((largestPlaylist?.name ?? '—').slice(0, 14) + ((largestPlaylist?.name ?? '').length > 14 ? '…' : ''))}</strong>
@@ -7169,7 +7947,7 @@ async function renderPlaylistsPage(options = {}) {
             </div>
           </article>
           <article class="playlist-cockpit-mini" data-tone="warning">
-            <div class="playlist-cockpit-mini-icon">🔥</div>
+            <div class="playlist-cockpit-mini-icon">${renderNeonMediaIcon('published', 'mini')}</div>
             <div class="playlist-cockpit-mini-info">
               <span class="playlist-cockpit-mini-label">Mais usada</span>
               <strong class="playlist-cockpit-mini-value playlist-cockpit-mini-text">${escapeHtml((mostDepleted?.name ?? '—').slice(0, 14) + ((mostDepleted?.name ?? '').length > 14 ? '…' : ''))}</strong>
@@ -7200,6 +7978,10 @@ async function renderPlaylistsPage(options = {}) {
         </div>
       </section>
 
+      <section class="platform-dashboard-stat-grid">
+        ${metricsHtml}
+      </section>
+
       <section class="platform-dashboard-main-grid">
         <section class="platform-surface platform-dashboard-panel">
           <div class="platform-dashboard-panel-head">
@@ -7211,11 +7993,17 @@ async function renderPlaylistsPage(options = {}) {
           </div>
           <div class="media-upload-zone">
             <div class="media-upload-zone-header">
-              <span class="media-upload-zone-icon">📁</span>
+              <span class="media-upload-zone-icon">${renderNeonMediaIcon('folder', 'upload')}</span>
               <div>
                 <p class="media-upload-zone-title">Importar da pasta do servidor</p>
                 <p class="media-upload-zone-sub">Cada subpasta vira uma playlist automaticamente</p>
               </div>
+            </div>
+            <div class="media-upload-pipeline" aria-hidden="true">
+              <span>${renderNeonMediaIcon('folder', 'chip')} Pasta</span>
+              <span>${renderNeonMediaIcon('playlist', 'chip')} Playlist</span>
+              <span>${renderNeonMediaIcon('video', 'chip')} Videos</span>
+              <span>${renderNeonMediaIcon('clock', 'chip')} Auto</span>
             </div>
             <form id="scan-folder-form" class="form-grid">
               <label>
@@ -7334,12 +8122,13 @@ async function renderPlaylistDetailPage(playlistId) {
   const liveClock = formatClockLabel();
 
   const metricsHtml = [
-    { label: 'Videos', value: formatNumber(items.length), hint: 'Total na playlist', tone: 'info' },
-    { label: 'Disponiveis', value: formatNumber(availCount), hint: 'Ainda nao postados via Auto', tone: availCount > 0 ? 'info' : 'warning' },
-    { label: 'Ja usados', value: formatNumber(usedCount), hint: 'Postados pelo modo Auto', tone: 'success' },
-    { label: 'Progresso', value: items.length > 0 ? `${Math.round((usedCount / items.length) * 100)}%` : '—', hint: 'Completude da playlist', tone: 'info' },
+    { icon: 'video', label: 'Videos', value: formatNumber(items.length), hint: 'Total na playlist', tone: 'info' },
+    { icon: 'folder', label: 'Disponiveis', value: formatNumber(availCount), hint: 'Ainda nao postados via Auto', tone: availCount > 0 ? 'info' : 'warning' },
+    { icon: 'clock', label: 'Ja usados', value: formatNumber(usedCount), hint: 'Postados pelo modo Auto', tone: 'success' },
+    { icon: 'playlist', label: 'Progresso', value: items.length > 0 ? `${Math.round((usedCount / items.length) * 100)}%` : '—', hint: 'Completude da playlist', tone: 'info' },
   ].map((card) => `
     <article class="platform-dashboard-stat" data-tone="${escapeHtml(card.tone)}">
+      <span class="platform-dashboard-stat-icon">${renderNeonMediaIcon(card.icon, 'chip', card.tone)}</span>
       <span class="platform-dashboard-stat-label">${escapeHtml(card.label)}</span>
       <strong>${escapeHtml(card.value)}</strong>
       <span class="platform-dashboard-stat-detail">${escapeHtml(card.hint)}</span>
@@ -7348,16 +8137,19 @@ async function renderPlaylistDetailPage(playlistId) {
 
   const itemCardsHtml = items.map((item) => {
     const asset = videoById[item.videoAssetId];
-    const usedLabel = item.usedAt ? `Usado ${new Date(item.usedAt).toLocaleString()}` : 'Disponivel';
+    const usedLabel = item.usedAt ? `Usado ${new Date(item.usedAt).toLocaleString(getActiveLocale())}` : 'Disponivel';
     const usedTone = item.usedAt ? '' : 'success';
     const previewHtml = asset ? renderVideoPreviewCell(asset) : '<span class="muted">Asset nao encontrado</span>';
     return `
       <article class="platform-media-card">
         <div class="platform-media-card-head">
-          <div>
-            <span class="platform-dashboard-kicker">video</span>
-            <h3>${escapeHtml(asset?.original_name ?? item.videoAssetId)}</h3>
-            <p>${escapeHtml(asset?.mime_type ?? '')}${asset?.created_at ? ' · ' + escapeHtml(formatDate(asset.created_at)) : ''}</p>
+          <div class="platform-media-card-titleline">
+            <span class="platform-media-card-kind-icon">${renderNeonMediaIcon('video', 'chip')}</span>
+            <div>
+              <span class="platform-dashboard-kicker">video</span>
+              <h3>${escapeHtml(asset?.original_name ?? item.videoAssetId)}</h3>
+              <p>${escapeHtml(asset?.mime_type ?? '')}${asset?.created_at ? ' · ' + escapeHtml(formatDate(asset.created_at)) : ''}</p>
+            </div>
           </div>
           <div class="inline-actions">
             ${statusPill(item.usedAt ? 'usado' : 'disponivel')}
@@ -7404,8 +8196,8 @@ async function renderPlaylistDetailPage(playlistId) {
           <h2>${escapeHtml(playlist.name)}</h2>
           <p>${escapeHtml(playlist.folderPath || 'Criada manualmente')}</p>
           <div class="platform-dashboard-chip-row">
-            <span class="platform-chip">🔀 Auto aleatorio</span>
-            <span class="platform-chip">📌 Sem repeticao</span>
+            <span class="platform-chip">${renderNeonMediaIcon('playlist', 'chip')} Auto aleatorio</span>
+            <span class="platform-chip">${renderNeonMediaIcon('available', 'chip')} Sem repeticao</span>
           </div>
           <div class="platform-dashboard-chip-row">
             <span class="platform-dashboard-inline-stat">${formatNumber(items.length)} videos</span>
@@ -7452,7 +8244,7 @@ async function renderPlaylistDetailPage(playlistId) {
           ${videoOptions ? `
             <div class="media-upload-zone">
               <div class="media-upload-zone-header">
-                <span class="media-upload-zone-icon">➕</span>
+                <span class="media-upload-zone-icon">${renderNeonMediaIcon('add', 'upload')}</span>
                 <div>
                   <p class="media-upload-zone-title">Selecione um video da biblioteca</p>
                   <p class="media-upload-zone-sub">Videos ja na playlist nao aparecem</p>
@@ -7564,7 +8356,11 @@ async function renderCampaignsPage() {
     limit: parseInteger(query.get('limit') ?? '20', 20, 1, 200),
     offset: parseInteger(query.get('offset') ?? '0', 0, 0),
   };
-  const [campaignsResult, mediaResult] = await Promise.all([api.campaigns(filters), api.media()]);
+  const [campaignsResult, mediaResult, reauthResult] = await Promise.all([
+    api.campaigns(filters),
+    api.media(),
+    api.campaignReauthRequired(),
+  ]);
   if (!campaignsResult.ok || !mediaResult.ok) {
     const failing = !campaignsResult.ok ? campaignsResult : mediaResult;
     if (failing.status === 401) {
@@ -7573,10 +8369,14 @@ async function renderCampaignsPage() {
     }
     renderWorkspaceShell({
       title: 'Campanhas',
-      subtitle: 'Campaign list and lifecycle actions.',
+      subtitle: 'Controle rascunhos, filas, agendamentos e resultados de publicacao.',
       noticeHtml: `<div class="notice error">${escapeHtml(failing.error)}</div>`,
-      contentHtml: '<section class="card">Unable to load campaigns.</section>',
+      contentHtml: '<section class="card">Nao foi possivel carregar as campanhas.</section>',
     });
+    return;
+  }
+  if (reauthResult.status === 401) {
+    unauthorizedRedirect();
     return;
   }
 
@@ -7649,17 +8449,92 @@ async function renderCampaignsPage() {
     return `${s}s`;
   };
   const platformLabel = topPlatform ? (topPlatform[0] === 'youtube' ? 'YouTube' : topPlatform[0] === 'tiktok' ? 'TikTok' : topPlatform[0] === 'instagram' ? 'Instagram' : topPlatform[0]) : '—';
-  const platformIcon = topPlatform?.[0] === 'tiktok' ? '🎵' : topPlatform?.[0] === 'youtube' ? '▶️' : topPlatform?.[0] === 'instagram' ? '📸' : '📡';
+  const platformIcon = topPlatform?.[0] && CAMPAIGN_FLOW_PLATFORMS.includes(topPlatform[0])
+    ? renderPlatformLogo3d(topPlatform[0], 36, 'mission-platform-logo')
+    : renderNeonMediaIcon('storage', 'mini');
   const successCircumference = 2 * Math.PI * 36;
   const successOffset = successCircumference * (1 - successRate / 100);
+  const campaignOutcomeTotals = campaigns.reduce((acc, campaign) => {
+    const summary = summarizeCampaignOutcomes(campaign);
+    acc.total += Number(summary.total ?? 0);
+    acc.published += Number(summary.published ?? 0);
+    acc.failed += Number(summary.failed ?? 0);
+    acc.pending += Number(summary.pending ?? 0);
+    acc.reauthRequired += Number(summary.reauthRequired ?? 0);
+    return acc;
+  }, { total: 0, published: 0, failed: 0, pending: 0, reauthRequired: 0 });
+  const targetTotalSafe = Math.max(1, campaignOutcomeTotals.total);
+  const targetCompletionRate = Math.round((campaignOutcomeTotals.published / targetTotalSafe) * 100);
+  const campaignReauthOverview = normalizeCampaignReauthOverview(
+    reauthResult.ok ? reauthResult.body?.overview : null,
+    campaignOutcomeTotals.reauthRequired,
+  );
+  const reauthResumeProvider = query.get('reauth') === 'resume'
+    ? readCampaignReauthReturnProvider()
+    : null;
+  if (query.get('reauth') === 'resume') {
+    writeCampaignReauthReturnProvider(null);
+  }
+  const activeCampaignCount = statusTotals.ready + statusTotals.launching;
+  const draftReadyCount = statusTotals.draft + statusTotals.ready;
+  const campaignStatusCardsHtml = [
+    { key: 'draft', label: 'Rascunhos', hint: 'editaveis', icon: 'folder' },
+    { key: 'ready', label: 'Prontas', hint: 'aguardando lancamento', icon: 'available' },
+    { key: 'launching', label: 'Enviando', hint: 'fila ativa', icon: 'published' },
+    { key: 'completed', label: 'Concluidas', hint: 'publicadas', icon: 'star' },
+    { key: 'failed', label: 'Falhas', hint: 'precisam de acao', icon: 'error' },
+  ].map((item) => `
+    <article class="campaign-control-status-card" data-status="${escapeHtml(item.key)}">
+      <span class="campaign-control-status-icon" aria-hidden="true">${renderNeonMediaIcon(item.icon, 'mini', item.key)}</span>
+      <span class="campaign-control-status-label">${escapeHtml(item.label)}</span>
+      <strong data-target="${statusTotals[item.key] ?? 0}">0</strong>
+      <small>${escapeHtml(item.hint)}</small>
+    </article>
+  `).join('');
+  const platformStats = CAMPAIGN_FLOW_PLATFORMS
+    .map((platform) => ({
+      platform,
+      label: getCampaignFlowPlatformLabel(platform),
+      count: Number(platformCounts[platform] ?? 0),
+    }))
+    .filter((item) => item.count > 0);
+  const maxPlatformCount = Math.max(1, ...platformStats.map((item) => item.count));
+  const platformDistributionHtml = platformStats.length > 0
+    ? platformStats.map((item) => `
+      <div class="campaign-control-platform-row">
+        ${renderPlatformLogo3d(item.platform, 30, 'campaign-control-platform-logo')}
+        <span>${escapeHtml(item.label)}</span>
+        <div class="campaign-control-platform-track"><span style="--fill:${Math.min(100, (item.count / maxPlatformCount) * 100)}%"></span></div>
+        <strong>${formatNumber(item.count)}</strong>
+      </div>
+    `).join('')
+    : `<div class="campaign-control-empty-note">${renderNeonMediaIcon('storage', 'mini')} Sem destinos conectados nas campanhas desta pagina.</div>`;
+  const targetProgressHtml = `
+    <div class="campaign-control-target-progress">
+      <div class="campaign-control-target-head">
+        <span>Destinos publicados</span>
+        <strong>${formatNumber(campaignOutcomeTotals.published)} / ${formatNumber(campaignOutcomeTotals.total)}</strong>
+      </div>
+      <div class="campaign-control-target-track" aria-hidden="true">
+        <span class="is-published" style="--fill:${Math.min(100, targetCompletionRate)}%"></span>
+        <span class="is-failed" style="--fill:${Math.min(100, (campaignOutcomeTotals.failed / targetTotalSafe) * 100)}%"></span>
+      </div>
+      <div class="campaign-control-target-foot">
+        <span>${formatNumber(campaignOutcomeTotals.pending)} pendentes</span>
+        <span>${formatNumber(campaignOutcomeTotals.failed)} com erro</span>
+        <span>${formatNumber(campaignOutcomeTotals.reauthRequired)} reconectar</span>
+      </div>
+    </div>
+  `;
 
   const metricsHtml = [
-    { label: 'Total', value: formatNumber(total), hint: `Page ${formatNumber(currentPage)} of ${formatNumber(totalPages)}`, tone: 'info' },
-    { label: 'Completed', value: formatNumber(statusTotals.completed), hint: 'Successfully published', tone: 'success' },
-    { label: 'Launching', value: formatNumber(statusTotals.launching), hint: 'Currently publishing', tone: 'warning' },
-    { label: 'Failed', value: formatNumber(statusTotals.failed), hint: 'Ended with errors', tone: 'danger' },
+    { label: 'Campanhas', value: formatNumber(total), hint: `Pagina ${formatNumber(currentPage)} de ${formatNumber(totalPages)}`, tone: 'info', icon: 'playlist' },
+    { label: 'Concluidas', value: formatNumber(statusTotals.completed), hint: 'Publicadas com sucesso', tone: 'success', icon: 'star' },
+    { label: 'Em envio', value: formatNumber(statusTotals.launching), hint: 'Na fila de publicacao', tone: 'warning', icon: 'published' },
+    { label: 'Com erro', value: formatNumber(statusTotals.failed), hint: 'Precisam de revisao', tone: 'danger', icon: 'error' },
   ].map((card) => `
-    <article class="platform-dashboard-stat" data-tone="${escapeHtml(card.tone)}">
+    <article class="platform-dashboard-stat campaign-stat-card" data-tone="${escapeHtml(card.tone)}">
+      <span class="campaign-stat-icon" aria-hidden="true">${renderNeonMediaIcon(card.icon, 'mini', card.tone)}</span>
       <span class="platform-dashboard-stat-label">${escapeHtml(card.label)}</span>
       <strong>${escapeHtml(card.value)}</strong>
       <span class="platform-dashboard-stat-detail">${escapeHtml(card.hint)}</span>
@@ -7718,42 +8593,54 @@ async function renderCampaignsPage() {
     : '';
   const campaignsEmptyState = total === 0
     ? renderEmptyStateCard({
-        title: 'No campaigns yet',
-        message: 'Start by creating your first campaign. If you have not uploaded media or connected channels yet, you can do that first.',
+        title: 'Nenhuma campanha ainda',
+        message: 'Crie sua primeira campanha quando a midia e os destinos estiverem prontos. A pagina vai guiar a fila sem esconder o que falta.',
         tone: 'info',
         actionsHtml: [
-          '<a class="button button-primary" data-link href="/workspace/campanhas/nova">Create campaign</a>',
-          '<a class="button button-secondary" data-link href="/workspace/videos">Open videos</a>',
-          '<a class="button button-secondary" data-link href="/workspace/accounts">Open accounts</a>',
+          '<a class="button button-primary" data-link href="/workspace/campanhas/nova">Nova campanha</a>',
+          '<a class="button button-secondary" data-link href="/workspace/videos">Abrir videos</a>',
+          '<a class="button button-secondary" data-link href="/workspace/accounts">Abrir contas</a>',
         ].join(''),
       })
     : campaigns.length === 0
       ? renderEmptyStateCard({
-          title: 'No campaigns match the current filters',
-          message: 'Change the filters or clear the search to show campaigns again.',
-          actionsHtml: '<a class="button button-secondary" data-link href="/workspace/campanhas">Clear filters</a>',
+          title: 'Nenhuma campanha encontrada',
+          message: 'Ajuste os filtros ou limpe a busca para voltar a ver a fila completa.',
+          actionsHtml: '<a class="button button-secondary" data-link href="/workspace/campanhas">Limpar filtros</a>',
         })
       : '';
 
   const campaignItemsHtml = campaigns.length === 0
     ? ''
-    : `<div class="campaign-list">${campaigns.map((campaign) => {
+    : `<div class="campaign-list campaign-launch-board">${campaigns.map((campaign) => {
         const summary = summarizeCampaignOutcomes(campaign);
-        const scheduledLabel = campaign.scheduledAt ? formatDate(campaign.scheduledAt) : 'Immediate';
+        const scheduledLabel = campaign.scheduledAt ? formatDate(campaign.scheduledAt) : 'Imediato';
+        const createdLabel = formatDate(campaign.createdAt);
         const mediaAsset = mediaById.get(campaign.videoAssetId);
         const publishFormat = getVideoPublishFormat(mediaAsset ?? {});
+        const statusMeta = getCampaignStatusMeta(campaign.status);
         return `
-          <div class="campaign-item" data-status="${escapeHtml(campaign.status)}">
-            <div class="campaign-item-main">
-              <p class="campaign-item-title">${escapeHtml(campaign.title)}</p>
-              <div class="campaign-item-meta">
-                ${statusPill(campaign.status)}
-                ${statusPill(getVideoPublishFormatLabel(publishFormat))}
-                <span>${escapeHtml(campaign.videoAssetName ?? campaign.videoAssetId ?? '-')}</span>
-                <span>${escapeHtml(scheduledLabel)}</span>
-                <span>${formatNumber(campaign.targetCount ?? summary.total)} targets</span>
+          <article class="campaign-item campaign-command-card" data-status="${escapeHtml(campaign.status)}" data-tone="${escapeHtml(statusMeta.tone)}">
+            <div class="campaign-command-icon" aria-hidden="true">${renderNeonMediaIcon(statusMeta.icon, 'stat', statusMeta.tone)}</div>
+            <div class="campaign-command-main">
+              <div class="campaign-command-head">
+                <div class="campaign-command-title-block">
+                  <span class="campaign-command-kicker">${escapeHtml(statusMeta.label)} - ${escapeHtml(statusMeta.detail)}</span>
+                  <p class="campaign-item-title">${escapeHtml(campaign.title || 'Campanha sem titulo')}</p>
+                </div>
+                ${renderCampaignPlatformStack(campaign)}
               </div>
-              <div class="campaign-item-outcome">
+              <div class="campaign-command-meta-grid">
+                <div><span>Midia</span><strong>${escapeHtml(campaign.videoAssetName ?? campaign.videoAssetId ?? '-')}</strong></div>
+                <div><span>Formato</span><strong>${escapeHtml(getVideoPublishFormatLabel(publishFormat))}</strong></div>
+                <div><span>Agenda</span><strong>${escapeHtml(scheduledLabel)}</strong></div>
+                <div><span>Destinos</span><strong>${formatNumber(campaign.targetCount ?? summary.total)}</strong></div>
+                <div><span>Criada</span><strong>${escapeHtml(createdLabel)}</strong></div>
+                <div><span>ID</span><strong><code>${escapeHtml(campaign.id)}</code></strong></div>
+              </div>
+              ${renderCampaignOutcomeChips(summary)}
+              ${renderCampaignProgress(summary)}
+              <div class="campaign-item-outcome is-legacy-hidden">
                 <span class="ok">✓ ${formatNumber(summary.published)}</span>
                 <span class="fail">✕ ${formatNumber(summary.failed)}</span>
                 <span class="pending">◷ ${formatNumber(summary.pending)}</span>
@@ -7761,45 +8648,29 @@ async function renderCampaignsPage() {
               </div>
             </div>
             <div class="campaign-item-actions">${campaignActionButtons(campaign)}</div>
-          </div>
+          </article>
         `;
       }).join('')}</div>`;
+  const campaignReauthPanelHtml = renderCampaignReauthPanel(campaignReauthOverview, {
+    resumeProvider: reauthResumeProvider,
+  });
 
   renderWorkspaceShell({
     title: 'Campanhas',
-    subtitle: 'Campaign list and lifecycle actions.',
+    subtitle: 'Controle rascunhos, filas, agendamentos e resultados de publicacao.',
     actionsHtml: `
       <div class="inline-actions cc-hero-actions">
-        <a class="cc-create-btn" data-link href="/workspace/campanhas/nova" title="Criar nova campanha">
-          <span class="cc-create-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="16" />
-              <line x1="8" y1="12" x2="16" y2="12" />
-            </svg>
-          </span>
-          <span class="cc-create-label">
-            <span class="cc-create-title">Create campaign</span>
-            <span class="cc-create-sub">Launch a new CAMPAIGN</span>
-          </span>
-          <span class="cc-create-arrow" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="5" y1="12" x2="19" y2="12" />
-              <polyline points="12 5 19 12 12 19" />
-            </svg>
-          </span>
-        </a>
         <a class="cc-refresh-btn" data-link href="${escapeHtml(buildUrl('/workspace/campanhas', {
           status: filters.status,
           search: filters.search,
           limit: pageLimit,
           offset: pageOffset,
-        }))}" title="Refresh list">
+        }))}" title="Atualizar lista">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="23 4 23 10 17 10" />
             <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
           </svg>
-          <span>Refresh</span>
+          <span>Atualizar</span>
         </a>
       </div>
     `,
@@ -7813,79 +8684,93 @@ async function renderCampaignsPage() {
           <div class="campaign-control-header-main">
             <span class="campaign-control-kicker">
               <span class="campaign-control-dot"></span>
-              CAMPAIGN CONTROL
+              CENTRO DE CAMPANHAS
             </span>
-            <span class="campaign-control-clock">LIVE · ${escapeHtml(liveClock)}</span>
+            <span class="campaign-control-clock">AO VIVO - ${escapeHtml(liveClock)}</span>
           </div>
           <div class="campaign-control-legend">
-            <span data-legend="draft"><span class="legend-swatch"></span>Draft</span>
-            <span data-legend="ready"><span class="legend-swatch"></span>Ready</span>
-            <span data-legend="launching"><span class="legend-swatch"></span>Launching</span>
-            <span data-legend="completed"><span class="legend-swatch"></span>Completed</span>
-            <span data-legend="failed"><span class="legend-swatch"></span>Failed</span>
+            <span data-legend="draft"><span class="legend-swatch"></span>Rascunho</span>
+            <span data-legend="ready"><span class="legend-swatch"></span>Pronta</span>
+            <span data-legend="launching"><span class="legend-swatch"></span>Enviando</span>
+            <span data-legend="completed"><span class="legend-swatch"></span>Concluida</span>
+            <span data-legend="failed"><span class="legend-swatch"></span>Falhou</span>
           </div>
         </header>
 
         <div class="campaign-control-grid">
-          <div class="campaign-control-chart" data-total="${formatNumber(total)}">
-            <svg class="campaign-control-radar" viewBox="0 0 220 220" aria-hidden="true">
-              <defs>
-                <radialGradient id="radarFill" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stop-color="currentColor" stop-opacity="0.35" />
-                  <stop offset="70%" stop-color="currentColor" stop-opacity="0.12" />
-                  <stop offset="100%" stop-color="transparent" />
-                </radialGradient>
-                <linearGradient id="radarSweep" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stop-color="transparent" />
-                  <stop offset="100%" stop-color="currentColor" />
-                </linearGradient>
-              </defs>
-              <circle cx="110" cy="110" r="100" fill="url(#radarFill)" />
-              <circle cx="110" cy="110" r="100" fill="none" stroke="currentColor" stroke-opacity="0.18" stroke-width="1" />
-              <circle cx="110" cy="110" r="75" fill="none" stroke="currentColor" stroke-opacity="0.14" stroke-width="1" />
-              <circle cx="110" cy="110" r="50" fill="none" stroke="currentColor" stroke-opacity="0.1" stroke-width="1" />
-              <circle cx="110" cy="110" r="25" fill="none" stroke="currentColor" stroke-opacity="0.08" stroke-width="1" />
-              <line x1="10" y1="110" x2="210" y2="110" stroke="currentColor" stroke-opacity="0.12" stroke-width="1" />
-              <line x1="110" y1="10" x2="110" y2="210" stroke="currentColor" stroke-opacity="0.12" stroke-width="1" />
-              <g class="radar-sweep-group">
-                <path d="M110 110 L210 110 A100 100 0 0 0 171 39 Z" fill="url(#radarSweep)" opacity="0.55" />
-              </g>
-              ${buildRadarPoints(statusTotals)}
-            </svg>
-            <div class="campaign-control-chart-center">
-              <span class="chart-center-kicker">TOTAL</span>
-              <strong class="chart-center-val" data-target="${total}">0</strong>
-              <span class="chart-center-label">CAMPAIGNS</span>
+          <div class="campaign-control-command">
+            <div class="campaign-control-command-top">
+              <span class="campaign-control-command-icon" aria-hidden="true">${renderNeonMediaIcon('add', 'hero')}</span>
+              <div class="campaign-control-command-copy">
+                <span>Novo fluxo</span>
+                <h2>Criar campanha</h2>
+                <p>Campanhas por etapas com plataformas, midias, destinos, metadados e revisao antes do lancamento.</p>
+              </div>
+            </div>
+            <a class="campaign-control-create-btn" data-link href="/workspace/campanhas/nova" title="Criar nova campanha">
+              <span>Comecar campanha</span>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="5" y1="12" x2="19" y2="12" />
+                <polyline points="12 5 19 12 12 19" />
+              </svg>
+            </a>
+            <div class="campaign-control-command-metrics">
+              <span><strong data-target="${total}">0</strong> campanhas</span>
+              <span><strong data-target="${activeCampaignCount}">0</strong> ativas</span>
+              <span><strong data-target="${draftReadyCount}">0</strong> editaveis</span>
             </div>
           </div>
 
-          <div class="campaign-control-pulse">
-            <div class="pulse-head">
-              <span>PULSE · LAST 30 TICKS</span>
-              <span class="pulse-now">+${formatNumber(statusTotals.launching)}</span>
+          <div class="campaign-control-intel">
+            <div class="campaign-control-status-grid">
+              ${campaignStatusCardsHtml}
             </div>
-            <svg class="pulse-chart" viewBox="0 0 600 140" preserveAspectRatio="none" aria-hidden="true">
-              <defs>
-                <linearGradient id="pulseFill" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stop-color="currentColor" stop-opacity="0.6" />
-                  <stop offset="100%" stop-color="currentColor" stop-opacity="0" />
-                </linearGradient>
-                <linearGradient id="pulseStroke" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stop-color="currentColor" />
-                  <stop offset="100%" class="pulse-stroke-end" stop-color="var(--cc-accent2)" />
-                </linearGradient>
-              </defs>
-              ${buildPulseChart(statusTotals)}
-            </svg>
-            <div class="pulse-ticks">
-              ${['DRAFT','READY','LAUNCHING','DONE','FAIL'].map((label, i) => {
-                const key = ['draft','ready','launching','completed','failed'][i];
-                return `<div class="pulse-tick" data-status="${key}">
-                  <span class="pulse-tick-label">${label}</span>
-                  <strong class="pulse-tick-val" data-target="${statusTotals[key] ?? 0}">0</strong>
-                  <div class="pulse-tick-bar"><div class="pulse-tick-fill" style="--fill:${Math.min(100, (statusTotals[key] ?? 0) / Math.max(1, total) * 100)}%"></div></div>
-                </div>`;
-              }).join('')}
+            <div class="campaign-control-pulse">
+              <div class="pulse-head">
+                <span>PULSO DA FILA - 30 SINAIS</span>
+                <span class="pulse-now">+${formatNumber(statusTotals.launching)}</span>
+              </div>
+              <svg class="pulse-chart" viewBox="0 0 600 140" preserveAspectRatio="none" aria-hidden="true">
+                <defs>
+                  <linearGradient id="pulseFill" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="currentColor" stop-opacity="0.6" />
+                    <stop offset="100%" stop-color="currentColor" stop-opacity="0" />
+                  </linearGradient>
+                  <linearGradient id="pulseStroke" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="currentColor" />
+                    <stop offset="100%" class="pulse-stroke-end" stop-color="var(--cc-accent2)" />
+                  </linearGradient>
+                </defs>
+                ${buildPulseChart(statusTotals)}
+              </svg>
+              <div class="pulse-ticks">
+                ${['RASCUNHO','PRONTA','ENVIANDO','OK','ERRO'].map((label, i) => {
+                  const key = ['draft','ready','launching','completed','failed'][i];
+                  return `<div class="pulse-tick" data-status="${key}">
+                    <span class="pulse-tick-label">${label}</span>
+                    <strong class="pulse-tick-val" data-target="${statusTotals[key] ?? 0}">0</strong>
+                    <div class="pulse-tick-bar"><div class="pulse-tick-fill" style="--fill:${Math.min(100, (statusTotals[key] ?? 0) / Math.max(1, total) * 100)}%"></div></div>
+                  </div>`;
+                }).join('')}
+              </div>
+            </div>
+            <div class="campaign-control-insight-grid">
+              <div class="campaign-control-mini-panel">
+                <div class="campaign-control-mini-head">
+                  <span>Plataformas</span>
+                  <strong>${topPlatform ? escapeHtml(platformLabel) : 'Sem lider'}</strong>
+                </div>
+                <div class="campaign-control-platform-list">
+                  ${platformDistributionHtml}
+                </div>
+              </div>
+              <div class="campaign-control-mini-panel">
+                <div class="campaign-control-mini-head">
+                  <span>Publicacao</span>
+                  <strong>${formatNumber(targetCompletionRate)}%</strong>
+                </div>
+                ${targetProgressHtml}
+              </div>
             </div>
           </div>
         </div>
@@ -7897,7 +8782,7 @@ async function renderCampaignsPage() {
           <div class="mission-insights-grid"></div>
         </div>
         <header class="mission-insights-head">
-          <span class="mission-insights-kicker"><span class="mission-insights-dot"></span> MISSION INSIGHTS</span>
+          <span class="mission-insights-kicker"><span class="mission-insights-dot"></span> INTELIGENCIA DA FILA</span>
           <span class="mission-insights-clock">${escapeHtml(liveClock)}</span>
         </header>
 
@@ -7912,54 +8797,54 @@ async function renderCampaignsPage() {
               transform="rotate(-90 40 40)" />
           </svg>
           <div class="mission-success-info">
-            <span class="mission-success-label">Success rate</span>
+            <span class="mission-success-label">Taxa de sucesso</span>
             <strong class="mission-success-value" data-target-rate="${successRate}">0%</strong>
-            <span class="mission-success-detail">${formatNumber(statusTotals.completed)} ok · ${formatNumber(statusTotals.failed)} fail</span>
+            <span class="mission-success-detail">${formatNumber(statusTotals.completed)} ok - ${formatNumber(statusTotals.failed)} erro</span>
           </div>
         </div>
 
         <div class="mission-insights-tiles">
           <button type="button" class="mission-tile mission-tile-countdown" ${nextScheduled ? `data-link-href="/workspace/campanhas/${escapeHtml(nextScheduled.id)}"` : 'disabled'}>
-            <div class="mission-tile-icon">⏱️</div>
+            <div class="mission-tile-icon">${renderNeonMediaIcon('clock', 'mini')}</div>
             <div class="mission-tile-info">
-              <span class="mission-tile-label">Next launch</span>
-              <strong class="mission-tile-value" id="mission-countdown" data-countdown-ms="${nextCountdown ?? ''}">${nextScheduled ? escapeHtml(formatCountdown(nextCountdown)) : 'No queue'}</strong>
-              <span class="mission-tile-detail">${nextScheduled ? escapeHtml((nextScheduled.title ?? '').slice(0, 24)) : 'Schedule a campaign'}</span>
+              <span class="mission-tile-label">Proximo envio</span>
+              <strong class="mission-tile-value" id="mission-countdown" data-countdown-ms="${nextCountdown ?? ''}">${nextScheduled ? escapeHtml(formatCountdown(nextCountdown)) : 'Sem fila'}</strong>
+              <span class="mission-tile-detail">${nextScheduled ? escapeHtml((nextScheduled.title ?? '').slice(0, 24)) : 'Agende uma campanha'}</span>
             </div>
           </button>
 
           <button type="button" class="mission-tile" data-link-href="/workspace/campanhas?status=launching">
-            <div class="mission-tile-icon">🚀</div>
+            <div class="mission-tile-icon">${renderNeonMediaIcon('published', 'mini')}</div>
             <div class="mission-tile-info">
-              <span class="mission-tile-label">Today</span>
+              <span class="mission-tile-label">Hoje</span>
               <strong class="mission-tile-value" data-counter="${todayLaunches}">0</strong>
-              <span class="mission-tile-detail">launches scheduled</span>
+              <span class="mission-tile-detail">envios agendados</span>
             </div>
           </button>
 
           <div class="mission-tile mission-tile-static">
             <div class="mission-tile-icon">${platformIcon}</div>
             <div class="mission-tile-info">
-              <span class="mission-tile-label">Top platform</span>
+              <span class="mission-tile-label">Plataforma lider</span>
               <strong class="mission-tile-value">${escapeHtml(platformLabel)}</strong>
-              <span class="mission-tile-detail">${topPlatform ? `${formatNumber(topPlatform[1])} targets` : 'No data yet'}</span>
+              <span class="mission-tile-detail">${topPlatform ? `${formatNumber(topPlatform[1])} destinos` : 'Sem dados ainda'}</span>
             </div>
           </div>
 
           <div class="mission-tile mission-tile-static">
-            <div class="mission-tile-icon">📊</div>
+            <div class="mission-tile-icon">${renderNeonMediaIcon('storage', 'mini')}</div>
             <div class="mission-tile-info">
-              <span class="mission-tile-label">Active</span>
+              <span class="mission-tile-label">Ativas</span>
               <strong class="mission-tile-value" data-counter="${statusTotals.launching + statusTotals.ready}">0</strong>
-              <span class="mission-tile-detail">in pipeline</span>
+              <span class="mission-tile-detail">no pipeline</span>
             </div>
           </div>
         </div>
 
         <div class="mission-insights-spark">
           <div class="mission-spark-head">
-            <span>LAST 7 DAYS</span>
-            <span class="mission-spark-total">${formatNumber(last7Days.reduce((sum, d) => sum + d.count, 0))} total</span>
+            <span>ULTIMOS 7 DIAS</span>
+            <span class="mission-spark-total">${formatNumber(last7Days.reduce((sum, d) => sum + d.count, 0))} no total</span>
           </div>
           <div class="mission-spark-bars">
             ${last7Days.map((d) => `
@@ -7973,6 +8858,8 @@ async function renderCampaignsPage() {
       </section>
       </div>
 
+      ${campaignReauthPanelHtml}
+
       <section class="platform-dashboard-stat-grid">
         ${metricsHtml}
       </section>
@@ -7980,47 +8867,47 @@ async function renderCampaignsPage() {
       <section class="platform-surface platform-dashboard-panel">
         <div class="platform-dashboard-panel-head">
           <div>
-            <span class="platform-dashboard-kicker">Campaign filters</span>
-            <h3>Refine the queue</h3>
+            <span class="platform-dashboard-kicker">Filtros de campanha</span>
+            <h3>Refinar fila</h3>
           </div>
-          <span class="platform-dashboard-panel-meta">${formatNumber(total)} total records</span>
+          <span class="platform-dashboard-panel-meta">${formatNumber(total)} registros</span>
         </div>
         <form id="campaign-filter-form" class="filter-bar">
           <label>
             Status
             <select name="status">
-              <option value="">All statuses</option>
-              <option value="draft" ${filters.status === 'draft' ? 'selected' : ''}>Draft</option>
-              <option value="ready" ${filters.status === 'ready' ? 'selected' : ''}>Ready</option>
-              <option value="launching" ${filters.status === 'launching' ? 'selected' : ''}>Launching</option>
-              <option value="completed" ${filters.status === 'completed' ? 'selected' : ''}>Completed</option>
-              <option value="failed" ${filters.status === 'failed' ? 'selected' : ''}>Failed</option>
+              <option value="">Todos</option>
+              <option value="draft" ${filters.status === 'draft' ? 'selected' : ''}>Rascunho</option>
+              <option value="ready" ${filters.status === 'ready' ? 'selected' : ''}>Pronta</option>
+              <option value="launching" ${filters.status === 'launching' ? 'selected' : ''}>Enviando</option>
+              <option value="completed" ${filters.status === 'completed' ? 'selected' : ''}>Concluida</option>
+              <option value="failed" ${filters.status === 'failed' ? 'selected' : ''}>Falhou</option>
             </select>
           </label>
           <label>
-            Search
-            <input name="search" value="${escapeHtml(filters.search)}" placeholder="Title contains..." />
+            Busca
+            <input name="search" value="${escapeHtml(filters.search)}" placeholder="Titulo contem..." />
           </label>
           <label>
-            Page size
+            Por pagina
             <input name="limit" type="number" min="1" max="200" value="${escapeHtml(pageLimit)}" />
           </label>
           <div class="inline-actions cc-filter-actions">
-            <button class="cc-apply-btn" type="submit" title="Apply filters">
+            <button class="cc-apply-btn" type="submit" title="Aplicar filtros">
               <span class="cc-apply-glow" aria-hidden="true"></span>
               <span class="cc-apply-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
                   <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
                 </svg>
               </span>
-              <span class="cc-apply-label">Apply filters</span>
+              <span class="cc-apply-label">Aplicar filtros</span>
             </button>
-            <a class="cc-clear-btn" data-link href="/workspace/campanhas" title="Clear filters">
+            <a class="cc-clear-btn" data-link href="/workspace/campanhas" title="Limpar filtros">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
-              Clear
+              Limpar
             </a>
           </div>
         </form>
@@ -8028,20 +8915,20 @@ async function renderCampaignsPage() {
       <section class="platform-surface platform-dashboard-panel">
         <div class="platform-dashboard-panel-head">
           <div>
-            <span class="platform-dashboard-kicker">Launch board</span>
-            <h3>Campaigns (${formatNumber(total)})</h3>
+            <span class="platform-dashboard-kicker">Painel de lancamento</span>
+            <h3>Campanhas (${formatNumber(total)})</h3>
           </div>
           <div class="inline-actions">
             ${previousHref
-              ? `<a class="button button-secondary" data-link href="${previousHref}">Previous</a>`
-              : '<button class="button button-secondary" type="button" disabled>Previous</button>'}
+              ? `<a class="button button-secondary" data-link href="${previousHref}">Anterior</a>`
+              : '<button class="button button-secondary" type="button" disabled>Anterior</button>'}
             ${nextHref
-              ? `<a class="button button-secondary" data-link href="${nextHref}">Next</a>`
-              : '<button class="button button-secondary" type="button" disabled>Next</button>'}
+              ? `<a class="button button-secondary" data-link href="${nextHref}">Proxima</a>`
+              : '<button class="button button-secondary" type="button" disabled>Proxima</button>'}
           </div>
         </div>
         ${campaignItemsHtml}
-        ${total > 0 ? `<p class="muted">Showing ${formatNumber(pageStart)}-${formatNumber(pageEnd)} of ${formatNumber(total)} campaigns.</p>` : ''}
+        ${total > 0 ? `<p class="muted">Mostrando ${formatNumber(pageStart)}-${formatNumber(pageEnd)} de ${formatNumber(total)} campanhas.</p>` : ''}
       </section>
     `,
   });
@@ -8068,6 +8955,70 @@ async function renderCampaignsPage() {
       offset: '0',
     });
     navigate(href);
+  });
+
+  document.querySelectorAll('[data-action="campaign-reauth-oauth"]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const platform = button.getAttribute('data-platform');
+      if (!CAMPAIGN_FLOW_PLATFORMS.includes(platform)) return;
+
+      clearUiNotice();
+      setButtonBusy(button, true, 'Reconectando...');
+      const result = platform === 'youtube'
+        ? await api.startYouTubeOauth()
+        : platform === 'tiktok'
+          ? await api.startTikTokOauth()
+          : await api.startInstagramOauth();
+      setButtonBusy(button, false);
+
+      if (!result.ok) {
+        setUiNotice('error', `Falha ao reconectar ${getCampaignFlowPlatformLabel(platform)}`, result.error);
+        await renderCampaignsPage();
+        return;
+      }
+
+      const redirectUrl = result.body?.redirectUrl;
+      if (!redirectUrl) {
+        setUiNotice('error', `Falha ao reconectar ${getCampaignFlowPlatformLabel(platform)}`, 'OAuth redirect URL nao retornou pela API.');
+        await renderCampaignsPage();
+        return;
+      }
+
+      writePendingOauthProvider(platform);
+      writeCampaignReauthReturnProvider(platform);
+      window.location.assign(redirectUrl);
+    });
+  });
+
+  document.querySelectorAll('[data-action="retry-reauth-required"]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const confirmed = await showConfirmDialog({
+        title: 'Tentar novamente destinos reconectados?',
+        message: 'Todos os destinos com REAUTH_REQUIRED e job falhado serao reenfileirados. Se alguma conta ainda nao foi reconectada, ela pode falhar novamente.',
+        confirmLabel: 'Tentar novamente',
+        tone: 'warning',
+      });
+      if (!confirmed) return;
+
+      setButtonBusy(button, true, 'Reenfileirando...');
+      const response = await api.retryReauthRequired();
+      setButtonBusy(button, false);
+      if (!response.ok) {
+        setUiNotice('error', 'Retry em lote falhou', response.error);
+        await renderCampaignsPage();
+        return;
+      }
+
+      const retried = Number(response.body?.retried ?? response.body?.jobs?.length ?? 0);
+      const skipped = Number(response.body?.skipped ?? 0);
+      const tone = retried > 0 ? 'success' : 'warning';
+      setUiNotice(
+        tone,
+        retried > 0 ? 'Destinos reenfileirados' : 'Nenhum destino reenfileirado',
+        `${formatNumber(retried)} destinos voltaram para a fila. ${formatNumber(skipped)} ficaram pendentes de revisao.`,
+      );
+      await renderCampaignsPage();
+    });
   });
 
   document.querySelectorAll('[data-action="mark-ready"]').forEach((button) => {
@@ -8322,7 +9273,7 @@ function campaignFlowFormatLocalDate(value) {
   if (!value) return 'Imediato';
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return String(value);
-  return parsed.toLocaleString();
+  return parsed.toLocaleString(getActiveLocale());
 }
 
 function campaignFlowSelectedVideos(videos, flowState) {
@@ -8333,10 +9284,10 @@ function campaignFlowSelectedVideos(videos, flowState) {
 }
 
 function countCampaignFlowWords(value) {
-  return String(value ?? '')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean).length;
+  const matches = String(value ?? '')
+    .normalize('NFKC')
+    .match(/[\p{L}\p{N}]+(?:['-][\p{L}\p{N}]+)*/gu);
+  return matches ? matches.length : 0;
 }
 
 function campaignFlowCoverPlatformLabel(platform) {
@@ -8721,10 +9672,12 @@ function renderCampaignFlowMediaStep(context, flowState) {
       <div class="campaign-segment-grid">
         <label class="campaign-segment" data-selected="${sourceType === 'media' ? 'true' : 'false'}">
           <input type="radio" name="campaignFlowSource" value="media" ${sourceType === 'media' ? 'checked' : ''} />
+          ${renderNeonMediaIcon('library', 'segment')}
           <strong>Midia</strong><span>Escolher um video manualmente.</span>
         </label>
         <label class="campaign-segment" data-selected="${sourceType === 'playlist' ? 'true' : 'false'}" data-disabled="${paidPlan ? 'false' : 'true'}">
           <input type="radio" name="campaignFlowSource" value="playlist" ${sourceType === 'playlist' ? 'checked' : ''} ${paidPlan ? '' : 'disabled'} />
+          ${renderNeonMediaIcon('playlist', 'segment')}
           <strong>Playlist</strong><span>${paidPlan ? 'Escolha automatica a partir de uma playlist.' : 'Liberado somente para planos pagos.'}</span>
         </label>
       </div>
@@ -9038,7 +9991,7 @@ function renderCampaignFlowMetadataStep(context, flowState) {
         <label class="campaign-flow-field campaign-flow-field-wide">
           <span>Base para titulo aleatorio</span>
           <input id="campaign-flow-title-seed" data-campaign-flow-meta data-min-words="12" value="${escapeHtml(flowState.titleSeed)}" placeholder="Ex: estrategia completa para automatizar postagens em multiplas plataformas todos os dias" />
-          <small class="campaign-field-warning" data-state="${thumbnailGate.baseReady ? 'ok' : 'warning'}">${thumbnailGate.baseReady ? `${formatNumber(thumbnailGate.baseWordCount)} palavras. Base suficiente para briefing.` : 'Preencha a Base para título aleatório com no mínimo 12 palavras para gerar um briefing melhor.'}</small>
+          <small class="campaign-field-warning" data-state="${thumbnailGate.baseReady ? 'ok' : 'warning'}">${thumbnailGate.baseReady ? `${formatNumber(thumbnailGate.baseWordCount)} palavras. Base suficiente para briefing.` : `${formatNumber(thumbnailGate.baseWordCount)}/12 palavras. Preencha a Base para título aleatório com no mínimo 12 palavras para gerar um briefing melhor.`}</small>
         </label>
         <label class="campaign-flow-field"><span>Titulo do video</span><input id="campaign-flow-video-title" data-campaign-flow-meta value="${escapeHtml(flowState.videoTitle)}" placeholder="Titulo publicado nas plataformas" /></label>
         <label class="campaign-flow-field">
@@ -9110,8 +10063,10 @@ function renderCampaignFlowMetadataStep(context, flowState) {
 }
 
 function attachCampaignFlowMetadataStep() {
-  const collect = () => {
-    patchCampaignFlowState({
+  const readLiveMetadataState = () => {
+    const current = readCampaignFlowState();
+    return {
+      ...current,
       title: document.querySelector('#campaign-flow-title')?.value ?? '',
       randomTitleEnabled: Boolean(document.querySelector('#campaign-flow-random-title')?.checked),
       titleSeed: document.querySelector('#campaign-flow-title-seed')?.value ?? '',
@@ -9125,10 +10080,18 @@ function attachCampaignFlowMetadataStep() {
       thumbnailAssistantEnabled: Boolean(document.querySelector('#campaign-flow-thumbnail-assistant-enabled')?.checked),
       instagramCaption: document.querySelector('#campaign-flow-instagram-caption')?.value ?? '',
       instagramShareToFeed: Boolean(document.querySelector('#campaign-flow-instagram-share')?.checked ?? true),
+    };
+  };
+  const collect = () => {
+    const draft = readLiveMetadataState();
+    const gate = getCampaignFlowThumbnailAssistantGate(draft);
+    return patchCampaignFlowState({
+      ...draft,
+      thumbnailAssistantEnabled: draft.thumbnailAssistantEnabled && gate.canEnable,
     });
   };
   const syncThumbnailAssistantGate = () => {
-    const next = readCampaignFlowState();
+    const next = readLiveMetadataState();
     const gate = getCampaignFlowThumbnailAssistantGate(next);
     const warnings = [
       !gate.baseReady ? 'Preencha a Base para título aleatório com no mínimo 12 palavras para gerar um briefing melhor.' : '',
@@ -9140,7 +10103,7 @@ function attachCampaignFlowMetadataStep() {
       seedWarning.setAttribute('data-state', gate.baseReady ? 'ok' : 'warning');
       seedWarning.textContent = gate.baseReady
         ? `${formatNumber(gate.baseWordCount)} palavras. Base suficiente para briefing.`
-        : 'Preencha a Base para título aleatório com no mínimo 12 palavras para gerar um briefing melhor.';
+        : `${formatNumber(gate.baseWordCount)}/12 palavras. Preencha a Base para título aleatório com no mínimo 12 palavras para gerar um briefing melhor.`;
     }
     const warningBox = document.querySelector('#campaign-thumbnail-warning');
     if (warningBox) {
@@ -9153,7 +10116,7 @@ function attachCampaignFlowMetadataStep() {
       if (!gate.canEnable) toggle.checked = false;
       toggle.closest('.campaign-check-row')?.setAttribute('data-disabled', gate.canEnable ? 'false' : 'true');
     }
-    if (!gate.canEnable && next.thumbnailAssistantEnabled) {
+    if (!gate.canEnable && readCampaignFlowState().thumbnailAssistantEnabled) {
       patchCampaignFlowState({ thumbnailAssistantEnabled: false });
       void renderCampaignFlowPage(4);
     }
@@ -10390,7 +11353,7 @@ function generateRandomTitle(seed, asset) {
     () => `${pickOne(intensifiers)} - ${baseSeed}${hints.number ? ` parte ${hints.number}` : ''}`,
     () => `${baseSeed}${hints.number ? ` #${hints.number}` : ''}${hints.isShort ? ' #shorts' : ''}`,
     () => `${pickOne(prefixes)}${baseSeed}${hints.durationLabel ? ` (${hints.durationLabel})` : ''}`,
-    () => `${baseSeed} | ${new Date().toLocaleDateString('pt-BR')}`,
+    () => `${baseSeed} | ${new Date().toLocaleDateString(getActiveLocale())}`,
   ];
   let title = pickOne(variants)().replace(/\s+/g, ' ').trim();
   if (title.length > 100) title = title.slice(0, 97) + '...';
@@ -10848,6 +11811,7 @@ async function renderCampaignDetailPage(campaignId) {
   const targetRows = targets.length === 0
     ? '<tr><td colspan="9" class="muted">No targets configured.</td></tr>'
     : targets.map((target) => {
+      const isReauthRequired = target.errorMessage === 'REAUTH_REQUIRED' || target.reauthRequired === true;
       const actionButtons = [];
       if (target.status === 'erro') {
         actionButtons.push(`<button type="button" data-action="retry-target" data-campaign-id="${escapeHtml(campaign.id)}" data-target-id="${escapeHtml(target.id)}">Retry</button>`);
@@ -10866,7 +11830,7 @@ async function renderCampaignDetailPage(campaignId) {
           <td>${target.platform === 'youtube' && target.youtubeVideoId ? `<a target="_blank" href="https://www.youtube.com/watch?v=${encodeURIComponent(target.youtubeVideoId)}">${escapeHtml(target.youtubeVideoId)}</a>` : escapeHtml(target.externalPublishId ?? '-')}</td>
           <td>${target.retryCount ?? 0}</td>
           <td>${target.errorMessage ? escapeHtml(target.errorMessage) : '-'}</td>
-          <td>${target.reauthRequired ? statusPill('reauth_required') : '-'}</td>
+          <td>${isReauthRequired ? statusPill('reauth_required') : '-'}</td>
           <td>
             <div class="inline-actions">
               ${actionButtons.join('')}
@@ -11449,6 +12413,16 @@ async function renderRoute() {
         return;
       }
 
+      if (path === '/workspace/configuracoes') {
+        await renderSettingsPage();
+        return;
+      }
+
+      if (path === '/workspace/perfil') {
+        await renderProfilePage();
+        return;
+      }
+
       const playlistDetailMatch = path.match(/^\/workspace\/playlists\/([^/]+)$/);
       if (playlistDetailMatch) {
         await renderPlaylistDetailPage(decodeURIComponent(playlistDetailMatch[1]));
@@ -11497,5 +12471,6 @@ async function renderRoute() {
 
 applyBackgroundTheme(state.backgroundTheme);
 applyFontTheme(state.fontTheme);
+applyLocaleTranslations();
 attachGlobalNavigation();
 void renderRoute();

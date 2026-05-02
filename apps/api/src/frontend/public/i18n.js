@@ -11,16 +11,81 @@
     en: new Map(),
   };
 
+  const CP1252_CODEPOINT_TO_BYTE = new Map([
+    [0x20ac, 0x80],
+    [0x201a, 0x82],
+    [0x0192, 0x83],
+    [0x201e, 0x84],
+    [0x2026, 0x85],
+    [0x2020, 0x86],
+    [0x2021, 0x87],
+    [0x02c6, 0x88],
+    [0x2030, 0x89],
+    [0x0160, 0x8a],
+    [0x2039, 0x8b],
+    [0x0152, 0x8c],
+    [0x017d, 0x8e],
+    [0x2018, 0x91],
+    [0x2019, 0x92],
+    [0x201c, 0x93],
+    [0x201d, 0x94],
+    [0x2022, 0x95],
+    [0x2013, 0x96],
+    [0x2014, 0x97],
+    [0x02dc, 0x98],
+    [0x2122, 0x99],
+    [0x0161, 0x9a],
+    [0x203a, 0x9b],
+    [0x0153, 0x9c],
+    [0x017e, 0x9e],
+    [0x0178, 0x9f],
+  ]);
+
+  function cp1252ByteForCodePoint(codePoint) {
+    if (codePoint <= 0xff) return codePoint;
+    return CP1252_CODEPOINT_TO_BYTE.get(codePoint) ?? null;
+  }
+
+  function decodeCp1252Utf8Mojibake(value) {
+    if (!/[\u00c3\u00c2\u00e2\u00f0]/.test(value)) return value;
+    if (typeof TextDecoder !== 'function') return value;
+
+    const bytes = [];
+    for (const char of value) {
+      const byte = cp1252ByteForCodePoint(char.codePointAt(0));
+      if (byte === null) return value;
+      bytes.push(byte);
+    }
+
+    try {
+      return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(bytes));
+    } catch {
+      return value;
+    }
+  }
+
+  function repairMojibake(value) {
+    let current = String(value ?? '');
+    for (let index = 0; index < 4; index += 1) {
+      const next = decodeCp1252Utf8Mojibake(current);
+      if (next === current) break;
+      current = next;
+    }
+    return current;
+  }
+
   function addPair(pt, en, options = {}) {
-    const ptSources = [pt, ...(options.pt ?? [])].filter(Boolean);
-    const enSources = [en, ...(options.en ?? [])].filter(Boolean);
+    const canonicalPt = repairMojibake(pt);
+    const canonicalEn = repairMojibake(en);
+    const ptSources = [pt, canonicalPt, ...(options.pt ?? []).map(repairMojibake), ...(options.pt ?? [])].filter(Boolean);
+    const enSources = [en, canonicalEn, ...(options.en ?? []).map(repairMojibake), ...(options.en ?? [])].filter(Boolean);
     for (const source of ptSources) {
-      maps['pt-BR'].set(source, pt);
-      maps.en.set(source, en);
+      maps['pt-BR'].set(source, canonicalPt);
+      maps.en.set(source, canonicalEn);
     }
     for (const source of enSources) {
-      maps['pt-BR'].set(source, pt);
-      maps.en.set(source, en);
+      maps['pt-BR'].set(source, canonicalPt);
+      maps.en.set(source, canonicalEn);
     }
   }
 
@@ -100,8 +165,9 @@
     ['Preferências da plataforma', 'Platform preferences', { pt: ['Preferencias da plataforma'] }],
     ['Controle visual, idioma, perfil e preferências da plataforma.', 'Control visual style, language, profile and platform preferences.', { pt: ['Controle visual, idioma, perfil e preferencias da plataforma.'] }],
     ['Background do plano', 'Plan background'],
+    ['Backgrounds desbloqueados', 'Unlocked backgrounds'],
     ['Backgrounds do seu plano', 'Backgrounds for your plan'],
-    ['Free começa simples; planos pagos liberam visuais mais ricos e com mais contraste.', 'Free starts simple; paid plans unlock richer visuals with stronger contrast.', { pt: ['Free comeca simples; planos pagos liberam visuais mais ricos e com mais contraste.'] }],
+    ['Cada plano adiciona 4 sets; upgrades mantem os backgrounds dos planos anteriores.', 'Each plan adds 4 sets; upgrades keep the backgrounds from previous plans.', { pt: ['Cada plano adiciona 4 sets; upgrades mantem os backgrounds dos planos anteriores.'] }],
     ['Idioma da plataforma', 'Platform language'],
     ['Alterna todos os textos visíveis, labels, titles e aria-labels entre pt-BR e en.', 'Switches all visible text, labels, titles and aria-labels between pt-BR and en.', { pt: ['Alterna todos os textos visiveis, labels, titles e aria-labels entre pt-BR e en.'] }],
     ['Dados da conta, plano ativo, tokens e preferências persistidas.', 'Account data, active plan, tokens and persisted preferences.', { pt: ['Dados da conta, plano ativo, tokens e preferencias persistidas.'] }],
@@ -117,10 +183,10 @@
     ['Plano e faturamento', 'Plan and billing'],
     ['Gerencie upgrade, downgrade e compra de tokens avulsos.', 'Manage upgrades, downgrades and one-time token purchases.'],
     ['Abrir planos', 'Open plans'],
-    ['Visual simples, leve e direto para começar sem excesso de contraste.', 'A simple, light and direct visual style to start without excess contrast.', { pt: ['Visual simples, leve e direto para comecar sem excesso de contraste.'] }],
-    ['Mais presença visual, mantendo leitura limpa para operação recorrente.', 'More visual presence while keeping clean reading for recurring operations.', { pt: ['Mais presenca visual, mantendo leitura limpa para operacao recorrente.'] }],
-    ['Energia multicanal com contraste forte para fluxos YouTube, TikTok e Instagram.', 'Multi-channel energy with strong contrast for YouTube, TikTok and Instagram flows.'],
-    ['Backgrounds mais ricos, com camadas e acabamento premium para operação avançada.', 'Richer backgrounds with layers and premium finish for advanced operations.', { pt: ['Backgrounds mais ricos, com camadas e acabamento premium para operacao avancada.'] }],
+    ['Visual simples, variado e direto para comecar sem confusao.', 'Simple, varied and direct visuals to start without confusion.'],
+    ['Mais presenca visual, mantendo leitura limpa para operacao recorrente.', 'More visual presence while keeping clean reading for recurring operations.'],
+    ['Energia multicanal com contraste claro para fluxos YouTube, TikTok e Instagram.', 'Multi-channel energy with clear contrast for YouTube, TikTok and Instagram flows.'],
+    ['Backgrounds mais ricos, com camadas e acabamento premium para operacao avancada.', 'Richer backgrounds with layers and premium finish for advanced operations.'],
     ['Básico', 'Basic', { pt: ['Basico'] }],
     ['Operador', 'Operator'],
 
@@ -223,7 +289,7 @@
     ['nos planos pagos.', 'on paid plans.'],
     ['Ao mudar de plano, você recebe os tokens mensais do novo plano imediatamente.', 'When you change plans, you receive the new plan monthly tokens immediately.', { pt: ['Ao mudar de plano, voce recebe os tokens mensais do novo plano imediatamente.'] }],
     ['A publicação só acontece se você tiver tokens suficientes para todas as contas selecionadas.', 'Publishing only runs when you have enough tokens for all selected accounts.', { pt: ['A publicacao so acontece se voce tiver tokens suficientes para todas as contas selecionadas.'] }],
-    ['TikTok está disponível somente nos planos', 'TikTok is available only on the', { pt: ['TikTok esta disponivel somente nos planos'] }],
+    ['TikTok e Instagram estao disponiveis somente nos planos', 'TikTok and Instagram are available only on the', { pt: ['TikTok e Instagram estao disponiveis somente nos planos'] }],
     ['Planos pagos têm duração de 30 dias e expiram automaticamente para Free.', 'Paid plans last 30 days and automatically expire to Free.', { pt: ['Planos pagos tem duracao de 30 dias e expiram automaticamente para Free.'] }],
     ['Salvando...', 'Saving...'],
     ['Iniciando checkout...', 'Starting checkout...'],
@@ -682,6 +748,7 @@
     ['Grande', 'Large'],
     ['Neon cinematográfico TikTok.', 'Neon cinematic TikTok.', { pt: ['Neon cinematic TikTok.'] }],
     ['Transmissão vermelho quente.', 'Hot red broadcast.', { pt: ['Hot red broadcast.'] }],
+    ['Gradiente social com contraste mais quente.', 'Social gradient with warmer contrast.', { pt: ['Social gradient with warmer contrast.'] }],
     ['Analytics premium escuro.', 'Premium analytics dark.', { pt: ['Premium analytics dark.'] }],
     ['SaaS futurista escuro.', 'Futuristic SaaS dark.', { pt: ['Futuristic SaaS dark.'] }],
     ['UI interna neutra.', 'Neutral internal UI.', { pt: ['Neutral internal UI.'] }],
@@ -997,11 +1064,12 @@
 
   function translateCore(locale, core) {
     const targetLocale = normalizeLocale(locale);
-    const direct = maps[targetLocale].get(core);
+    const repairedCore = repairMojibake(core);
+    const direct = maps[targetLocale].get(repairedCore) ?? maps[targetLocale].get(core);
     if (direct) {
       return direct;
     }
-    const normalizedCore = core.replace(/\s+/g, ' ');
+    const normalizedCore = repairedCore.replace(/\s+/g, ' ');
     const normalizedDirect = maps[targetLocale].get(normalizedCore);
     if (normalizedDirect) {
       return normalizedDirect;
@@ -1011,12 +1079,13 @@
 
   function translateValue(locale, value) {
     const original = String(value ?? '');
-    const core = original.trim();
+    const repairedOriginal = repairMojibake(original);
+    const core = repairedOriginal.trim();
     if (!core) return original;
-    if (/^(https?:\/\/|mailto:|\/api\/|\/workspace\/|#[0-9a-f]{3,8}\b)/i.test(core)) return original;
-    if (/^[\w.+-]+@[\w.-]+\.[a-z]{2,}$/i.test(core)) return original;
+    if (/^(https?:\/\/|mailto:|\/api\/|\/workspace\/|#[0-9a-f]{3,8}\b)/i.test(core)) return repairedOriginal;
+    if (/^[\w.+-]+@[\w.-]+\.[a-z]{2,}$/i.test(core)) return repairedOriginal;
     const translated = translateCore(locale, core);
-    return translated === core ? original : preserveWhitespace(original, translated);
+    return translated === core ? repairedOriginal : preserveWhitespace(repairedOriginal, translated);
   }
 
   function t(locale, key, values = {}) {
@@ -1034,7 +1103,13 @@
     const updates = [];
     while (walker.nextNode()) {
       const node = walker.currentNode;
-      if (shouldSkipTextNode(node)) continue;
+      if (shouldSkipTextNode(node)) {
+        const repaired = repairMojibake(node.nodeValue);
+        if (repaired !== node.nodeValue) {
+          updates.push([node, repaired]);
+        }
+        continue;
+      }
       const next = translateValue(locale, node.nodeValue);
       if (next !== node.nodeValue) {
         updates.push([node, next]);
@@ -1048,7 +1123,17 @@
   function translateAttributes(root, locale) {
     const elements = root.querySelectorAll ? root.querySelectorAll('*') : [];
     for (const element of elements) {
-      if (element.closest('[data-no-i18n]')) continue;
+      if (element.closest('[data-no-i18n]')) {
+        for (const attr of ATTRIBUTES) {
+          if (!element.hasAttribute(attr)) continue;
+          const value = element.getAttribute(attr);
+          const repaired = repairMojibake(value);
+          if (repaired !== value) {
+            element.setAttribute(attr, repaired);
+          }
+        }
+        continue;
+      }
       for (const attr of ATTRIBUTES) {
         if (!element.hasAttribute(attr)) continue;
         const value = element.getAttribute(attr);

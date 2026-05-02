@@ -468,9 +468,10 @@ describe('API Router - account plan routes', () => {
     expect(firstRes.status).toBe(200);
     expect(firstRes.body.claimed).toBe(true);
     expect(firstRes.body.grantedTokens).toBe(15);
+    expect(firstRes.body.account.tokens).toBe(165);
     expect(secondRes.status).toBe(200);
     expect(secondRes.body.claimed).toBe(false);
-    expect(secondRes.body.account.tokens).toBe(15);
+    expect(secondRes.body.account.tokens).toBe(165);
   });
 
   it('POST /api/account/plan/select updates the current plan', async () => {
@@ -483,6 +484,6 @@ describe('API Router - account plan routes', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.account.plan).toBe('PRO');
-    expect(res.body.account.allowedPlatforms).toEqual(['youtube', 'tiktok']);
+    expect(res.body.account.allowedPlatforms).toEqual(['youtube', 'tiktok', 'instagram']);
   });
 });

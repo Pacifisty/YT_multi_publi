@@ -288,7 +288,68 @@ describe('HTTP adapter — createRequestHandler', () => {
     expect(res._body).toContain('<link rel="canonical" href="https://platform.example/" />');
     expect(res._body).toContain('<script type="application/ld+json">');
     expect(res._body).toContain('Publicação multi plataforma');
-    expect(res._body).toContain('<script src="/i18n.js"></script>');
+    expect(res._body).toContain('<a href="/privacy">Privacy Policy</a>');
+    expect(res._body).toContain('<a href="/terms">Terms of Service</a>');
+    expect(res._body).toContain('<a href="/data-deletion">User Data Deletion</a>');
+    expect(res._body).not.toContain('window.__PMP_LEGAL_DOCUMENTS__');
+    expect(res._body).toMatch(/<script src="\/i18n\.js\?v=[^"]+"><\/script>/);
+  });
+
+  test('serves public legal documents with indexable metadata', async () => {
+    const app = mockApp();
+    const handler = createRequestHandler({ app });
+    const previousPublicUrl = process.env.PUBLIC_APP_URL;
+    process.env.PUBLIC_APP_URL = 'https://platform.example';
+    const privacyReq = mockReq({ method: 'GET', url: '/privacy' });
+    const privacyRes = mockRes();
+    const termsReq = mockReq({ method: 'GET', url: '/terms' });
+    const termsRes = mockRes();
+    const deletionReq = mockReq({ method: 'GET', url: '/data-deletion' });
+    const deletionRes = mockRes();
+
+    try {
+      await handler(privacyReq, privacyRes as any);
+      await handler(termsReq, termsRes as any);
+      await handler(deletionReq, deletionRes as any);
+    } finally {
+      if (previousPublicUrl === undefined) {
+        delete process.env.PUBLIC_APP_URL;
+      } else {
+        process.env.PUBLIC_APP_URL = previousPublicUrl;
+      }
+    }
+
+    expect(privacyRes._status).toBe(200);
+    expect(privacyRes._body).toContain('<title>Privacy Policy | Platform Multi Publisher</title>');
+    expect(privacyRes._body).toContain('<meta name="robots" content="index,follow" />');
+    expect(privacyRes._body).toContain('<link rel="canonical" href="https://platform.example/privacy" />');
+    expect(privacyRes._body).toContain('window.__PMP_LEGAL_DOCUMENTS__');
+
+    expect(termsRes._status).toBe(200);
+    expect(termsRes._body).toContain('<title>Terms of Service | Platform Multi Publisher</title>');
+    expect(termsRes._body).toContain('<meta name="robots" content="index,follow" />');
+    expect(termsRes._body).toContain('<link rel="canonical" href="https://platform.example/terms" />');
+
+    expect(deletionRes._status).toBe(200);
+    expect(deletionRes._body).toContain('<title>User Data Deletion | Platform Multi Publisher</title>');
+    expect(deletionRes._body).toContain('<meta name="robots" content="index,follow" />');
+    expect(deletionRes._body).toContain('<link rel="canonical" href="https://platform.example/data-deletion" />');
+    expect(app.handleRequest).not.toHaveBeenCalled();
+  });
+
+  test('serves public legal documents when URL has a trailing slash', async () => {
+    const app = mockApp();
+    const handler = createRequestHandler({ app });
+    const req = mockReq({ method: 'GET', url: '/data-deletion/' });
+    const res = mockRes();
+
+    await handler(req, res as any);
+
+    expect(res._status).toBe(200);
+    expect(res._body).toContain('<title>User Data Deletion | Platform Multi Publisher</title>');
+    expect(res._body).toContain('<link rel="canonical" href="http://127.0.0.1:3000/data-deletion" />');
+    expect(res._body).toContain('How to request deletion');
+    expect(app.handleRequest).not.toHaveBeenCalled();
   });
 
   test('serves frontend html in English when requested by query locale', async () => {
@@ -363,6 +424,9 @@ describe('HTTP adapter — createRequestHandler', () => {
     expect(sitemapRes._status).toBe(200);
     expect(sitemapRes._headers['content-type']).toBe('application/xml; charset=utf-8');
     expect(sitemapRes._body).toContain('<loc>https://platform.example/</loc>');
+    expect(sitemapRes._body).toContain('<loc>https://platform.example/privacy</loc>');
+    expect(sitemapRes._body).toContain('<loc>https://platform.example/terms</loc>');
+    expect(sitemapRes._body).toContain('<loc>https://platform.example/data-deletion</loc>');
     expect(app.handleRequest).not.toHaveBeenCalled();
   });
 

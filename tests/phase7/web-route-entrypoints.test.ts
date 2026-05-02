@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 
-import { buildAppLayout } from '../../apps/web/app/layout';
+import { buildAppLayout } from '../../apps/web/app/layout-view';
 import { buildRootPageView } from '../../apps/web/app/page';
 import { completeLoginCallback } from '../../apps/web/app/(public)/login/callback/page';
 import { buildPlanOnboardingPage } from '../../apps/web/app/(public)/onboarding/plan/page';
@@ -219,7 +219,7 @@ describe('web route entrypoints', () => {
               expiresSoon: false,
               dailyVisitClaimedToday: true,
               monthlyGrantClaimedThisMonth: true,
-              allowedPlatforms: ['youtube', 'tiktok'],
+              allowedPlatforms: ['youtube', 'tiktok', 'instagram'],
               depthProfile: 'deep',
             },
           }),
@@ -239,6 +239,6 @@ describe('web route entrypoints', () => {
       current: true,
       canChange: false,
     });
-    expect(result.page?.rules).toContain('TikTok esta disponivel somente no plano PRO.');
+    expect(result.page?.rules).toContain('TikTok e Instagram estao disponiveis somente nos planos PRO e Premium.');
   });
 });

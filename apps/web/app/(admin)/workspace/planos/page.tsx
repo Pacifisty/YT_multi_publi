@@ -53,7 +53,7 @@ function buildRules(): string[] {
     'A publicacao so acontece se voce tiver tokens suficientes para todas as contas selecionadas.',
     'Se nao houver tokens suficientes, a campanha nao sera publicada e voce vera um aviso de out of Tokens.',
     'O limite de tokens nunca e ultrapassado; o bonus diario respeita o maximo do plano.',
-    'TikTok esta disponivel somente no plano PRO.',
+    'TikTok e Instagram estao disponiveis somente nos planos PRO e Premium.',
   ];
 }
 

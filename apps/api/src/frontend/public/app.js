@@ -94,7 +94,11 @@ function renderAnimatedLogoByPlatform(platform, size = 32) {
 
 let logoStylesInjected = false;
 function injectLogoStyles() {
-  if (logoStylesInjected || !root) return;
+  if (!root) return;
+  if (document.getElementById('logo-animations-style')) {
+    logoStylesInjected = true;
+    return;
+  }
   root.insertAdjacentHTML('afterbegin', LOGO_STYLES);
   logoStylesInjected = true;
 }
@@ -355,78 +359,229 @@ const ACCOUNT_PLAN_OPTIONS = [
   {
     id: 'FREE',
     label: 'Free',
+    priceBrl: 0,
+    tokens: 150,
+    dailyVisitTokens: 15,
+    campaignPublishCostTokens: 2,
+    thumbnailCostTokens: 1,
+    durationDays: null,
+    allowedPlatforms: ['youtube'],
     priceLabel: 'R$ 0,00',
     description: 'Ideal para conhecer a plataforma e publicar no YouTube sem custo mensal.',
-    tokenSummary: 'ganho de 150 tokens todo mes na escolha deste plano',
+    tokenSummary: '150 tokens mensais',
     visitSummary: '+15 tokens por visita diaria',
     platformSummary: 'YouTube',
     benefits: [
-      'Publicação no YouTube',
+      'Publicacao no YouTube',
       '150 tokens mensais',
-      '+15 tokens por visita diária',
-      'Custo de 2 tokens por publicação',
+      '+15 tokens por visita diaria',
+      'Custo de 2 tokens por campanha',
+      'Thumbnail custa 1 token',
       'Suporte da comunidade',
     ],
   },
   {
     id: 'BASIC',
-    label: 'Básico',
-    priceLabel: 'R$ 19,90 / mês',
-    description: 'Mais fôlego para operação recorrente com limite maior de tokens.',
-    tokenSummary: 'ganho de 400 tokens todo mes na escolha deste plano',
+    label: 'Basico',
+    priceBrl: 19.90,
+    tokens: 400,
+    dailyVisitTokens: 40,
+    campaignPublishCostTokens: 2,
+    thumbnailCostTokens: 0,
+    durationDays: 30,
+    allowedPlatforms: ['youtube'],
+    priceLabel: 'R$ 19,90 / mes',
+    description: 'Mais folego para operacao recorrente com limite maior de tokens.',
+    tokenSummary: '400 tokens mensais',
     visitSummary: '+40 tokens por visita diaria',
     platformSummary: 'YouTube',
     benefits: [
-      'Publicação no YouTube',
+      'Publicacao no YouTube',
       '400 tokens mensais',
-      '+40 tokens por visita diária',
-      'Thumbnails incluídas (sem custo extra)',
-      'Custo de 2 tokens por publicação',
+      '+40 tokens por visita diaria',
+      'Thumbnails incluidas sem custo extra',
+      'Custo de 2 tokens por campanha',
       'Suporte por email',
     ],
   },
   {
     id: 'PRO',
     label: 'Pro',
-    priceLabel: 'R$ 49,90 / mês',
-    description: 'Plano completo para publicar em YouTube, TikTok e Instagram.',
-    tokenSummary: 'ganho de 800 tokens todo mes na escolha deste plano',
+    priceBrl: 49.90,
+    tokens: 800,
+    dailyVisitTokens: 80,
+    campaignPublishCostTokens: 2,
+    thumbnailCostTokens: 0,
+    durationDays: 30,
+    allowedPlatforms: ['youtube', 'tiktok', 'instagram'],
+    priceLabel: 'R$ 49,90 / mes',
+    description: 'Plano completo para publicar em YouTube, TikTok e Instagram com automacao avancada.',
+    tokenSummary: '800 tokens mensais',
     visitSummary: '+80 tokens por visita diaria',
     platformSummary: 'YouTube + TikTok + Instagram',
     featured: true,
     benefits: [
-      'Publicação no YouTube + TikTok + Instagram',
+      'Publicacao no YouTube + TikTok + Instagram',
       '800 tokens mensais',
-      '+80 tokens por visita diária',
-      'Thumbnails incluídas (sem custo extra)',
-      'Reels para Instagram',
-      'Playlists com auto-rotação',
-      'Agendamento aleatório avançado',
-      'Suporte prioritário',
+      '+80 tokens por visita diaria',
+      'Thumbnails incluidas sem custo extra',
+      'Playlists com auto-rotacao',
+      'Agendamento aleatorio avancado',
+      'Suporte prioritario',
     ],
   },
   {
     id: 'PREMIUM',
     label: 'Premium',
-    priceLabel: 'R$ 99,90 / mês',
-    description: 'Potência máxima com tokens ilimitados, suporte 24/7 e todas as plataformas.',
-    tokenSummary: 'ganho de 2000 tokens todo mes na escolha deste plano',
+    priceBrl: 99.90,
+    tokens: 2000,
+    dailyVisitTokens: 200,
+    campaignPublishCostTokens: 1,
+    thumbnailCostTokens: 0,
+    durationDays: 30,
+    allowedPlatforms: ['youtube', 'tiktok', 'instagram'],
+    priceLabel: 'R$ 99,90 / mes',
+    description: 'Potencia maxima para YouTube, TikTok e Instagram com mais tokens, custo reduzido por campanha e suporte dedicado.',
+    tokenSummary: '2000 tokens mensais',
     visitSummary: '+200 tokens por visita diaria',
     platformSummary: 'YouTube + TikTok + Instagram',
     benefits: [
-      'Publicação no YouTube + TikTok + Instagram',
+      'Publicacao no YouTube + TikTok + Instagram',
       '2000 tokens mensais',
-      '+200 tokens por visita diária',
-      'Custo reduzido de 1 token por publicação',
-      'Thumbnails + Reels inclusos',
-      'Playlists ilimitadas com auto-rotação',
-      'Agendamento aleatório avançado',
-      'Geração de títulos por IA',
+      '+200 tokens por visita diaria',
+      'Custo reduzido de 1 token por campanha',
+      'Thumbnails incluidas sem custo extra',
+      'Playlists ilimitadas com auto-rotacao',
+      'Agendamento aleatorio avancado',
+      'Geracao de titulos por IA',
       'Suporte dedicado 24/7',
       'Acesso antecipado a novos recursos',
     ],
   },
 ];
+const ACCOUNT_PLAN_LABELS = {
+  FREE: 'Free',
+  BASIC: 'Basico',
+  PRO: 'Pro',
+  PREMIUM: 'Premium',
+};
+const ACCOUNT_PLAN_DESCRIPTIONS = {
+  FREE: 'Ideal para conhecer a plataforma e publicar no YouTube sem custo mensal.',
+  BASIC: 'Mais folego para operacao recorrente com limite maior de tokens.',
+  PRO: 'Plano completo para publicar em YouTube, TikTok e Instagram com automacao avancada.',
+  PREMIUM: 'Potencia maxima para YouTube, TikTok e Instagram com mais tokens, custo reduzido por campanha e suporte dedicado.',
+};
+const PLAN_PLATFORM_LABELS = {
+  youtube: 'YouTube',
+  tiktok: 'TikTok',
+  instagram: 'Instagram',
+};
+function normalizePlanCode(value) {
+  return parseKnownPlanCode(value) ?? 'FREE';
+}
+
+function parseKnownPlanCode(value) {
+  const code = String(value ?? '').toUpperCase().trim();
+  return ACCOUNT_PLAN_LABELS[code] ? code : null;
+}
+
+function formatPlanPriceLabel(priceBrl, fallback = '') {
+  const price = Number(priceBrl);
+  if (!Number.isFinite(price)) return fallback;
+  if (price <= 0) return 'R$ 0,00';
+  return `R$ ${price.toFixed(2).replace('.', ',')} / mes`;
+}
+
+function normalizePlanPlatforms(value) {
+  const platforms = Array.isArray(value) ? value : [];
+  const normalized = platforms
+    .map((platform) => String(platform ?? '').toLowerCase().trim())
+    .filter((platform) => PLAN_PLATFORM_LABELS[platform]);
+  return normalized.length > 0 ? Array.from(new Set(normalized)) : ['youtube'];
+}
+
+function getPlanAllowedPlatforms(option) {
+  return normalizePlanPlatforms(option?.allowedPlatforms);
+}
+
+function getPlanPlatformSummary(option) {
+  return getPlanAllowedPlatforms(option)
+    .map((platform) => PLAN_PLATFORM_LABELS[platform] ?? platform)
+    .join(' + ');
+}
+
+function formatTokenCost(value) {
+  const cost = Number(value ?? 0);
+  if (!Number.isFinite(cost) || cost <= 0) return 'Sem custo';
+  return `${formatNumber(cost)} ${cost === 1 ? 'token' : 'tokens'}`;
+}
+
+function buildPlanBenefits(option) {
+  const planId = normalizePlanCode(option?.id);
+  const platforms = getPlanPlatformSummary(option);
+  const tokens = Number(option?.tokens ?? option?.maxTokens ?? 0);
+  const dailyVisitTokens = Number(option?.dailyVisitTokens ?? 0);
+  const campaignCost = Number(option?.campaignPublishCostTokens ?? 0);
+  const thumbnailCost = Number(option?.thumbnailCostTokens ?? 0);
+  const benefits = [
+    `Publicacao em ${platforms}`,
+    `${formatNumber(tokens)} tokens mensais`,
+    `+${formatNumber(dailyVisitTokens)} tokens por visita diaria`,
+    `Custo de ${formatTokenCost(campaignCost)} por campanha`,
+    thumbnailCost > 0 ? `Thumbnail custa ${formatTokenCost(thumbnailCost)}` : 'Thumbnails incluidas sem custo extra',
+  ];
+
+  if (planId === 'PRO' || planId === 'PREMIUM') {
+    benefits.push('Playlists com auto-rotacao');
+    benefits.push('Agendamento aleatorio avancado');
+  }
+  if (planId === 'PREMIUM') {
+    benefits.push('Geracao de titulos por IA');
+    benefits.push('Suporte dedicado 24/7');
+  } else if (planId === 'PRO') {
+    benefits.push('Suporte prioritario');
+  } else if (planId === 'BASIC') {
+    benefits.push('Suporte por email');
+  } else {
+    benefits.push('Suporte da comunidade');
+  }
+
+  return benefits;
+}
+
+function mergePlanDisplayOptions(apiPlans = []) {
+  const apiPlansByCode = new Map(
+    (Array.isArray(apiPlans) ? apiPlans : [])
+      .map((plan) => [parseKnownPlanCode(plan?.code), plan])
+      .filter(([code]) => code)
+  );
+
+  return ACCOUNT_PLAN_OPTIONS.map((fallbackPlan) => {
+    const planId = normalizePlanCode(fallbackPlan.id);
+    const apiPlan = apiPlansByCode.get(planId);
+    const merged = {
+      ...fallbackPlan,
+      id: planId,
+      label: ACCOUNT_PLAN_LABELS[planId] ?? fallbackPlan.label,
+      priceBrl: apiPlan?.priceBrl ?? fallbackPlan.priceBrl,
+      tokens: apiPlan?.tokens ?? fallbackPlan.tokens,
+      dailyVisitTokens: apiPlan?.dailyVisitTokens ?? fallbackPlan.dailyVisitTokens,
+      campaignPublishCostTokens: apiPlan?.campaignPublishCostTokens ?? fallbackPlan.campaignPublishCostTokens,
+      thumbnailCostTokens: apiPlan?.thumbnailCostTokens ?? fallbackPlan.thumbnailCostTokens,
+      durationDays: apiPlan?.durationDays ?? fallbackPlan.durationDays,
+      allowedPlatforms: normalizePlanPlatforms(apiPlan?.allowedPlatforms ?? fallbackPlan.allowedPlatforms),
+      active: apiPlan?.active ?? fallbackPlan.active ?? true,
+      featured: fallbackPlan.featured,
+    };
+    merged.priceLabel = formatPlanPriceLabel(merged.priceBrl, fallbackPlan.priceLabel);
+    merged.description = ACCOUNT_PLAN_DESCRIPTIONS[planId] ?? fallbackPlan.description;
+    merged.platformSummary = getPlanPlatformSummary(merged);
+    merged.tokenSummary = `${formatNumber(merged.tokens)} tokens mensais`;
+    merged.visitSummary = `+${formatNumber(merged.dailyVisitTokens)} tokens por visita diaria`;
+    merged.benefits = buildPlanBenefits(merged);
+    return merged;
+  }).filter((plan) => plan.active !== false);
+}
 const BACKGROUND_THEME_OPTIONS = [
   {
     id: 'platform-neon-night',
@@ -473,6 +628,29 @@ const BACKGROUND_THEME_OPTIONS = [
     info: '#fca5a5',
     shadow: '0 20px 48px rgba(0, 0, 0, 0.56)',
     headerBackground: 'linear-gradient(135deg, rgba(5, 5, 5, 0.98) 0%, rgba(38, 8, 12, 0.96) 60%, rgba(255, 0, 51, 0.78) 100%)',
+  },
+  {
+    id: 'platform-instagram-gradient',
+    label: 'Platform Instagram',
+    type: 'gradient',
+    appearance: 'dark',
+    code: '#F58529 -> #8134AF',
+    description: 'Social gradient with warmer contrast.',
+    pageBackground: 'radial-gradient(circle at 18% 20%, rgba(245, 133, 41, 0.44) 0%, transparent 32%), radial-gradient(circle at 82% 18%, rgba(221, 42, 123, 0.46) 0%, transparent 34%), radial-gradient(circle at 54% 86%, rgba(81, 91, 212, 0.4) 0%, transparent 38%), linear-gradient(145deg, #35113f 0%, #140b22 100%)',
+    bg: '#171022',
+    bgSoft: '#24132f',
+    surface: 'rgba(23, 16, 34, 0.88)',
+    surfaceMuted: 'rgba(36, 19, 47, 0.92)',
+    border: 'rgba(245, 133, 41, 0.24)',
+    primary: '#f58529',
+    primaryStrong: '#dd2a7b',
+    primarySoft: 'rgba(245, 133, 41, 0.18)',
+    danger: '#fb7185',
+    warning: '#fbbf24',
+    success: '#86efac',
+    info: '#c4b5fd',
+    shadow: '0 20px 48px rgba(20, 8, 34, 0.52)',
+    headerBackground: 'linear-gradient(135deg, rgba(245, 133, 41, 0.78) 0%, rgba(221, 42, 123, 0.72) 52%, rgba(81, 91, 212, 0.72) 100%)',
   },
   {
     id: 'deep-black-blue',
@@ -1199,32 +1377,32 @@ const PLAN_BACKGROUND_THEME_MAP = {
     shortLabel: 'Free',
     tone: 'info',
     defaultTheme: 'minimal-off-white',
-    themeIds: ['minimal-off-white', 'graphite-gray', 'ice-blue', 'warm-beige'],
-    summary: 'Visual simples, leve e direto para começar sem excesso de contraste.',
+    themeIds: ['minimal-off-white', 'ice-blue', 'green-to-blue', 'sunset'],
+    summary: 'Visual simples, variado e direto para comecar sem confusao.',
   },
   BASIC: {
     label: 'Básico',
     shortLabel: 'Basic',
     tone: 'success',
     defaultTheme: 'soft-grid-light',
-    themeIds: ['soft-grid-light', 'clean-white', 'ocean', 'deep-black-blue'],
-    summary: 'Mais presença visual, mantendo leitura limpa para operação recorrente.',
+    themeIds: ['soft-grid-light', 'warm-beige', 'graphite-gray', 'ocean'],
+    summary: 'Mais presenca visual, mantendo leitura limpa para operacao recorrente.',
   },
   PRO: {
     label: 'Pro',
     shortLabel: 'Pro',
     tone: 'warning',
     defaultTheme: 'platform-neon-night',
-    themeIds: ['platform-neon-night', 'platform-youtube-redline', 'platform-instagram-gradient', 'dark-cyan-glow', 'green-to-blue', 'purple-to-indigo'],
-    summary: 'Energia multicanal com contraste forte para fluxos YouTube, TikTok e Instagram.',
+    themeIds: ['platform-neon-night', 'platform-youtube-redline', 'platform-instagram-gradient', 'dark-cyan-glow'],
+    summary: 'Energia multicanal com contraste claro para fluxos YouTube, TikTok e Instagram.',
   },
   PREMIUM: {
     label: 'Premium',
     shortLabel: 'Premium',
     tone: 'warning',
     defaultTheme: 'mesh-gradient',
-    themeIds: ['mesh-gradient', 'frosted-glass', 'abstract-waves', 'premium-gray-noise', 'blue-to-purple', 'dark-purple-tech', 'pink-to-orange', 'sunset'],
-    summary: 'Backgrounds mais ricos, com camadas e acabamento premium para operação avançada.',
+    themeIds: ['mesh-gradient', 'frosted-glass', 'abstract-waves', 'premium-gray-noise'],
+    summary: 'Backgrounds mais ricos, com camadas e acabamento premium para operacao avancada.',
   },
 };
 const PLAN_BACKGROUND_TIER_ORDER = ['FREE', 'BASIC', 'PRO', 'PREMIUM'];
@@ -1656,7 +1834,7 @@ function renderFontThemeButtons(themeIds = ['black', 'lightgrey', 'turquoise', '
   }).join('');
 }
 
-function renderCompactPlanThemeButtons(planId = getCurrentAccountPlanId(), limit = 4) {
+function renderCompactPlanThemeButtons(planId = getCurrentAccountPlanId(), limit = Number.POSITIVE_INFINITY) {
   const normalizedPlanId = normalizeAccountPlanId(planId);
   const ownThemeIds = getPlanBackgroundThemeIds(normalizedPlanId, { cumulative: false });
   const ownThemes = ownThemeIds
@@ -1678,7 +1856,8 @@ function renderCompactPlanThemeButtons(planId = getCurrentAccountPlanId(), limit
     themes.unshift(selectedTheme);
   }
 
-  return themes.slice(0, limit).map((option) => {
+  const maxItems = Number.isFinite(limit) ? limit : themes.length;
+  return themes.slice(0, maxItems).map((option) => {
     const unlockPlanId = getThemeUnlockPlanId(option.id) ?? normalizedPlanId;
     const unlockPlanConfig = getPlanVisualConfig(unlockPlanId);
     const selectedClass = option.id === state.backgroundTheme ? ' selected' : '';
@@ -1732,6 +1911,7 @@ function settingsPickerHtml(prefix) {
   const selectedFont = FONT_THEME_OPTIONS.find((option) => option.id === state.fontTheme) ?? FONT_THEME_OPTIONS[0];
   const planId = getCurrentAccountPlanId();
   const planConfig = getPlanVisualConfig(planId);
+  const unlockedBackgroundCount = getPlanBackgroundThemeIds(planId).length;
   const cardsHtml = renderCompactPlanThemeButtons(planId);
   const fontOptionsHtml = renderFontThemeButtons();
   const languageOptionsHtml = renderLanguageOptionButtons();
@@ -1772,8 +1952,8 @@ function settingsPickerHtml(prefix) {
         </div>
         <div class="settings-section">
           <div class="settings-section-header">
-            <strong>Background do plano</strong>
-            <span class="muted">${escapeHtml(planConfig.label)}</span>
+            <strong>Backgrounds desbloqueados</strong>
+            <span class="muted">${unlockedBackgroundCount} sets</span>
           </div>
           <div class="style-preset-grid style-preset-grid-plan">
             ${cardsHtml}
@@ -2364,6 +2544,99 @@ function renderGoogleGlyph(extraClass = '') {
   `;
 }
 
+function renderPmpBrandMark(idPrefix = 'pmp') {
+  const safePrefix = String(idPrefix ?? 'pmp').replace(/[^a-zA-Z0-9_-]/g, '') || 'pmp';
+  return `
+    <div class="pmp-logo-mark" aria-hidden="true">
+      <svg class="pmp-logo-svg" viewBox="0 0 100 100" role="img">
+        <defs>
+          <linearGradient id="${safePrefix}Ring" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#67e8f9" />
+            <stop offset="52%" stop-color="#22d3ee" />
+            <stop offset="100%" stop-color="#3b82f6" />
+          </linearGradient>
+          <linearGradient id="${safePrefix}Symbol" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#f8fafc" />
+            <stop offset="42%" stop-color="#67e8f9" />
+            <stop offset="100%" stop-color="#22d3ee" />
+          </linearGradient>
+          <linearGradient id="${safePrefix}Publish" x1="24%" y1="20%" x2="78%" y2="82%">
+            <stop offset="0%" stop-color="#22d3ee" />
+            <stop offset="55%" stop-color="#6366f1" />
+            <stop offset="100%" stop-color="#c084fc" />
+          </linearGradient>
+          <radialGradient id="${safePrefix}InnerGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="rgba(34,211,238,0.28)" />
+            <stop offset="62%" stop-color="rgba(59,130,246,0.05)" />
+            <stop offset="100%" stop-color="transparent" />
+          </radialGradient>
+          <filter id="${safePrefix}Glow" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="1.6" result="b" />
+            <feMerge>
+              <feMergeNode in="b" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        <rect x="6" y="6" width="88" height="88" rx="24" fill="url(#${safePrefix}InnerGlow)" />
+        <rect class="pmp-logo-ring" x="8" y="8" width="84" height="84" rx="22" fill="none" stroke="url(#${safePrefix}Ring)" stroke-width="2.8" />
+        <g class="pmp-logo-network" stroke="url(#${safePrefix}Symbol)" stroke-width="2" fill="none" stroke-linecap="round">
+          <line x1="31" y1="29" x2="43" y2="42" />
+          <line x1="31" y1="71" x2="43" y2="58" />
+          <line x1="68" y1="50" x2="58" y2="50" />
+          <circle class="pmp-logo-node pmp-logo-node-youtube" cx="29" cy="27" r="4.2" fill="#ff1744" stroke="rgba(255,255,255,0.72)" stroke-width="1.2" />
+          <circle class="pmp-logo-node pmp-logo-node-tiktok" cx="72" cy="50" r="4.2" fill="#22d3ee" stroke="rgba(255,255,255,0.72)" stroke-width="1.2" />
+          <circle class="pmp-logo-node pmp-logo-node-instagram" cx="29" cy="73" r="4.2" fill="#d946ef" stroke="rgba(255,255,255,0.72)" stroke-width="1.2" />
+        </g>
+        <g class="pmp-logo-publish" filter="url(#${safePrefix}Glow)">
+          <circle cx="50" cy="50" r="17" fill="rgba(15,23,42,0.68)" stroke="url(#${safePrefix}Publish)" stroke-width="2.4" />
+          <path class="pmp-logo-play" d="M45 40.5L63 50L45 59.5Z" fill="url(#${safePrefix}Publish)" />
+          <path class="pmp-logo-upload" d="M50 68V77M44.5 72.5L50 77.5L55.5 72.5" stroke="url(#${safePrefix}Symbol)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+        </g>
+        <g class="pmp-logo-queue" stroke="url(#${safePrefix}Symbol)" stroke-width="1.7" stroke-linecap="round" opacity="0.82">
+          <line x1="39" y1="79" x2="44" y2="79" />
+          <line x1="48" y1="82" x2="53" y2="82" />
+          <line x1="57" y1="79" x2="62" y2="79" />
+        </g>
+      </svg>
+      <span class="pmp-logo-pulse" aria-hidden="true"></span>
+    </div>
+  `;
+}
+
+function renderPublicSaasNav(options = {}) {
+  const context = options.context === 'login' ? 'login' : 'landing';
+  const idPrefix = options.idPrefix ?? (context === 'login' ? 'loginPmp' : 'publicSaasPmp');
+  const base = context === 'login' ? '/' : '';
+  const loginActive = options.active === 'login';
+  const registerActive = options.active === 'register';
+  const registerLabel = 'Get started';
+
+  return `
+    <header class="public-nav public-saas-nav ${context === 'login' ? 'login-modern-site-nav' : ''}">
+      <a class="public-brand pmp-brand" href="/" data-link aria-label="Platform Multi Publisher">
+        ${renderPmpBrandMark(idPrefix)}
+        <div class="pmp-brand-text">
+          <span class="pmp-brand-kicker">PLATFORM</span>
+          <span class="pmp-brand-name">Multi Publisher</span>
+        </div>
+      </a>
+      <nav class="public-nav-links" aria-label="Menu principal">
+        <a href="${base}#recursos">Recursos</a>
+        <a href="${base}#como-funciona">Como funciona</a>
+        <a href="${base}#integracoes">Integracoes</a>
+        <a href="${base}#seguranca">Seguranca</a>
+        <a href="${base}#planos">Precos</a>
+        <a href="${base}#contato">Contato</a>
+      </nav>
+      <div class="public-nav-actions" data-no-i18n>
+        <a class="public-link" href="/login" data-link data-no-i18n ${loginActive ? 'aria-current="page"' : ''}>Login</a>
+        <a class="public-button" href="/login?mode=register" data-link data-no-i18n ${registerActive ? 'aria-current="page"' : ''}>${escapeHtml(registerLabel)}</a>
+      </div>
+    </header>
+  `;
+}
+
 function renderLoginPage(options = {}) {
   return renderRichLoginPage(options);
   const mode = options.mode === 'register' ? 'register' : 'login';
@@ -2533,64 +2806,30 @@ function renderModernLoginPage(options = {}) {
   }
   const errorHtml = options.error ? `<div class="login-modern-alert" role="alert">⚠ ${escapeHtml(options.error)}</div>` : '';
   const noticeHtml = renderUiNotice();
+  const loginNavHtml = renderPublicSaasNav({
+    context: 'login',
+    active: mode === 'register' ? 'register' : 'login',
+    idPrefix: 'loginHeaderPmp',
+  });
 
   root.innerHTML = `
-    <div class="login-modern" data-mode="${mode}">
-      <div class="login-modern-bg" aria-hidden="true">
+    <div class="login-modern public-product-page public-saas-page login-with-public-nav" data-mode="${mode}">
+      <div class="login-modern-bg public-neon-bg" aria-hidden="true">
         <div class="login-modern-orb login-modern-orb-1"></div>
         <div class="login-modern-orb login-modern-orb-2"></div>
         <div class="login-modern-orb login-modern-orb-3"></div>
         <div class="login-modern-grid"></div>
       </div>
 
+      ${loginNavHtml}
+
       <aside class="login-modern-hero">
         <div class="login-modern-hero-inner">
-          <div class="login-modern-brand">
-            <svg class="login-modern-logo" viewBox="0 0 100 100" aria-hidden="true">
-              <defs>
-                <linearGradient id="loginRing" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#3b82f6" />
-                  <stop offset="55%" stop-color="#6366f1" />
-                  <stop offset="100%" stop-color="#a855f7" />
-                </linearGradient>
-                <linearGradient id="loginLetters" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#22d3ee" />
-                  <stop offset="50%" stop-color="#6366f1" />
-                  <stop offset="100%" stop-color="#c084fc" />
-                </linearGradient>
-                <radialGradient id="loginInnerGlow" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stop-color="rgba(99,102,241,0.4)" />
-                  <stop offset="100%" stop-color="transparent" />
-                </radialGradient>
-                <filter id="loginGlow" x="-30%" y="-30%" width="160%" height="160%">
-                  <feGaussianBlur stdDeviation="1.6" result="b" />
-                  <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-                </filter>
-              </defs>
-              <circle cx="50" cy="50" r="46" fill="url(#loginInnerGlow)" />
-              <circle cx="50" cy="50" r="44" fill="none" stroke="url(#loginRing)" stroke-width="2.5" />
-              <g stroke="url(#loginLetters)" stroke-width="1.8" fill="none" stroke-linecap="round">
-                <circle cx="42" cy="26" r="2.4" fill="url(#loginLetters)" />
-                <circle cx="58" cy="26" r="2.4" fill="url(#loginLetters)" />
-                <circle cx="50" cy="34" r="2.4" fill="url(#loginLetters)" />
-                <line x1="42" y1="26" x2="50" y2="34" />
-                <line x1="58" y1="26" x2="50" y2="34" />
-              </g>
-              <text x="50" y="68" text-anchor="middle"
-                font-family="'Inter', system-ui, sans-serif"
-                font-size="22" font-weight="900"
-                fill="url(#loginLetters)" filter="url(#loginGlow)"
-                letter-spacing="-0.5">PMP</text>
-              <g stroke="url(#loginLetters)" stroke-width="1.6" stroke-linecap="round" opacity="0.85">
-                <line x1="44" y1="80" x2="44" y2="76" />
-                <line x1="48" y1="80" x2="48" y2="74" />
-                <line x1="52" y1="80" x2="52" y2="71" />
-                <line x1="56" y1="80" x2="56" y2="73" />
-              </g>
-            </svg>
+          <div class="login-modern-brand login-modern-brand-compact">
+            <span class="login-modern-brand-orb" aria-hidden="true"></span>
             <div class="login-modern-brand-text">
-              <span class="login-modern-kicker">PLATFORM</span>
-              <span class="login-modern-name">Multi Publisher</span>
+              <span class="login-modern-kicker">ACESSO OPERACIONAL</span>
+              <span class="login-modern-name">Painel centralizado</span>
             </div>
           </div>
 
@@ -2599,7 +2838,7 @@ function renderModernLoginPage(options = {}) {
             <span class="login-modern-headline-accent">Every platform.</span>
           </h1>
           <p class="login-modern-tagline">
-            Schedule, automate and publish to YouTube and TikTok from a single dashboard built for creators who scale.
+            Schedule, automate and publish to YouTube, TikTok and Instagram from a single dashboard built for creators who scale.
           </p>
 
           <div class="login-pmp-stack" id="login-pmp-stack" aria-hidden="false">
@@ -2610,7 +2849,7 @@ function renderModernLoginPage(options = {}) {
               </div>
               <div class="login-pmp-body">
                 <strong>Publish anywhere</strong>
-                <small>YouTube and TikTok from one cockpit</small>
+                <small>YouTube, TikTok and Instagram from one cockpit</small>
               </div>
               <div class="login-pmp-glow" aria-hidden="true"></div>
             </div>
@@ -2709,7 +2948,7 @@ function renderModernLoginPage(options = {}) {
 
           <p class="login-modern-footnote">
             ${mode === 'register'
-              ? 'By creating an account you agree to our terms of service and privacy policy.'
+              ? 'By creating an account you agree to our <a href="/terms" data-link>Terms of Service</a> and <a href="/privacy" data-link>Privacy Policy</a>.'
               : 'Use Google sign-in if you started with Google to restore your workspace correctly.'}
           </p>
         </div>
@@ -3297,6 +3536,71 @@ function handleAuthenticatedNavigation(user) {
   navigate(user.needsPlanSelection ? '/onboarding/plan' : '/workspace/dashboard', true);
 }
 
+async function loadPublicPlanOptions() {
+  try {
+    const plansResult = await api.listPlans();
+    const apiPlans = plansResult.ok ? (plansResult.body?.plans ?? []) : [];
+    return mergePlanDisplayOptions(apiPlans);
+  } catch {
+    return mergePlanDisplayOptions();
+  }
+}
+
+function renderPublicPlanCard(plan) {
+  const planId = normalizePlanCode(plan.id);
+  const isFeatured = planId === 'PRO';
+  const isPremium = planId === 'PREMIUM';
+  const platforms = getPlanAllowedPlatforms(plan);
+  const platformIcons = platforms.map((platform) => `
+    <span class="public-plan-platform-icon" title="${escapeAttribute(PLAN_PLATFORM_LABELS[platform] ?? platform)}">
+      ${renderAnimatedLogoByPlatform(platform, 30) || renderPlatformGlyph(platform, 'small')}
+    </span>
+  `).join('');
+  const platformNames = getPlanPlatformSummary(plan);
+  const durationLabel = Number(plan.durationDays ?? 0) > 0 ? `${formatNumber(plan.durationDays)} dias` : 'Sem mensalidade';
+  const metrics = [
+    { label: 'Tokens mensais', value: `${formatNumber(plan.tokens)} tokens` },
+    { label: 'Bonus diario', value: `+${formatNumber(plan.dailyVisitTokens)} tokens` },
+    { label: 'Custo por campanha', value: formatTokenCost(plan.campaignPublishCostTokens) },
+    { label: 'Thumbnail', value: Number(plan.thumbnailCostTokens ?? 0) > 0 ? formatTokenCost(plan.thumbnailCostTokens) : 'Inclusa' },
+  ];
+  const metricsHtml = metrics.map((metric) => `
+    <li>
+      <span>${escapeHtml(metric.label)}</span>
+      <strong>${escapeHtml(metric.value)}</strong>
+    </li>
+  `).join('');
+  const benefitsHtml = (plan.benefits ?? []).slice(0, 5).map((benefit) => `
+    <li><span aria-hidden="true"></span>${escapeHtml(benefit)}</li>
+  `).join('');
+
+  return `
+    <article class="public-plan-card${isFeatured ? ' public-plan-card-featured' : ''}${isPremium ? ' public-plan-card-premium' : ''}" data-plan="${escapeAttribute(planId)}">
+      <div class="public-plan-card-head">
+        <p class="public-pricing-tier">${escapeHtml(plan.label)}</p>
+        ${isFeatured ? '<span class="public-plan-badge">Mais usado</span>' : ''}
+        ${isPremium ? '<span class="public-plan-badge public-plan-badge-premium">Maximo</span>' : ''}
+      </div>
+      <div class="public-plan-price-row">
+        <strong>${escapeHtml(plan.priceLabel)}</strong>
+        <span>${escapeHtml(durationLabel)}</span>
+      </div>
+      <p>${escapeHtml(plan.description)}</p>
+      <div class="public-plan-platforms" aria-label="Plataformas liberadas">
+        <div>${platformIcons}</div>
+        <span>${escapeHtml(platformNames)}</span>
+      </div>
+      <ul class="public-plan-metrics">
+        ${metricsHtml}
+      </ul>
+      <ul class="public-plan-benefits">
+        ${benefitsHtml}
+      </ul>
+      <a class="public-button" href="/login?mode=register" data-link>${planId === 'FREE' ? 'Comecar gratis' : `Escolher ${escapeHtml(plan.label)}`}</a>
+    </article>
+  `;
+}
+
 async function renderGoogleAuthCallbackPage() {
   renderLoading('Completing Google sign-in...');
 
@@ -3327,12 +3631,11 @@ async function renderGoogleAuthCallbackPage() {
 function renderPlanCard(option, selectedPlan) {
   const isSelected = option.id === selectedPlan;
   const isPremium = option.id === 'PREMIUM';
-  const hasPremiumPlatforms = option.id === 'PRO' || option.id === 'PREMIUM';
-  const platformIcons = hasPremiumPlatforms
-    ? `${renderPlatformGlyph('youtube')}${renderPlatformGlyph('tiktok')}${renderPlatformGlyph('instagram')}`
-    : renderPlatformGlyph('youtube');
+  const platformIcons = getPlanAllowedPlatforms(option)
+    .map((platform) => renderPlatformGlyph(platform))
+    .join('');
   const benefitsHtml = (option.benefits ?? []).map(
-    (b) => `<li class="plan-benefit"><span class="plan-benefit__check">✓</span><span>${escapeHtml(b)}</span></li>`
+    (b) => `<li class="plan-benefit"><span class="plan-benefit__check">&#10003;</span><span>${escapeHtml(b)}</span></li>`
   ).join('');
   return `
     <article class="plan-card ${option.featured ? 'featured' : ''} ${isPremium ? 'plan-card-premium' : ''} ${isSelected ? 'selected' : ''}">
@@ -3340,7 +3643,7 @@ function renderPlanCard(option, selectedPlan) {
         <div class="platform-dashboard-chip-row">
           <span class="pill ${isPremium ? 'warning' : option.featured ? 'success' : 'info'}">${escapeHtml(option.label)}</span>
           ${option.featured && !isPremium ? '<span class="pill success">Mais popular</span>' : ''}
-          ${isPremium ? '<span class="pill warning">Máximo poder</span>' : ''}
+          ${isPremium ? '<span class="pill warning">Maximo poder</span>' : ''}
         </div>
         <div class="plan-price">${escapeHtml(option.priceLabel)}</div>
         <p class="muted plan-description">${escapeHtml(option.description)}</p>
@@ -3363,14 +3666,13 @@ function renderWorkspacePlanCard(option, account) {
   const canUpgrade = !isCurrentPlan;
   const isFeatured = option.id === 'PRO';
   const isPremium = option.id === 'PREMIUM';
-  const hasPremiumPlatforms = option.id === 'PRO' || option.id === 'PREMIUM';
 
-  const platformIcons = hasPremiumPlatforms
-    ? `${renderPlatformGlyph('youtube')}${renderPlatformGlyph('tiktok')}${renderPlatformGlyph('instagram')}`
-    : renderPlatformGlyph('youtube');
+  const platformIcons = getPlanAllowedPlatforms(option)
+    .map((platform) => renderPlatformGlyph(platform))
+    .join('');
 
   const benefitsHtml = (option.benefits ?? []).map(
-    (b) => `<li class="plan-benefit"><span class="plan-benefit__check">✓</span><span>${escapeHtml(b)}</span></li>`
+    (b) => `<li class="plan-benefit"><span class="plan-benefit__check">&#10003;</span><span>${escapeHtml(b)}</span></li>`
   ).join('');
 
   return `
@@ -3380,7 +3682,7 @@ function renderWorkspacePlanCard(option, account) {
           <span class="pill ${isPremium ? 'warning' : isFeatured ? 'success' : 'info'}">${escapeHtml(option.label)}</span>
           ${isCurrentPlan ? '<span class="pill warning">Seu plano atual</span>' : ''}
           ${isFeatured && !isCurrentPlan ? '<span class="pill success">Mais popular</span>' : ''}
-          ${isPremium && !isCurrentPlan ? '<span class="pill warning">Máximo poder</span>' : ''}
+          ${isPremium && !isCurrentPlan ? '<span class="pill warning">Maximo poder</span>' : ''}
         </div>
         <div class="plan-price">${escapeHtml(option.priceLabel)}</div>
         <p class="muted plan-description">${escapeHtml(option.description)}</p>
@@ -3395,11 +3697,11 @@ function renderWorkspacePlanCard(option, account) {
         <div class="plan-account-info">
           <span class="plan-account-info__balance">Saldo atual: <strong>${account.tokens}</strong> tokens</span>
           ${account.dailyVisitClaimedToday
-            ? '<span class="pill info">Bônus diário já coletado hoje</span>'
-            : '<span class="pill success">+' + account.dailyVisitTokens + ' tokens disponíveis hoje</span>'}
+            ? '<span class="pill info">Bonus diario ja coletado hoje</span>'
+            : '<span class="pill success">+' + account.dailyVisitTokens + ' tokens disponiveis hoje</span>'}
           ${account.monthlyGrantClaimedThisMonth
-            ? '<span class="pill info">Grant mensal já recebido este mês</span>'
-            : '<span class="pill success">Grant mensal pendente este mês</span>'}
+            ? '<span class="pill info">Grant mensal ja recebido este mes</span>'
+            : '<span class="pill success">Grant mensal pendente este mes</span>'}
         </div>
       ` : ''}
       ${canUpgrade
@@ -3468,7 +3770,7 @@ async function renderSettingsPage() {
             <span class="settings-hub-card-icon">${renderNeonMediaIcon('thumbnail', 'stat', { state: 'processing' })}</span>
             <span class="settings-hub-card-copy">
               <strong>Backgrounds do seu plano</strong>
-              <small>Free começa simples; planos pagos liberam visuais mais ricos e com mais contraste.</small>
+              <small>Cada plano adiciona 4 sets; upgrades mantem os backgrounds dos planos anteriores.</small>
             </span>
           </div>
           <div class="background-grid background-grid-plan">
@@ -3611,27 +3913,13 @@ async function renderPlanosPage(options = {}) {
   const billingHtml = account?.billingExpiresAt ? `
     <div class="notice ${account.expiresSoon ? 'warning' : 'info'}">
       ${account.expiresSoon ? 'Seu plano expira em breve!' : 'Plano ativo ate:'} <strong>${formatDate(account.billingExpiresAt)}</strong>
-      ${account.expiresSoon ? ' — <a data-link href="/workspace/planos">Renovar agora</a>' : ''}
+      ${account.expiresSoon ? ' - <a data-link href="/workspace/planos">Renovar agora</a>' : ''}
     </div>
   ` : '';
 
-  // Merge API plan data (benefits, active, id) into static options for display
   const plansResult = await api.listPlans();
   const apiPlans = plansResult.ok ? (plansResult.body?.plans ?? []) : [];
-  const mergedOptions = ACCOUNT_PLAN_OPTIONS.map((opt) => {
-    const apiPlan = apiPlans.find((p) => p.code === opt.id);
-    if (!apiPlan) return opt;
-    return {
-      ...opt,
-      id: apiPlan.code,
-      label: apiPlan.name ?? opt.label,
-      benefits: apiPlan.benefits?.length ? apiPlan.benefits : (opt.benefits ?? []),
-      active: apiPlan.active ?? true,
-      tokens: apiPlan.tokens,
-      dailyVisitTokens: apiPlan.dailyVisitTokens,
-      priceBrl: apiPlan.priceBrl,
-    };
-  }).filter((opt) => opt.active !== false);
+  const mergedOptions = mergePlanDisplayOptions(apiPlans);
 
   const planCardsHtml = mergedOptions.map((option) => renderWorkspacePlanCard(option, account)).join('');
 
@@ -3640,7 +3928,7 @@ async function renderPlanosPage(options = {}) {
   const tokenPacksHtml = packs.length === 0 ? '' : `
     <section class="card stack plan-section">
       <h2>Comprar tokens avulsos</h2>
-      <p>Pacotes únicos que somam ao seu saldo. Não substituem a assinatura mensal.</p>
+      <p>Pacotes unicos que somam ao seu saldo. Nao substituem a assinatura mensal.</p>
       <div class="plan-grid">
         ${packs.map((pack) => `
           <article class="plan-card">
@@ -3668,12 +3956,12 @@ async function renderPlanosPage(options = {}) {
       <section class="card stack plan-section">
         <h2>Como funcionam os planos</h2>
         <ul class="stack plan-rules">
-          <li>Cada conta conectada para publicar custa tokens por campanha (1–2 tokens dependendo do plano).</li>
-          <li>Thumbnail custa <strong>1 token</strong> no plano Free. <strong>Grátis</strong> nos planos pagos.</li>
-          <li>Ao mudar de plano, você recebe os tokens mensais do novo plano imediatamente.</li>
-          <li>A publicação só acontece se você tiver tokens suficientes para todas as contas selecionadas.</li>
-          <li>TikTok está disponível somente nos planos <strong>PRO</strong> e <strong>Premium</strong>.</li>
-          <li>Planos pagos têm duração de 30 dias e expiram automaticamente para Free.</li>
+          <li>Cada conta conectada para publicar custa tokens por campanha (1 a 2 tokens dependendo do plano).</li>
+          <li>Thumbnail custa <strong>1 token</strong> no plano Free. <strong>Gratis</strong> nos planos pagos.</li>
+          <li>Ao mudar de plano, voce recebe os tokens mensais do novo plano imediatamente.</li>
+          <li>A publicacao so acontece se voce tiver tokens suficientes para todas as contas selecionadas.</li>
+          <li>TikTok e Instagram estao disponiveis somente nos planos <strong>PRO</strong> e <strong>Premium</strong>.</li>
+          <li>Planos pagos tem duracao de 30 dias e expiram automaticamente para Free.</li>
         </ul>
       </section>
     `,
@@ -3806,7 +4094,7 @@ async function renderPlanSelectionPage(options = {}) {
   const account = result.body?.account ?? null;
   const selectedPlan = account?.plan ?? 'FREE';
   const combinedNoticeHtml = `${renderUiNotice()}${options.error ? `<div class="notice error">${escapeHtml(options.error)}</div>` : ''}`;
-  const planCardsHtml = ACCOUNT_PLAN_OPTIONS.map((option) => renderPlanCard(option, selectedPlan)).join('');
+  const planCardsHtml = mergePlanDisplayOptions().map((option) => renderPlanCard(option, selectedPlan)).join('');
 
   root.innerHTML = `
     <div class="login-wrap">
@@ -3955,156 +4243,1018 @@ function attachGlobalNavigation() {
   });
 }
 
+const LEGAL_LAST_UPDATED = 'May 2, 2026';
+
+function getLegalPagePresentation(activePage, title, subtitle) {
+  const base = {
+    title,
+    subtitle,
+    eyebrow: 'Documentos legais',
+    badge: 'Conformidade operacional',
+    summary: 'Regras claras para uma operacao de video com contas autorizadas, midia, campanhas, filas e publicacoes em plataformas de terceiros.',
+    accent: 'cyan',
+    stats: [
+      ['OAuth', 'Conexao autorizada pelo usuario'],
+      ['Tokens', 'Protecao e controle de acesso'],
+      ['Revogacao', 'Usuario pode desconectar contas'],
+    ],
+  };
+
+  if (activePage === 'privacy') {
+    return {
+      ...base,
+      eyebrow: 'Privacidade e dados',
+      badge: 'Dados, APIs e retencao',
+      title: 'Privacy Policy',
+      ptTitle: 'Politica de Privacidade',
+      summary: 'Explica quais dados sao coletados, por que sao usados, como sao protegidos e como usuarios podem solicitar acesso, correcao, exclusao ou exportacao.',
+      accent: 'cyan',
+      stats: [
+        ['90 dias', 'Retencao apos pedido de exclusao, salvo obrigacao maior'],
+        ['OAuth', 'YouTube, TikTok e Instagram autorizados pelo usuario'],
+        ['Sem ads', 'Dados de TikTok nao sao vendidos nem usados para anuncios'],
+      ],
+    };
+  }
+
+  if (activePage === 'terms') {
+    return {
+      ...base,
+      eyebrow: 'Termos de uso',
+      badge: 'Responsabilidades e limites',
+      title: 'Terms of Service',
+      ptTitle: 'Termos de Servico',
+      summary: 'Define regras de uso, autorizacoes, responsabilidades por conteudo, limites de responsabilidade e relacao com plataformas independentes.',
+      accent: 'violet',
+      stats: [
+        ['Usuario', 'Responsavel por conteudo, direitos e destinos'],
+        ['APIs', 'Publicacao depende das regras de terceiros'],
+        ['Brasil', 'Lei aplicavel conforme os termos'],
+      ],
+    };
+  }
+
+  return {
+    ...base,
+    eyebrow: 'Exclusao de dados',
+    badge: 'User Data Deletion',
+    title: 'User Data Deletion',
+    ptTitle: 'Exclusao de Dados do Usuario',
+    summary: 'Mostra como solicitar exclusao de conta, contas conectadas, tokens OAuth, midias, campanhas e dados de integracao.',
+    accent: 'green',
+    stats: [
+      ['30 dias', 'Prazo para processar pedidos validos'],
+      ['Email', 'Solicitacao pelo endereco da conta'],
+      ['Revogacao', 'Tambem pode ser feita nas plataformas conectadas'],
+    ],
+  };
+}
+
+function stripHtml(value) {
+  return String(value ?? '').replace(/<[^>]+>/g, '').trim();
+}
+
+function getLegalDocumentHeadings(bodyHtml) {
+  return Array.from(String(bodyHtml ?? '').matchAll(/<h2>(.*?)<\/h2>/g))
+    .map((match) => stripHtml(match[1]))
+    .filter(Boolean);
+}
+
+function addLegalSectionIds(bodyHtml) {
+  let sectionIndex = 0;
+  return String(bodyHtml ?? '').replace(/<section>/g, () => `<section id="legal-section-${sectionIndex++}">`);
+}
+
+function getSharedLegalDocuments() {
+  const documents = window.__PMP_LEGAL_DOCUMENTS__;
+  return documents && typeof documents === 'object' ? documents : {};
+}
+
+function getLegalDocument(activePage) {
+  const document = getSharedLegalDocuments()[activePage];
+  return document && Array.isArray(document.sections) ? document : null;
+}
+
+function renderLegalDocumentBodyHtml(documentData) {
+  return documentData.sections.map((section) => `
+    <section>
+      <h2>${escapeHtml(section.heading)}</h2>
+      ${String(section.html ?? '')}
+    </section>
+  `).join('');
+}
+
+function renderPublicFooter() {
+  return `
+    <footer class="public-footer legal-saas-footer">
+      <div class="public-footer-brand">
+        <strong>Platform Multi Publisher</strong>
+        <span>Publicacao profissional sem prometer resultados dependentes de terceiros.</span>
+      </div>
+      <nav class="public-footer-links" aria-label="Legal and account links">
+        <a href="/privacy" data-link>Privacy Policy</a>
+        <a href="/terms" data-link>Terms of Service</a>
+        <a href="/data-deletion" data-link>User Data Deletion</a>
+        <a href="/login?mode=register" data-link>Comecar agora</a>
+      </nav>
+    </footer>
+  `;
+}
+
+function renderLegalPublicNav(activePage) {
+  return `
+    <header class="public-nav legal-saas-nav">
+      <a class="public-brand pmp-brand" href="/" data-link aria-label="Platform Multi Publisher">
+        <span class="public-brand-mark legal-brand-mark">PMP</span>
+        <span class="pmp-brand-text">
+          <span class="pmp-brand-kicker">PLATFORM</span>
+          <span class="pmp-brand-name">Multi Publisher</span>
+        </span>
+      </a>
+      <nav class="public-nav-links" aria-label="Main website links">
+        <a href="/#recursos" data-link>Recursos</a>
+        <a href="/#como-funciona" data-link>Como funciona</a>
+        <a href="/#integracoes" data-link>Integracoes</a>
+        <a href="/#seguranca" data-link>Seguranca</a>
+        <a href="/#planos" data-link>Precos</a>
+      </nav>
+      <nav class="legal-nav-links" aria-label="Legal pages">
+        <a href="/privacy" data-link ${activePage === 'privacy' ? 'aria-current="page"' : ''}>Privacy</a>
+        <a href="/terms" data-link ${activePage === 'terms' ? 'aria-current="page"' : ''}>Terms</a>
+        <a href="/data-deletion" data-link ${activePage === 'data-deletion' ? 'aria-current="page"' : ''}>Data Deletion</a>
+      </nav>
+      <div class="public-nav-actions">
+        <a class="public-link" href="/login" data-link>Entrar</a>
+        <a class="public-button" href="/login?mode=register" data-link>Comecar agora</a>
+      </div>
+    </header>
+  `;
+}
+
+function renderLegalShell(activePage, title, subtitle, bodyHtml, lastUpdated = LEGAL_LAST_UPDATED, reviewNote = 'This document should be reviewed by a qualified legal professional before publishing or relying on it for platform approval.') {
+  const page = getLegalPagePresentation(activePage, title, subtitle);
+  const headings = getLegalDocumentHeadings(bodyHtml);
+  const decoratedBodyHtml = addLegalSectionIds(bodyHtml);
+  const statsHtml = page.stats.map(([value, label]) => `
+    <article>
+      <strong>${escapeHtml(value)}</strong>
+      <span>${escapeHtml(label)}</span>
+    </article>
+  `).join('');
+  const tocHtml = headings.map((heading, index) => `
+    <a href="#legal-section-${index}">${escapeHtml(heading)}</a>
+  `).join('');
+
+  root.innerHTML = `
+    <div class="public-landing legal-page legal-saas-page public-saas-page" data-legal-page="${escapeAttribute(activePage)}" data-legal-accent="${escapeAttribute(page.accent)}">
+      <div class="login-modern-bg public-neon-bg" aria-hidden="true">
+        <div class="login-modern-orb login-modern-orb-1"></div>
+        <div class="login-modern-orb login-modern-orb-2"></div>
+        <div class="login-modern-grid"></div>
+      </div>
+      <div class="public-shell">
+        ${renderLegalPublicNav(activePage)}
+        <main class="legal-main legal-saas-main">
+          <section class="legal-hero legal-saas-hero">
+            <div class="legal-hero-copy">
+              <p class="public-eyebrow">${escapeHtml(page.eyebrow)}</p>
+              <span class="legal-hero-badge">${escapeHtml(page.badge)}</span>
+              <h1>${escapeHtml(page.ptTitle ?? page.title)}</h1>
+              <p>${escapeHtml(page.summary)}</p>
+              <div class="legal-meta-row">
+                <span>Atualizado em: ${escapeHtml(lastUpdated)}</span>
+                <span>Website oficial: plataformmultipublisher.com</span>
+                <span>Brasil</span>
+              </div>
+              <div class="legal-hero-actions">
+                <a class="public-button public-button-large" href="/" data-link>Ver pagina principal</a>
+                <a class="public-ghost-button" href="#legal-contact">Entrar em contato</a>
+              </div>
+            </div>
+            <aside class="legal-dashboard-card" aria-label="Resumo visual de seguranca e operacao">
+              <div class="legal-dashboard-top">
+                <span>${renderNeonMediaIcon('storage', 'stat', { state: 'success' })}</span>
+                <div>
+                  <strong>Workspace com autorizacao do usuario</strong>
+                  <small>Campanhas, biblioteca, contas conectadas e fila de publicacao.</small>
+                </div>
+              </div>
+              <div class="legal-platform-row" aria-label="Plataformas suportadas">
+                ${renderAnimatedLogoByPlatform('youtube', 36)}
+                ${renderAnimatedLogoByPlatform('tiktok', 36)}
+                ${renderAnimatedLogoByPlatform('instagram', 36)}
+              </div>
+              <div class="legal-status-list">
+                <span><b></b> Tokens protegidos</span>
+                <span><b></b> Revogacao de acesso</span>
+                <span><b></b> Logs de publicacao</span>
+              </div>
+              <p>Platform Multi Publisher nao e afiliado, patrocinado ou operado oficialmente por YouTube, TikTok, Instagram, Google ou Meta.</p>
+            </aside>
+          </section>
+
+          <section class="legal-summary-grid" aria-label="Resumo do documento">
+            ${statsHtml}
+          </section>
+
+          <p class="legal-review-note">
+            ${escapeHtml(reviewNote)}
+          </p>
+
+          <section class="legal-content-shell">
+            <aside class="legal-toc" aria-label="Indice do documento">
+              <strong>Nesta pagina</strong>
+              ${tocHtml}
+            </aside>
+            <article class="legal-document">
+              ${decoratedBodyHtml}
+            </article>
+          </section>
+
+          <section id="legal-contact" class="legal-contact-card">
+            <div>
+              <p class="public-eyebrow">Contato</p>
+              <h2>Precisa falar sobre privacidade, termos ou exclusao de dados?</h2>
+              <p>Use o formulario para preparar uma mensagem ao contato oficial. Para exclusao de dados, envie a solicitacao pelo email associado a conta.</p>
+            </div>
+            <form class="public-contact-form legal-contact-form" data-public-contact-form novalidate>
+              <label>Nome<input name="name" autocomplete="name" required /></label>
+              <label>Email<input name="email" type="email" autocomplete="email" required /></label>
+              <label>Empresa<input name="company" autocomplete="organization" /></label>
+              <label class="public-contact-message">Mensagem<textarea name="message" rows="4" required></textarea></label>
+              <p class="public-form-feedback" data-contact-feedback aria-live="polite"></p>
+              <button class="public-button public-button-large" type="submit">Enviar mensagem</button>
+            </form>
+          </section>
+
+        </main>
+        ${renderPublicFooter()}
+      </div>
+    </div>
+  `;
+
+  injectLogoStyles();
+  bindPublicContactForm();
+}
+
+function renderLegalDocumentPage(activePage) {
+  const documentData = getLegalDocument(activePage);
+  if (!documentData) {
+    root.innerHTML = `
+      <div class="public-landing legal-page legal-saas-page public-saas-page">
+        <div class="public-shell">
+          ${renderLegalPublicNav(activePage)}
+          <main class="legal-main legal-saas-main">
+            <section class="legal-hero legal-saas-hero">
+              <div class="legal-hero-copy">
+                <p class="public-eyebrow">Documentos legais</p>
+                <h1>Documento indisponivel</h1>
+                <p>Nao foi possivel carregar o conteudo legal compartilhado. Atualize a pagina ou tente novamente.</p>
+              </div>
+            </section>
+          </main>
+          ${renderPublicFooter()}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  renderLegalShell(
+    activePage,
+    documentData.title,
+    documentData.subtitle,
+    renderLegalDocumentBodyHtml(documentData),
+    documentData.lastUpdated || LEGAL_LAST_UPDATED,
+    documentData.reviewNote,
+  );
+}
+
+function renderPrivacyPolicyPage() {
+  renderLegalDocumentPage('privacy');
+}
+
+function renderTermsOfServicePage() {
+  renderLegalDocumentPage('terms');
+}
+
+function renderDataDeletionPage() {
+  renderLegalDocumentPage('data-deletion');
+}
 function unauthorizedRedirect() {
   state.me = null;
   navigate('/login', true);
 }
 
-function renderPublicLandingPage() {
-  root.innerHTML = `
-    <div class="public-landing">
-      <header class="public-nav">
-        <a class="public-brand" href="/" data-link aria-label="Platform Multi Publisher">
-          <span class="public-brand-mark">PMP</span>
-          <span>
-            <strong>Platform Multi Publisher</strong>
-            <small>YouTube, TikTok e Instagram</small>
-          </span>
-        </a>
-        <nav class="public-nav-links" aria-label="Conteudo principal">
-          <a href="#plataformas">Plataformas</a>
-          <a href="#dashboard-publico">Dashboard</a>
-          <a href="#seo-base">SEO</a>
-        </nav>
-        <div class="public-nav-actions">
-          <a class="public-link" href="/login" data-link>Entrar</a>
-          <a class="public-button" href="/login?mode=register" data-link>Criar conta</a>
+async function renderPublicLandingPage() {
+  const publicPlanOptions = await loadPublicPlanOptions();
+  const planCardsHtml = publicPlanOptions.map((plan) => renderPublicPlanCard(plan)).join('');
+  const platformCardsHtml = [
+    {
+      id: 'youtube',
+      title: 'YouTube',
+      detail: 'Envio de videos, Shorts, playlists, status e historico operacional por campanha.',
+      meta: 'upload + playlist',
+    },
+    {
+      id: 'tiktok',
+      title: 'TikTok',
+      detail: 'Fluxo autorizado para videos curtos, fila de revisao e tratamento de erros.',
+      meta: 'upload + publish',
+    },
+    {
+      id: 'instagram',
+      title: 'Instagram',
+      detail: 'Reels, legendas, conta profissional e acompanhamento consolidado no workspace.',
+      meta: 'reels + feed',
+    },
+  ].map((platform) => `
+    <article class="public-platform-card" data-platform="${escapeAttribute(platform.id)}">
+      <div class="public-platform-card-head">
+        <div class="public-platform-icon" aria-hidden="true">
+          ${renderAnimatedLogoByPlatform(platform.id, 48)}
         </div>
-      </header>
+        <span>${escapeHtml(platform.meta)}</span>
+      </div>
+      <h3>${escapeHtml(platform.title)}</h3>
+      <p>${escapeHtml(platform.detail)}</p>
+    </article>
+  `).join('');
 
-      <main>
-        <section class="public-hero">
-          <div class="public-hero-copy">
-            <p class="public-eyebrow">Automacao visual para criadores e equipes</p>
-            <h1>Platform Multi Publisher</h1>
-            <p class="public-hero-text">
-              Planeje campanhas, organize midias e publique videos em YouTube, TikTok e Instagram a partir de um unico workspace com dashboard operacional.
-            </p>
+  const stepsHtml = [
+    ['01', 'Conecte suas contas', 'Autorize YouTube, TikTok e Instagram por OAuth, sempre com permissao do usuario.'],
+    ['02', 'Organize seus videos', 'Suba arquivos, capas e descricoes em uma biblioteca de midia reutilizavel.'],
+    ['03', 'Crie campanhas', 'Defina destinos, legendas, privacidade, agenda e regras antes de enviar.'],
+    ['04', 'Acompanhe a fila', 'Veja jobs prontos, enviados, publicados, pendentes ou com falha em um painel.'],
+  ].map(([step, title, text]) => `
+    <article class="public-flow-card">
+      <span class="public-flow-step">${escapeHtml(step)}</span>
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(text)}</p>
+    </article>
+  `).join('');
+
+  const featuresHtml = [
+    ['playlist', 'Campanhas multiplataforma', 'Agrupe videos, destinos e regras por campanha para nao repetir trabalho.', 'processing'],
+    ['library', 'Biblioteca de midia', 'Centralize videos, thumbnails, descricoes e arquivos prontos para reutilizar.', 'info'],
+    ['available', 'Contas via OAuth', 'Conecte contas autorizadas e mantenha controle sobre revogacao e reconexao.', 'success'],
+    ['clock', 'Fila de publicacao', 'Acompanhe o que esta pronto, em envio, pendente, publicado ou com erro.', 'processing'],
+    ['warning', 'Status e logs', 'Transforme falhas de API em mensagens operacionais para agir rapido.', 'warning'],
+    ['folder', 'Organizacao por workspace', 'Separe operacoes por equipe, cliente, canal ou rotina de publicacao.', 'info'],
+    ['storage', 'Seguranca operacional', 'Tokens protegidos, permissoes claras e trilha de acoes importantes.', 'success'],
+    ['video', 'YouTube, TikTok e Instagram', 'Use os canais conectados sem insinuar parceria oficial com as plataformas.', 'info'],
+  ].map(([icon, title, text, state]) => `
+    <article class="public-feature">
+      <span class="public-feature-icon">${renderNeonMediaIcon(icon, 'stat', { state })}</span>
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(text)}</p>
+    </article>
+  `).join('');
+
+  const audiencesHtml = [
+    ['Criadores de conteudo', 'Organize uploads, copies e canais sem depender de planilhas soltas.'],
+    ['Agencias', 'Padronize operacoes por cliente e reduza retrabalho entre social media e edicao.'],
+    ['Social media managers', 'Veja prioridades, pendencias e falhas antes que virem problema.'],
+    ['Times de marketing', 'Centralize campanhas de video e mantenha uma rotina previsivel.'],
+    ['Empresas com volume', 'Controle multiplos destinos e publicacoes recorrentes com menos operacao manual.'],
+  ].map(([title, text]) => `
+    <article class="public-audience-card">
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(text)}</p>
+    </article>
+  `).join('');
+
+  const benefitsHtml = [
+    ['Menos retrabalho', 'Cadastre a peca uma vez e reaproveite em campanhas e destinos diferentes.'],
+    ['Mais controle operacional', 'Saiba o que esta pronto, aguardando, enviado, publicado ou falhou.'],
+    ['Publicacao centralizada', 'Reduza troca de abas e organize a rotina em um unico workspace.'],
+    ['Visao clara por campanha', 'Acompanhe status, contas conectadas, midias e fila em uma narrativa unica.'],
+    ['Menos erro manual', 'Checklist de tokens, autorizacao, destino e revisao antes do disparo.'],
+    ['Producao mais organizada', 'Biblioteca, campanhas e logs ficam juntos para consulta posterior.'],
+  ].map(([title, text]) => `
+    <article class="public-benefit-card">
+      <span aria-hidden="true"></span>
+      <div>
+        <h3>${escapeHtml(title)}</h3>
+        <p>${escapeHtml(text)}</p>
+      </div>
+    </article>
+  `).join('');
+
+  const faqHtml = [
+    ['Como funciona a integracao com YouTube?', 'O usuario conecta a conta autorizada e escolhe quando usar o canal em campanhas. A publicacao depende das permissoes, regras e disponibilidade da API do Google/YouTube.'],
+    ['Como funciona a integracao com TikTok?', 'A plataforma usa o fluxo autorizado do TikTok para identificar a conta conectada, preparar videos selecionados pelo usuario e acompanhar status quando o escopo estiver aprovado.'],
+    ['Como funciona a integracao com Instagram?', 'O fluxo foi pensado para contas profissionais compatíveis com publicacao de Reels/feed via Meta, com revisao de legenda, midia e destino.'],
+    ['Meus dados ficam seguros?', 'A landing resume os controles principais: OAuth, tokens protegidos, acesso por conta e links publicos de privacidade, termos e exclusao de dados.'],
+    ['Como desconectar contas?', 'O usuario pode desconectar no workspace e tambem revogar o acesso diretamente nas configuracoes de apps conectados da plataforma.'],
+    ['O que acontece se uma publicacao falhar?', 'O job fica marcado para revisao, com status e mensagem operacional. A falha pode ocorrer por limite, permissao, token expirado, regra da plataforma ou rejeicao do conteudo.'],
+  ].map(([question, answer]) => `
+    <article class="public-faq-card">
+      <h3>${escapeHtml(question)}</h3>
+      <p>${escapeHtml(answer)}</p>
+    </article>
+  `).join('');
+
+  root.innerHTML = `
+    <div class="public-landing public-product-page public-saas-page">
+      <div class="login-modern-bg public-neon-bg" aria-hidden="true">
+        <div class="login-modern-orb login-modern-orb-1"></div>
+        <div class="login-modern-orb login-modern-orb-2"></div>
+        <div class="login-modern-orb login-modern-orb-3"></div>
+        <div class="login-modern-grid"></div>
+      </div>
+      <div class="public-shell">
+        ${renderPublicSaasNav({ context: 'landing', idPrefix: 'publicSaasPmp' })}
+
+        <main class="public-product-main">
+          <section class="public-hero public-saas-hero">
+            <div class="public-hero-copy">
+              <p class="public-eyebrow">SaaS operacional para video</p>
+              <h1>Publique videos no YouTube, TikTok e Instagram sem repetir o trabalho.</h1>
+              <p class="public-hero-text">Organize campanhas, conecte suas contas, acompanhe a fila de publicacao e gerencie tudo em um unico painel.</p>
+              <div class="public-hero-actions">
+                <a class="public-button public-button-large" href="/login?mode=register" data-link>Comecar agora</a>
+                <a class="public-secondary-button" href="#demonstracao">Ver como funciona</a>
+                <a class="public-ghost-button" href="#contato">Entrar em contato</a>
+              </div>
+              <div class="public-trustline">
+                <span>Campanhas</span>
+                <span>Biblioteca de midia</span>
+                <span>Destinos conectados</span>
+                <span>Fila de publicacao</span>
+              </div>
+            </div>
+
+            <div class="public-dashboard-mockup" id="demonstracao" role="img" aria-label="Preview visual do dashboard com campanhas, biblioteca de midia, contas conectadas, fila de publicacao e status">
+              <div class="public-mockup-topbar">
+                <span></span><span></span><span></span>
+                <strong>Workspace operacional</strong>
+              </div>
+              <div class="public-mockup-grid">
+                <section class="public-mockup-panel public-mockup-campaigns">
+                  <div class="public-mockup-panel-head">
+                    <span>Campanhas</span>
+                    <strong>16 ativas</strong>
+                  </div>
+                  <div class="public-mockup-campaign active">
+                    <b>Lancamento Shorts</b>
+                    <small>YouTube + TikTok</small>
+                    <span style="width:76%"></span>
+                  </div>
+                  <div class="public-mockup-campaign">
+                    <b>Reels da semana</b>
+                    <small>Instagram</small>
+                    <span style="width:44%"></span>
+                  </div>
+                </section>
+                <section class="public-mockup-panel public-mockup-library">
+                  <div class="public-mockup-panel-head">
+                    <span>Biblioteca</span>
+                    <strong>128 itens</strong>
+                  </div>
+                  <div class="public-mockup-media-row">
+                    <span>${renderNeonMediaIcon('video', 'mini', { state: 'success' })}</span>
+                    <div><b>video_final_9x16.mp4</b><small>Pronto para publicar</small></div>
+                  </div>
+                  <div class="public-mockup-media-row">
+                    <span>${renderNeonMediaIcon('thumbnail', 'mini', { state: 'warning' })}</span>
+                    <div><b>capa_campanha.png</b><small>Revisar texto seguro</small></div>
+                  </div>
+                </section>
+                <section class="public-mockup-panel public-mockup-accounts">
+                  <div class="public-mockup-panel-head">
+                    <span>Contas conectadas</span>
+                    <strong>OAuth</strong>
+                  </div>
+                  <div class="public-account-icons">
+                    ${renderAnimatedLogoByPlatform('youtube', 34)}
+                    ${renderAnimatedLogoByPlatform('tiktok', 34)}
+                    ${renderAnimatedLogoByPlatform('instagram', 34)}
+                  </div>
+                  <p>Usuario controla autorizacao, reconexao e revogacao.</p>
+                </section>
+                <section class="public-mockup-panel public-mockup-queue">
+                  <div class="public-mockup-panel-head">
+                    <span>Fila de publicacao</span>
+                    <strong>Agora</strong>
+                  </div>
+                  <div class="public-queue-row"><span data-state="ready"></span><b>Pronto</b><small>28 jobs</small></div>
+                  <div class="public-queue-row"><span data-state="sending"></span><b>Enviando</b><small>12 jobs</small></div>
+                  <div class="public-queue-row"><span data-state="risk"></span><b>Revisar</b><small>6 jobs</small></div>
+                </section>
+              </div>
+            </div>
+          </section>
+
+          <section class="public-section public-proof-strip" aria-label="Resumo do produto">
+            <article><strong>1</strong><span>workspace para campanhas, midia e destinos</span></article>
+            <article><strong>3</strong><span>integracoes previstas: YouTube, TikTok e Instagram</span></article>
+            <article><strong>OAuth</strong><span>conexao autorizada pelo usuario</span></article>
+            <article><strong>Logs</strong><span>status e falhas visiveis para operacao</span></article>
+          </section>
+
+          <section id="como-funciona" class="public-section public-flow">
+            <div class="public-section-head">
+              <p class="public-eyebrow">Como funciona</p>
+              <h2>Da conta conectada ao job acompanhado no painel.</h2>
+            </div>
+            <div class="public-flow-grid">${stepsHtml}</div>
+          </section>
+
+          <section id="recursos" class="public-section">
+            <div class="public-section-head">
+              <p class="public-eyebrow">Recursos principais</p>
+              <h2>O essencial para publicar video em volume sem bagunca.</h2>
+            </div>
+            <div class="public-feature-grid public-feature-grid-dense">${featuresHtml}</div>
+          </section>
+
+          <section class="public-section public-audience-section">
+            <div class="public-section-head">
+              <p class="public-eyebrow">Para quem e</p>
+              <h2>Feito para operacoes que precisam de previsibilidade.</h2>
+            </div>
+            <div class="public-audience-grid">${audiencesHtml}</div>
+          </section>
+
+          <section class="public-section public-benefits-section">
+            <div class="public-section-head">
+              <p class="public-eyebrow">Beneficios</p>
+              <h2>Menos troca de ferramenta. Mais clareza sobre cada publicacao.</h2>
+            </div>
+            <div class="public-benefit-grid">${benefitsHtml}</div>
+          </section>
+
+          <section id="integracoes" class="public-section">
+            <div class="public-section-head">
+              <p class="public-eyebrow">Integracoes</p>
+              <h2>YouTube, TikTok e Instagram em uma rotina unica.</h2>
+              <p class="public-section-note">Os icones identificam as plataformas suportadas e nao indicam afiliacao, patrocinio ou operacao oficial por elas.</p>
+            </div>
+            <div class="public-platform-grid">${platformCardsHtml}</div>
+          </section>
+
+          <section id="seguranca" class="public-section public-security-section">
+            <div class="public-security-card">
+              <div>
+                <p class="public-eyebrow">Seguranca e conformidade</p>
+                <h2>Controle de acesso claro para usuarios e equipes.</h2>
+                <p>As contas sao conectadas por autorizacao do usuario. Tokens devem ser protegidos, o usuario controla as contas conectadas e pode revogar acesso no workspace ou na propria plataforma.</p>
+                <p class="public-disclaimer">Platform Multi Publisher nao e afiliado, patrocinado ou operado oficialmente por YouTube, TikTok, Instagram, Google ou Meta.</p>
+              </div>
+              <div class="public-security-links">
+                <a href="/privacy" data-link>Privacy Policy</a>
+                <a href="/terms" data-link>Terms of Service</a>
+                <a href="/data-deletion" data-link>User Data Deletion</a>
+              </div>
+            </div>
+          </section>
+
+          <section id="planos" class="public-section">
+            <div class="public-section-head">
+              <p class="public-eyebrow">Precos</p>
+              <h2>Planos reais do workspace, com limites claros.</h2>
+              <p class="public-section-note">Valores, plataformas e tokens seguem a mesma configuracao da pagina Planos. Publicacoes podem depender de regras e disponibilidade das APIs de terceiros.</p>
+            </div>
+            <div class="public-pricing-grid">${planCardsHtml}</div>
+          </section>
+
+          <section id="faq" class="public-section public-faq">
+            <div class="public-section-head">
+              <p class="public-eyebrow">FAQ</p>
+              <h2>Duvidas comuns antes de conectar suas contas.</h2>
+            </div>
+            <div class="public-faq-grid">${faqHtml}</div>
+          </section>
+
+          <section id="contato" class="public-section public-contact-section">
+            <div class="public-contact-card">
+              <div>
+                <p class="public-eyebrow">Contato</p>
+                <h2>Quer validar a operacao antes de cadastrar?</h2>
+                <p>Envie nome, email, empresa e mensagem. O formulario abre uma mensagem para o email de contato oficial.</p>
+              </div>
+              <form class="public-contact-form" data-public-contact-form novalidate>
+                <label>Nome<input name="name" autocomplete="name" required /></label>
+                <label>Email<input name="email" type="email" autocomplete="email" required /></label>
+                <label>Empresa<input name="company" autocomplete="organization" /></label>
+                <label class="public-contact-message">Mensagem<textarea name="message" rows="4" required></textarea></label>
+                <p class="public-form-feedback" data-contact-feedback aria-live="polite"></p>
+                <button class="public-button public-button-large" type="submit">Enviar mensagem</button>
+              </form>
+            </div>
+          </section>
+
+          <section class="public-section public-final-cta">
+            <p class="public-eyebrow">Comece pela organizacao</p>
+            <h2>Pronto para centralizar sua operacao de videos?</h2>
             <div class="public-hero-actions">
               <a class="public-button public-button-large" href="/login?mode=register" data-link>Comecar agora</a>
-              <a class="public-secondary-button" href="/login" data-link>Acessar workspace</a>
+              <a class="public-secondary-button" href="#contato">Solicitar acesso</a>
             </div>
-            <div class="public-proof-row" aria-label="Recursos principais">
-              <span>Campanhas por plataforma</span>
-              <span>Biblioteca de midias</span>
-              <span>Fila de publicacao</span>
-            </div>
-          </div>
+          </section>
+        </main>
 
-          <div class="public-preview" data-platform="youtube" aria-label="Preview operacional do produto">
-            <div class="public-preview-toolbar" role="tablist" aria-label="Escolha de plataforma">
-              <button type="button" class="active" data-landing-platform="youtube">YouTube</button>
-              <button type="button" data-landing-platform="tiktok">TikTok</button>
-              <button type="button" data-landing-platform="instagram">Instagram</button>
-            </div>
-            <div class="public-preview-screen">
-              <div class="public-metric-line">
-                <span>Campanhas ativas</span>
-                <strong>24</strong>
-              </div>
-              <div class="public-channel-rail">
-                <span class="rail rail-youtube"></span>
-                <span class="rail rail-tiktok"></span>
-                <span class="rail rail-instagram"></span>
-              </div>
-              <div class="public-preview-panels">
-                <article data-landing-panel="youtube">
-                  ${renderPlatformLogo3d('youtube', 34, 'platform-dot-logo')}
-                  <h2>YouTube</h2>
-                  <p>Videos, Shorts, thumbnails, playlists e destinos do canal no mesmo fluxo de campanha.</p>
-                </article>
-                <article data-landing-panel="tiktok" hidden>
-                  ${renderPlatformLogo3d('tiktok', 34, 'platform-dot-logo')}
-                  <h2>TikTok</h2>
-                  <p>Publicacoes curtas, privacidade, fila de envio e reautenticacao acompanhadas pelo dashboard.</p>
-                </article>
-                <article data-landing-panel="instagram" hidden>
-                  ${renderPlatformLogo3d('instagram', 34, 'platform-dot-logo')}
-                  <h2>Instagram</h2>
-                  <p>Reels com legenda, conta conectada e status de publicacao vistos junto das outras redes.</p>
-                </article>
-              </div>
-              <div class="public-job-grid" aria-label="Estados de publicacao">
-                <span data-state="ready">Ready</span>
-                <span data-state="sending">Sending</span>
-                <span data-state="published">Published</span>
-                <span data-state="risk">Review</span>
-              </div>
-            </div>
+        <footer class="public-footer" aria-label="Rodape institucional">
+          <div class="public-footer-brand">
+            <strong>Platform Multi Publisher</strong>
+            <span>Publicacao profissional sem prometer resultados dependentes de terceiros.</span>
           </div>
-        </section>
-
-        <section id="plataformas" class="public-section">
-          <div class="public-section-head">
-            <p class="public-eyebrow">Operacao multi canal</p>
-            <h2>Uma campanha, varias redes, menos retrabalho.</h2>
-          </div>
-          <div class="public-feature-grid">
-            <article>
-              ${renderPlatformLogo3d('youtube', 38, 'platform-dot-logo')}
-              <h3>YouTube</h3>
-              <p>Controle canais, playlists, thumbnails e publicacoes com historico de jobs.</p>
-            </article>
-            <article>
-              ${renderPlatformLogo3d('tiktok', 38, 'platform-dot-logo')}
-              <h3>TikTok</h3>
-              <p>Centralize conta, privacidade, tentativas de envio e bloqueios de autenticacao.</p>
-            </article>
-            <article>
-              ${renderPlatformLogo3d('instagram', 38, 'platform-dot-logo')}
-              <h3>Instagram</h3>
-              <p>Leve Reels para dentro do mesmo planejamento usado pelas outras plataformas.</p>
-            </article>
-          </div>
-        </section>
-
-        <section id="dashboard-publico" class="public-section public-dashboard-strip">
-          <div>
-            <p class="public-eyebrow">Dashboard de projeto</p>
-            <h2>Veja saude, fila, midias e riscos antes da publicacao sair do trilho.</h2>
-          </div>
-          <div class="public-stat-board" aria-label="Resumo visual do dashboard">
-            <div><strong>92</strong><span>health</span></div>
-            <div><strong>61</strong><span>targets</span></div>
-            <div><strong>14</strong><span>destinos</span></div>
-            <div><strong>3</strong><span>alertas</span></div>
-          </div>
-        </section>
-
-        <section id="seo-base" class="public-section public-seo-section">
-          <div class="public-section-head">
-            <p class="public-eyebrow">Base para aparecer no Google</p>
-            <h2>Pagina publica, sitemap, robots e metadados prontos para indexacao.</h2>
-          </div>
-          <div class="public-check-grid">
-            <span>Conteudo indexavel na raiz</span>
-            <span>Sitemap XML publico</span>
-            <span>Robots com areas privadas bloqueadas</span>
-            <span>Title, description e dados estruturados</span>
-          </div>
-        </section>
-      </main>
-
-      <footer class="public-footer">
-        <span>Platform Multi Publisher</span>
-        <a href="/login?mode=register" data-link>Criar workspace</a>
-      </footer>
+          <nav class="public-footer-links" aria-label="Links institucionais">
+            <a href="/privacy" data-link>Privacy Policy</a>
+            <a href="/terms" data-link>Terms of Service</a>
+            <a href="/data-deletion" data-link>User Data Deletion</a>
+            <a href="/login" data-link>Entrar</a>
+          </nav>
+        </footer>
+      </div>
     </div>
   `;
 
+  injectLogoStyles();
   bindPublicLandingInteractions();
+  bindPublicContactForm();
 }
 
+async function renderPublicLandingPageLegacy() {
+  const publicPlanOptions = await loadPublicPlanOptions();
+  const platformCardsHtml = [
+    {
+      id: 'youtube',
+      title: 'YouTube',
+      detail: 'Videos, Shorts, thumbnails, playlists e historico de jobs.',
+      meta: 'upload + playlist',
+    },
+    {
+      id: 'tiktok',
+      title: 'TikTok',
+      detail: 'Videos curtos, autorizacao oficial e fila de revisao.',
+      meta: 'upload + publish',
+    },
+    {
+      id: 'instagram',
+      title: 'Instagram',
+      detail: 'Reels, legenda, conta profissional e status consolidado.',
+      meta: 'reels + feed',
+    },
+  ].map((platform) => `
+    <article class="public-platform-card" data-platform="${escapeAttribute(platform.id)}">
+      <div class="public-platform-card-head">
+        <div class="public-platform-icon" aria-hidden="true">
+          ${renderAnimatedLogoByPlatform(platform.id, 48)}
+        </div>
+        <span>${escapeHtml(platform.meta)}</span>
+      </div>
+      <h3>${escapeHtml(platform.title)}</h3>
+      <p>${escapeHtml(platform.detail)}</p>
+    </article>
+  `).join('');
+
+  const planCardsHtml = publicPlanOptions.map((plan) => renderPublicPlanCard(plan)).join('');
+
+  root.innerHTML = `
+    <div class="public-landing public-product-page">
+      <div class="login-modern-bg public-neon-bg" aria-hidden="true">
+        <div class="login-modern-orb login-modern-orb-1"></div>
+        <div class="login-modern-orb login-modern-orb-2"></div>
+        <div class="login-modern-orb login-modern-orb-3"></div>
+        <div class="login-modern-grid"></div>
+      </div>
+      <div class="public-shell">
+        <header class="public-nav">
+          <a class="public-brand pmp-brand" href="/" data-link aria-label="Platform Multi Publisher">
+            <div class="pmp-logo-mark" aria-hidden="true">
+              <svg class="pmp-logo-svg" viewBox="0 0 100 100" role="img">
+                <defs>
+                  <linearGradient id="publicPmpRing" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#67e8f9" />
+                    <stop offset="52%" stop-color="#22d3ee" />
+                    <stop offset="100%" stop-color="#3b82f6" />
+                  </linearGradient>
+                  <linearGradient id="publicPmpLetters" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#f8fafc" />
+                    <stop offset="42%" stop-color="#67e8f9" />
+                    <stop offset="100%" stop-color="#22d3ee" />
+                  </linearGradient>
+                  <radialGradient id="publicPmpInnerGlow" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stop-color="rgba(34,211,238,0.28)" />
+                    <stop offset="62%" stop-color="rgba(59,130,246,0.05)" />
+                    <stop offset="100%" stop-color="transparent" />
+                  </radialGradient>
+                  <filter id="publicPmpGlow" x="-30%" y="-30%" width="160%" height="160%">
+                    <feGaussianBlur stdDeviation="1.6" result="b" />
+                    <feMerge>
+                      <feMergeNode in="b" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+                </defs>
+                <rect x="6" y="6" width="88" height="88" rx="24" fill="url(#publicPmpInnerGlow)" />
+                <rect class="pmp-logo-ring" x="8" y="8" width="84" height="84" rx="22" fill="none" stroke="url(#publicPmpRing)" stroke-width="2.8" />
+                <g class="pmp-logo-share" stroke="url(#publicPmpLetters)" stroke-width="1.8" fill="none" stroke-linecap="round">
+                  <circle cx="42" cy="26" r="2.4" fill="url(#publicPmpLetters)" />
+                  <circle cx="58" cy="26" r="2.4" fill="url(#publicPmpLetters)" />
+                  <circle cx="50" cy="34" r="2.4" fill="url(#publicPmpLetters)" />
+                  <line x1="42" y1="26" x2="50" y2="34" />
+                  <line x1="58" y1="26" x2="50" y2="34" />
+                </g>
+                <text class="pmp-logo-text public-pmp-logo-text" x="50" y="68" text-anchor="middle"
+                  font-family="'Georgia', 'Times New Roman', serif"
+                  font-size="22" font-weight="900"
+                  fill="url(#publicPmpLetters)" filter="url(#publicPmpGlow)"
+                  letter-spacing="0">PMP</text>
+                <g class="pmp-logo-bars" stroke="url(#publicPmpLetters)" stroke-width="1.6" stroke-linecap="round" opacity="0.85">
+                  <line x1="44" y1="80" x2="44" y2="76" />
+                  <line x1="48" y1="80" x2="48" y2="74" />
+                  <line x1="52" y1="80" x2="52" y2="71" />
+                  <line x1="56" y1="80" x2="56" y2="73" />
+                </g>
+              </svg>
+              <span class="pmp-logo-pulse" aria-hidden="true"></span>
+            </div>
+            <div class="pmp-brand-text">
+              <span class="pmp-brand-kicker">PLATFORM</span>
+              <span class="pmp-brand-name">Multi Publisher</span>
+            </div>
+          </a>
+          <nav class="public-nav-links" aria-label="Conteudo principal">
+            <a href="#operacao">Operacao</a>
+            <a href="#fluxo">Fluxo</a>
+            <a href="#plataformas">Plataformas</a>
+            <a href="#planos">Planos</a>
+            <a href="#faq">FAQ</a>
+          </nav>
+          <div class="public-nav-actions">
+            <a class="public-link" href="/login" data-link>Entrar</a>
+            <a class="public-button" href="/login?mode=register" data-link>Criar conta</a>
+          </div>
+        </header>
+
+        <main class="public-product-main">
+          <section class="public-hero" id="operacao">
+            <div class="public-hero-head">
+              <div>
+                <p class="public-eyebrow">Central de publicacao para operacao recorrente</p>
+                <h1>Platform Multi Publisher</h1>
+              </div>
+              <p class="public-hero-text">
+                Conecte contas oficiais, monte campanhas, revise filas e publique em YouTube,
+                TikTok e Instagram a partir de um workspace unico.
+              </p>
+              <div class="public-hero-actions">
+                <a class="public-button public-button-large" href="/login?mode=register" data-link>Criar workspace</a>
+                <a class="public-secondary-button" href="/login" data-link>Acessar workspace</a>
+              </div>
+            </div>
+
+            <div class="public-ops-board" aria-label="Resumo operacional do produto">
+              <article class="public-ops-panel public-ops-panel-wide">
+                <div class="public-panel-head">
+                  <div>
+                    <span class="public-panel-kicker">Command center</span>
+                    <h2>Fila, contas e campanhas no mesmo lugar</h2>
+                  </div>
+                  <span class="public-live-pill"><span></span> Online</span>
+                </div>
+                <div class="public-command-list">
+                  <div class="public-command-row" data-tone="success">
+                    <span>01</span>
+                    <strong>Conectar contas</strong>
+                    <p>OAuth oficial para YouTube, TikTok e Instagram.</p>
+                  </div>
+                  <div class="public-command-row" data-tone="info">
+                    <span>02</span>
+                    <strong>Preparar campanha</strong>
+                    <p>Arquivo, legenda, thumbnail, privacidade e destino.</p>
+                  </div>
+                  <div class="public-command-row" data-tone="warning">
+                    <span>03</span>
+                    <strong>Revisar antes do envio</strong>
+                    <p>Status, tokens, permissao e pendencias visiveis.</p>
+                  </div>
+                </div>
+              </article>
+
+              <article class="public-ops-panel public-kpi-panel">
+                <span class="public-panel-kicker">Hoje</span>
+                <strong>42</strong>
+                <p>publicacoes e jobs preparados</p>
+                <div class="public-mini-meter"><span style="width:74%"></span></div>
+              </article>
+
+              <article class="public-ops-panel public-preview" data-platform="youtube" aria-label="Preview operacional do produto">
+                <div class="public-preview-shell">
+                  <div class="public-panel-head">
+                    <div>
+                      <span class="public-panel-kicker">Plataformas</span>
+                      <h2>Visao por canal</h2>
+                    </div>
+                  </div>
+                  <div class="public-preview-toolbar" role="tablist" aria-label="Escolha de plataforma">
+                    <button type="button" class="active" data-landing-platform="youtube">YouTube</button>
+                    <button type="button" data-landing-platform="tiktok">TikTok</button>
+                    <button type="button" data-landing-platform="instagram">Instagram</button>
+                  </div>
+                  <div class="public-preview-screen">
+                    <div class="public-metric-line">
+                      <span>Campanhas ativas</span>
+                      <strong>16</strong>
+                    </div>
+                    <div class="public-channel-rail" aria-label="Distribuicao por canal">
+                      <span class="rail rail-youtube"></span>
+                      <span class="rail rail-tiktok"></span>
+                      <span class="rail rail-instagram"></span>
+                    </div>
+                    <div class="public-preview-panels">
+                      <article data-landing-panel="youtube">
+                        <h3>YouTube</h3>
+                        <p>Videos, Shorts e playlists em um fluxo unico com historico de jobs por campanha.</p>
+                        <ul>
+                          <li>Conecte canais oficiais</li>
+                          <li>Defina privacidade e marcacoes</li>
+                          <li>Monitore status e falhas em lote</li>
+                        </ul>
+                      </article>
+                      <article data-landing-panel="tiktok" hidden>
+                        <h3>TikTok</h3>
+                        <p>Fluxo simplificado para videos curtos com revisao e reconexao rapida.</p>
+                        <ul>
+                          <li>Upload unico por peca</li>
+                          <li>Conectividade em equipe</li>
+                          <li>Alertas de bloqueio de autenticacao</li>
+                        </ul>
+                      </article>
+                      <article data-landing-panel="instagram" hidden>
+                        <h3>Instagram</h3>
+                        <p>Reels e feed com legenda, thumbnail e destino visual por campanha.</p>
+                        <ul>
+                          <li>Conta de negocio integrada</li>
+                          <li>Checklist de direitos de uso</li>
+                          <li>Status consolidado de publicacao</li>
+                        </ul>
+                      </article>
+                    </div>
+                    <div class="public-job-grid" aria-label="Estados de publicacao">
+                      <span data-state="ready">Pronto 28</span>
+                      <span data-state="sending">Enviando 12</span>
+                      <span data-state="published">Publicado 40</span>
+                      <span data-state="risk">Revisar 6</span>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="public-ops-panel public-check-panel">
+                <span class="public-panel-kicker">Checklist</span>
+                <div class="public-check-list">
+                  <span data-state="ok">Tokens disponiveis</span>
+                  <span data-state="ok">Conta autorizada</span>
+                  <span data-state="warn">Revisao pendente</span>
+                  <span data-state="ok">Destino selecionado</span>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="public-section public-quick-glance" aria-label="Resumo de operacao">
+            <article>
+              <p>16</p>
+              <span>Campanhas ativas esta semana</span>
+            </article>
+            <article>
+              <p>3</p>
+              <span>Plataformas conectadas</span>
+            </article>
+            <article>
+              <p>98%</p>
+              <span>Sincronizacao estavel</span>
+            </article>
+            <article>
+              <p>11</p>
+              <span>Itens aguardando revisao</span>
+            </article>
+          </section>
+
+          <section id="recursos" class="public-section">
+            <div class="public-section-head">
+              <p class="public-eyebrow">Recursos de operacao</p>
+              <h2>O que normalmente ficaria espalhado vira uma rotina unica</h2>
+            </div>
+            <div class="public-feature-grid">
+              <article class="public-feature">
+                <p class="public-feature-kicker">Planejamento</p>
+                <h3>Planejamento central</h3>
+                <p>Crie campanhas por objetivo, destino e prioridade em uma interface unica.</p>
+              </article>
+              <article class="public-feature">
+                <p class="public-feature-kicker">Biblioteca</p>
+                <h3>Acervo de pecas reutilizavel</h3>
+                <p>Armazene videos, capas e copies para reaproveitamento entre canais e clientes.</p>
+              </article>
+              <article class="public-feature">
+                <p class="public-feature-kicker">Seguranca</p>
+                <h3>Controle de acesso</h3>
+                <p>OAuth oficial por plataforma e trilha de acoes para reduzir falhas operacionais.</p>
+              </article>
+            </div>
+          </section>
+
+          <section id="fluxo" class="public-section public-flow">
+            <div class="public-section-head">
+              <p class="public-eyebrow">Como funciona</p>
+              <h2>Um fluxo claro para pessoas comuns, empresas e escritorios</h2>
+            </div>
+            <div class="public-flow-grid">
+              <article class="public-flow-card">
+                <span class="public-flow-step">1</span>
+                <h3>Conectar</h3>
+                <p>Autorize suas contas com permissoes minimas necessarias.</p>
+              </article>
+              <article class="public-flow-card">
+                <span class="public-flow-step">2</span>
+                <h3>Programar</h3>
+                <p>Monte campanhas com datas, texto, arquivos e regras por canal.</p>
+              </article>
+              <article class="public-flow-card">
+                <span class="public-flow-step">3</span>
+                <h3>Publicar</h3>
+                <p>Dispare por lote ou por peca e acompanhe aprovacao e agendamento.</p>
+              </article>
+              <article class="public-flow-card">
+                <span class="public-flow-step">4</span>
+                <h3>Otimizar</h3>
+                <p>Analise resposta e refine conteudo com visao de operacao.</p>
+              </article>
+            </div>
+          </section>
+
+          <section id="plataformas" class="public-section">
+            <div class="public-section-head">
+              <p class="public-eyebrow">Integracoes oficiais</p>
+              <h2>Conecte onde seu publico esta</h2>
+            </div>
+            <div class="public-platform-grid">${platformCardsHtml}</div>
+          </section>
+
+          <section id="planos" class="public-section">
+            <div class="public-section-head">
+              <p class="public-eyebrow">Planos</p>
+              <h2>Planos reais do workspace, sem surpresa no cadastro</h2>
+              <p class="public-section-note">Valores, plataformas e tokens seguem a mesma configuracao da pagina Planos.</p>
+            </div>
+            <div class="public-pricing-grid">
+              ${planCardsHtml}
+            </div>
+            <div class="public-cta-row">
+              <a class="public-button public-button-large" href="/login?mode=register" data-link>Ver opcoes no cadastro</a>
+              <span>Sem compromisso até concluir o cadastro.</span>
+            </div>
+          </section>
+
+          <section id="faq" class="public-section public-faq">
+            <div class="public-section-head">
+              <p class="public-eyebrow">Perguntas rápidas</p>
+              <h2>Como evitamos fricção no dia a dia?</h2>
+            </div>
+            <div class="public-faq-grid">
+              <article class="public-faq-card">
+                <h3>Posso gerenciar multiplas contas e clientes?</h3>
+                <p>Sim. O workspace organiza contas por cliente e mantem historico compartilhado com seguranca.</p>
+              </article>
+              <article class="public-faq-card">
+                <h3>Como funciona a seguranca?</h3>
+                <p>Conexao via OAuth e controle de escopo para operacoes criticas.</p>
+              </article>
+              <article class="public-faq-card">
+                <h3>Posso revogar acesso depois?</h3>
+                <p>Sim. Voce pode desconectar a conta pelo workspace ou pela propria plataforma integrada.</p>
+              </article>
+              <article class="public-faq-card">
+                <h3>Funciona para escritorios e despachantes?</h3>
+                <p>Sim. A estrutura foi feita para operacao recorrente com multiplos perfis e times.</p>
+              </article>
+            </div>
+          </section>
+        </main>
+
+        <footer class="public-footer" aria-label="Rodape institucional">
+          <div class="public-footer-brand">
+            <strong>Platform Multi Publisher</strong>
+            <span>Publicacao profissional sem complicar a rotina.</span>
+          </div>
+          <nav class="public-footer-links" aria-label="Links institucionais">
+            <a href="/privacy" data-link>Privacy Policy</a>
+            <a href="/terms" data-link>Terms of Service</a>
+            <a href="/data-deletion" data-link>Data Deletion</a>
+          </nav>
+        </footer>
+      </div>
+    </div>
+  `;
+
+  injectLogoStyles();
+  bindPublicLandingInteractions();
+}
 function bindPublicLandingInteractions() {
   const preview = document.querySelector('.public-preview');
   const buttons = Array.from(document.querySelectorAll('[data-landing-platform]'));
@@ -4121,6 +5271,48 @@ function bindPublicLandingInteractions() {
         panel.hidden = panel.getAttribute('data-landing-panel') !== platform;
       });
     });
+  });
+}
+
+function bindPublicContactForm() {
+  const form = document.querySelector('[data-public-contact-form]');
+  if (!(form instanceof HTMLFormElement)) return;
+  const feedback = form.querySelector('[data-contact-feedback]');
+  const setFeedback = (tone, message) => {
+    if (!feedback) return;
+    feedback.setAttribute('data-tone', tone);
+    feedback.textContent = message;
+  };
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const data = new FormData(form);
+    const name = String(data.get('name') ?? '').trim();
+    const email = String(data.get('email') ?? '').trim();
+    const company = String(data.get('company') ?? '').trim();
+    const message = String(data.get('message') ?? '').trim();
+    const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+    if (!name || !email || !message) {
+      setFeedback('error', 'Preencha nome, email e mensagem para enviar.');
+      return;
+    }
+    if (!emailValid) {
+      setFeedback('error', 'Informe um email valido.');
+      return;
+    }
+
+    const subject = `Contato pelo site - ${name}`;
+    const body = [
+      `Nome: ${name}`,
+      `Email: ${email}`,
+      `Empresa: ${company || 'Nao informado'}`,
+      '',
+      message,
+    ].join('\n');
+
+    setFeedback('success', 'Mensagem preparada. Seu aplicativo de email sera aberto para concluir o envio.');
+    window.location.href = `mailto:domingues_eu@hotmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   });
 }
 
@@ -5183,27 +6375,204 @@ function startChannelKpiCarousel(root) {
   });
 }
 
-function initDashboardAdSense(root) {
-  const config = (typeof window !== 'undefined' && window.ADSENSE_CONFIG) || null;
-  if (!config || !config.client) return;
-  const slots = root.querySelectorAll('.od-hero-ad-unit');
-  if (!slots.length) return;
-  slots.forEach((slot) => {
-    slot.setAttribute('data-ad-client', config.client);
-    if (config.slot) slot.setAttribute('data-ad-slot', config.slot);
+function buildDashboardPlaylistPlayerData(playlists, assets) {
+  const assetById = new Map(
+    (Array.isArray(assets) ? assets : [])
+      .filter((asset) => asset?.id)
+      .map((asset) => [String(asset.id), asset])
+  );
+
+  return (Array.isArray(playlists) ? playlists : [])
+    .map((playlist, playlistIndex) => {
+      const items = Array.isArray(playlist?.items) ? [...playlist.items] : [];
+      const videos = items
+        .sort((left, right) => Number(left?.position ?? 0) - Number(right?.position ?? 0))
+        .map((item, index) => {
+          const asset = assetById.get(String(item?.videoAssetId ?? ''));
+          const durationLabel = Number(asset?.duration_seconds ?? 0) > 0
+            ? formatDurationSeconds(asset.duration_seconds)
+            : 'sem duracao';
+          return {
+            id: `${playlist?.id ?? `playlist-${playlistIndex}`}-${item?.id ?? item?.videoAssetId ?? index}`,
+            item,
+            asset,
+            title: asset?.original_name ?? item?.videoAssetId ?? 'Video da playlist',
+            durationLabel,
+            sourceUrl: asset?.id ? buildMediaAssetFileUrl(asset.id) : '',
+            posterUrl: asset?.thumbnail?.id ? buildMediaAssetFileUrl(asset.thumbnail.id) : '',
+          };
+        })
+        .filter((video) => video.sourceUrl && video.asset?.asset_type !== 'thumbnail');
+      return {
+        id: String(playlist?.id ?? `playlist-${playlistIndex}`),
+        name: playlist?.name ?? 'Playlist',
+        updatedAt: playlist?.updatedAt ?? '',
+        videos,
+      };
+    })
+    .filter((playlist) => playlist.videos.length > 0)
+    .sort((left, right) => {
+      const leftUpdated = Date.parse(left.updatedAt ?? '') || 0;
+      const rightUpdated = Date.parse(right.updatedAt ?? '') || 0;
+      return rightUpdated - leftUpdated;
+    });
+}
+
+function renderDashboardPlaylistPlayerItem(playlist, video, isActive = false) {
+  const stateLabel = video.item?.usedAt ? 'usado' : 'disponivel';
+  const metaLabel = `${playlist.name} - ${video.durationLabel}`;
+
+  return `
+    <button
+      type="button"
+      class="od-playlist-player-item${isActive ? ' active' : ''}"
+      data-playlist-player-item
+      data-playlist-id="${escapeAttribute(playlist.id)}"
+      data-video-src="${escapeAttribute(video.sourceUrl)}"
+      data-video-poster="${escapeAttribute(video.posterUrl)}"
+      data-video-title="${escapeAttribute(video.title)}"
+      data-video-meta="${escapeAttribute(metaLabel)}"
+      data-used="${video.item?.usedAt ? 'true' : 'false'}"
+    >
+      <div class="od-playlist-player-thumb">
+        ${video.posterUrl
+          ? `<img src="${escapeAttribute(video.posterUrl)}" alt="${escapeAttribute(video.title)}" loading="lazy" />`
+          : renderNeonMediaIcon('video', 'tile', { state: video.item?.usedAt ? 'success' : 'processing' })}
+        <span class="od-playlist-player-play" aria-hidden="true"></span>
+      </div>
+      <div class="od-playlist-player-copy">
+        <strong>${escapeHtml(video.title)}</strong>
+        <span>${escapeHtml(video.durationLabel)}</span>
+      </div>
+      <span class="od-playlist-player-state od-mono">${escapeHtml(stateLabel)}</span>
+    </button>
+  `;
+}
+
+function renderDashboardPlaylistPanel(playlists, assets) {
+  const playerPlaylists = buildDashboardPlaylistPlayerData(playlists, assets);
+  const playlistCount = playerPlaylists.length;
+  const videoCount = playerPlaylists.reduce((sum, playlist) => sum + playlist.videos.length, 0);
+  const selectedPlaylist = playerPlaylists[0] ?? null;
+  const selectedVideo = selectedPlaylist?.videos?.[0] ?? null;
+  const playlistLabel = playlistCount === 1 ? '1 playlist' : `${formatNumber(playlistCount)} playlists`;
+  const videoLabel = videoCount === 1 ? '1 video' : `${formatNumber(videoCount)} videos`;
+  const selectedMeta = selectedPlaylist && selectedVideo ? `${selectedPlaylist.name} - ${selectedVideo.durationLabel}` : '';
+  const playlistOptionsHtml = playerPlaylists.map((playlist) => `
+    <option value="${escapeAttribute(playlist.id)}">${escapeHtml(playlist.name)} (${formatNumber(playlist.videos.length)})</option>
+  `).join('');
+  const playlistItemsHtml = playerPlaylists
+    .flatMap((playlist, playlistIndex) => playlist.videos.map((video, videoIndex) => (
+      renderDashboardPlaylistPlayerItem(playlist, video, playlistIndex === 0 && videoIndex === 0)
+    )))
+    .join('');
+
+  return `
+    <aside class="od-hero-playlist-player od-panel" aria-label="Player de videos das playlists" data-playlist-player>
+      <div class="od-hero-playlist-player-head">
+        <span class="od-kpi-label od-mono">Player de playlist</span>
+        <span class="od-panel-meta od-muted od-mono">${escapeHtml(videoLabel)} - ${escapeHtml(playlistLabel)}</span>
+      </div>
+      ${selectedPlaylist && selectedVideo
+          ? `
+            <label class="od-playlist-player-select-wrap">
+              <span class="od-mono">Playlist selecionada</span>
+              <select data-playlist-player-select>
+                ${playlistOptionsHtml}
+              </select>
+            </label>
+            <div class="od-playlist-player-frame">
+              <video
+                class="od-playlist-player-video"
+                data-playlist-player-video
+                controls
+                preload="metadata"
+                src="${escapeAttribute(selectedVideo.sourceUrl)}"
+                ${selectedVideo.posterUrl ? `poster="${escapeAttribute(selectedVideo.posterUrl)}"` : ''}
+                aria-label="Player do video ${escapeAttribute(selectedVideo.title)}"
+              ></video>
+            </div>
+            <div class="od-playlist-player-now">
+              <strong data-playlist-player-title>${escapeHtml(selectedVideo.title)}</strong>
+              <span data-playlist-player-meta>${escapeHtml(selectedMeta)}</span>
+            </div>
+            <div class="od-playlist-player-list" data-playlist-player-list>
+              ${playlistItemsHtml}
+            </div>
+          `
+          : `
+            <div class="od-playlist-player-empty">
+              ${renderNeonMediaIcon('playlist', 'stat', { state: 'processing' })}
+              <strong>Nenhuma playlist com videos prontos</strong>
+              <span>Crie uma playlist com videos da biblioteca para reproduzir aqui.</span>
+              <a class="button button-secondary" data-link href="/workspace/videos?view=playlists">Abrir playlists</a>
+            </div>
+          `}
+      <small class="od-hero-playlist-player-disclaimer od-muted od-mono">Selecione uma playlist e toque qualquer video salvo nela</small>
+    </aside>
+  `;
+}
+
+function bindDashboardPlaylistPlayer(root) {
+  const panel = root.querySelector('[data-playlist-player]');
+  if (!panel) return;
+  const select = panel.querySelector('[data-playlist-player-select]');
+  const video = panel.querySelector('[data-playlist-player-video]');
+  const titleTarget = panel.querySelector('[data-playlist-player-title]');
+  const metaTarget = panel.querySelector('[data-playlist-player-meta]');
+  const items = Array.from(panel.querySelectorAll('[data-playlist-player-item]'));
+  if (!items.length) return;
+
+  const activateItem = (item, { autoplay = false } = {}) => {
+    if (!item || !video) return;
+    const sourceUrl = item.getAttribute('data-video-src') || '';
+    if (!sourceUrl) return;
+
+    items.forEach((candidate) => candidate.classList.toggle('active', candidate === item));
+    const posterUrl = item.getAttribute('data-video-poster') || '';
+    const nextTitle = item.getAttribute('data-video-title') || 'Video da playlist';
+    const nextMeta = item.getAttribute('data-video-meta') || '';
+
+    if (titleTarget) titleTarget.textContent = nextTitle;
+    if (metaTarget) metaTarget.textContent = nextMeta;
+    if (video.getAttribute('src') !== sourceUrl) {
+      video.pause();
+      video.setAttribute('src', sourceUrl);
+      if (posterUrl) {
+        video.setAttribute('poster', posterUrl);
+      } else {
+        video.removeAttribute('poster');
+      }
+      video.load();
+    }
+    if (autoplay) {
+      const playResult = video.play();
+      if (playResult && typeof playResult.catch === 'function') playResult.catch(() => {});
+    }
+  };
+
+  const setPlaylist = (playlistId) => {
+    let firstVisible = null;
+    let activeVisible = null;
+    items.forEach((item) => {
+      const visible = item.getAttribute('data-playlist-id') === playlistId;
+      item.hidden = !visible;
+      if (!visible) return;
+      if (!firstVisible) firstVisible = item;
+      if (item.classList.contains('active')) activeVisible = item;
+    });
+    activateItem(activeVisible ?? firstVisible);
+  };
+
+  items.forEach((item) => {
+    item.addEventListener('click', () => activateItem(item, { autoplay: true }));
   });
-  if (!document.querySelector('script[data-adsense-loader]')) {
-    const script = document.createElement('script');
-    script.async = true;
-    script.crossOrigin = 'anonymous';
-    script.dataset.adsenseLoader = '1';
-    script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(config.client)}`;
-    document.head.appendChild(script);
-  }
-  try {
-    (window.adsbygoogle = window.adsbygoogle || []).push({});
-  } catch (err) {
-    /* AdSense will retry once script loads */
+
+  if (select) {
+    select.addEventListener('change', () => setPlaylist(select.value));
+    setPlaylist(select.value);
+  } else {
+    activateItem(items[0]);
   }
 }
 
@@ -5211,8 +6580,8 @@ function bindDashboardInteractions() {
   const dashboardRoot = document.getElementById('od-root');
   if (!dashboardRoot) return;
   clearPulseRotateTimer();
-  initDashboardAdSense(dashboardRoot);
   startChannelKpiCarousel(dashboardRoot);
+  bindDashboardPlaylistPlayer(dashboardRoot);
 
   dashboardRoot.querySelectorAll('[data-dashboard-mode]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -5249,14 +6618,16 @@ async function renderPlatformDashboardPage() {
   let mediaResult;
   let accountsResult;
   let destinationsResult;
+  let playlistsResult;
 
   try {
-    [result, campaignsResult, mediaResult, accountsResult, destinationsResult] = await Promise.all([
+    [result, campaignsResult, mediaResult, accountsResult, destinationsResult, playlistsResult] = await Promise.all([
       api.dashboard(),
       api.campaigns({ limit: 12, offset: 0 }),
       api.media(),
       api.accounts(),
       loadConnectedPublishDestinations(),
+      api.playlists(),
     ]);
   } catch (error) {
     renderWorkspaceShell({
@@ -5268,7 +6639,7 @@ async function renderPlatformDashboardPage() {
     return;
   }
 
-  const authFailure = [result, campaignsResult, mediaResult, accountsResult, destinationsResult]
+  const authFailure = [result, campaignsResult, mediaResult, accountsResult, destinationsResult, playlistsResult]
     .find((entry) => entry && !entry.ok && entry.status === 401);
   if (authFailure) {
     unauthorizedRedirect();
@@ -5289,6 +6660,7 @@ async function renderPlatformDashboardPage() {
   const assets = mediaResult?.ok && Array.isArray(mediaResult.body?.assets) ? mediaResult.body.assets : [];
   const accounts = accountsResult?.ok && Array.isArray(accountsResult.body?.accounts) ? accountsResult.body.accounts : [];
   const destinations = destinationsResult?.ok && Array.isArray(destinationsResult.destinations) ? destinationsResult.destinations : [];
+  const playlists = playlistsResult?.ok && Array.isArray(playlistsResult.body?.playlists) ? playlistsResult.body.playlists : [];
   const channels = Array.isArray(stats?.channels) ? [...stats.channels] : [];
 
   const channelsByProvider = { youtube: [], tiktok: [], instagram: [] };
@@ -5407,6 +6779,7 @@ async function renderPlatformDashboardPage() {
   const pulseAds = pulseAdsByProfile[profileTag];
   const leadershipHtml = renderLeadershipRows(rankedChannels, 'No ranked videos yet.');
   const viewsPerformanceHtml = renderViewsPerformancePanel(rankedChannels);
+  const playlistPanelHtml = renderDashboardPlaylistPanel(playlists, assets);
 
   const contentHtml = `
     <div id="od-root" class="od-root od-dashboard-pro" data-mode="overview">
@@ -5451,25 +6824,7 @@ async function renderPlatformDashboardPage() {
             </a>
           </div>
         </div>
-        <aside class="od-hero-ad od-panel" aria-label="Advertisement" data-ad-slot="dashboard-hero">
-          <div class="od-hero-ad-head">
-            <span class="od-kpi-label od-mono">Sponsored</span>
-            <span class="od-panel-meta od-muted od-mono">Google AdSense</span>
-          </div>
-          <div class="od-hero-ad-frame">
-            <div class="od-hero-ad-placeholder" aria-hidden="true">
-              <div class="od-hero-ad-shimmer"></div>
-              <span class="od-hero-ad-placeholder-label od-mono">Ad slot 300×250</span>
-            </div>
-            <ins class="adsbygoogle od-hero-ad-unit"
-                 style="display:block;width:100%;height:100%;"
-                 data-ad-client=""
-                 data-ad-slot=""
-                 data-ad-format="auto"
-                 data-full-width-responsive="true"></ins>
-          </div>
-          <small class="od-hero-ad-disclaimer od-muted od-mono">Ads keep this dashboard free</small>
-        </aside>
+        ${playlistPanelHtml}
       </section>
 
       <section class="od-channel-kpi-row" aria-label="Channel performance">
@@ -6743,10 +8098,20 @@ const NEON_MEDIA_ICON_STATE_BY_KIND = {
   disabled: 'disabled',
 };
 
+const NEON_MEDIA_ICON_KIND_ALIASES = {
+  erro: 'error',
+  falha: 'error',
+  falhas: 'error',
+  failed: 'error',
+  failure: 'error',
+};
+
+const NEON_MEDIA_ERROR_SVG_KINDS = new Set(['error', 'erro', 'falha', 'falhas', 'failed', 'failure']);
+
 function normalizeNeonIconState(kind, tone) {
   const normalizedTone = String(tone ?? '').toLowerCase().trim();
   if (['success', 'ready', 'completed', 'available', 'published', 'active', 'connected', 'ok'].includes(normalizedTone)) return 'success';
-  if (['danger', 'error', 'failed', 'failure', 'erro', 'falhou'].includes(normalizedTone)) return 'error';
+  if (['danger', 'error', 'errors', 'failed', 'failure', 'erro', 'erros', 'falha', 'falhas', 'falhou'].includes(normalizedTone)) return 'error';
   if (['warning', 'warn', 'attention', 'pending', 'queued', 'draft', 'aguardando'].includes(normalizedTone)) return 'warning';
   if (['processing', 'loading', 'launching', 'syncing', 'enviando', 'running'].includes(normalizedTone)) return 'processing';
   if (['disabled', 'inactive', 'locked', 'blocked', 'unavailable', 'indisponivel'].includes(normalizedTone)) return 'disabled';
@@ -6756,13 +8121,32 @@ function normalizeNeonIconState(kind, tone) {
 
 function renderNeonMediaIcon(kind = 'library', size = 'md', options = {}) {
   const requestedKind = String(kind ?? '').toLowerCase().trim();
-  const safeKind = NEON_MEDIA_ICON_KINDS.has(requestedKind) ? requestedKind : 'library';
+  const normalizedKind = NEON_MEDIA_ICON_KIND_ALIASES[requestedKind] ?? requestedKind;
+  const safeKind = NEON_MEDIA_ICON_KINDS.has(normalizedKind) ? normalizedKind : 'library';
   const requestedState = typeof options === 'string' ? options : options?.state ?? options?.tone;
   const iconState = normalizeNeonIconState(safeKind, requestedState);
+  const shouldRenderErrorSvg = safeKind === 'error' && NEON_MEDIA_ERROR_SVG_KINDS.has(requestedKind);
+  const errorSvgHtml = shouldRenderErrorSvg
+    ? `
+        <svg class="neon-media-error-svg" viewBox="0 0 100 100" focusable="false" aria-hidden="true">
+          <path class="neon-media-error-stroke neon-media-error-glow-stroke" d="M26 22H46C53 22 53 29 59 29H78C85 29 89 33 89 40V48" />
+          <path class="neon-media-error-stroke neon-media-error-glow-stroke" d="M18 32H43C50 32 50 39 57 39H84C91 39 95 43 95 51V60" />
+          <path class="neon-media-error-stroke neon-media-error-glow-stroke" d="M10 46C11 40 16 37 23 37H43C50 37 50 45 57 45H86C94 45 98 50 98 58V85C98 92 94 96 87 96H13C6 96 2 92 2 85V58C2 51 5 47 10 46Z" />
+          <circle class="neon-media-error-stroke neon-media-error-glow-stroke" cx="50" cy="70" r="18" />
+          <path class="neon-media-error-stroke neon-media-error-glow-stroke" d="M40 60L60 80M60 60L40 80" />
+
+          <path class="neon-media-error-stroke neon-media-error-hot-stroke" d="M26 22H46C53 22 53 29 59 29H78C85 29 89 33 89 40V48" />
+          <path class="neon-media-error-stroke neon-media-error-hot-stroke" d="M18 32H43C50 32 50 39 57 39H84C91 39 95 43 95 51V60" />
+          <path class="neon-media-error-stroke neon-media-error-hot-stroke" d="M10 46C11 40 16 37 23 37H43C50 37 50 45 57 45H86C94 45 98 50 98 58V85C98 92 94 96 87 96H13C6 96 2 92 2 85V58C2 51 5 47 10 46Z" />
+          <circle class="neon-media-error-stroke neon-media-error-hot-stroke" cx="50" cy="70" r="18" />
+          <path class="neon-media-error-stroke neon-media-error-hot-stroke" d="M40 60L60 80M60 60L40 80" />
+        </svg>`
+    : '';
   return `
     <span class="neon-media-icon neon-media-icon-${safeKind} neon-media-icon-${escapeHtml(size)}" data-icon-kind="${escapeAttribute(safeKind)}" data-icon-state="${escapeAttribute(iconState)}" aria-hidden="true">
       <span class="neon-media-icon-glow"></span>
       <span class="neon-media-icon-canvas">
+        ${errorSvgHtml}
         <span class="neon-media-shape neon-media-frame"></span>
         <span class="neon-media-shape neon-media-folder-tab"></span>
         <span class="neon-media-shape neon-media-tile tile-a"></span>
@@ -6799,7 +8183,7 @@ function renderVideosViewSwitcher({ activeView, libraryHref, playlistsHref, libr
   const plCountHtml = Number.isFinite(playlistsCount) ? `<span class="videos-view-tab-count">${formatNumber(playlistsCount)}</span>` : '';
 
   return `
-    <nav class="videos-view-switcher" role="tablist" aria-label="Visualização de vídeos">
+    <nav class="videos-view-switcher" role="tablist" aria-label="Visualizacao de videos">
       <a class="videos-view-tab ${libraryActive ? 'is-active' : ''}" role="tab" aria-selected="${libraryActive ? 'true' : 'false'}" data-link href="${escapeHtml(libraryHref)}">
         <span class="videos-view-tab-icon" aria-hidden="true">${renderNeonMediaIcon('library', 'tab')}</span>
         <span class="videos-view-tab-label">Asset library</span>
@@ -6833,7 +8217,7 @@ async function renderMediaPage(options = {}) {
   const playlistsHref = videosCtx ? '/workspace/videos?view=playlists' : '/workspace/playlists';
   const pageTitle = videosCtx ? 'Videos' : 'Media';
   const pageSubtitle = videosCtx
-    ? 'Sua biblioteca de vídeos e organização de playlists em um só lugar.'
+    ? 'Sua biblioteca de videos e organizacao de playlists em um so lugar.'
     : 'Uploaded reusable assets.';
 
   const result = await api.media();
@@ -7730,7 +9114,7 @@ async function renderPlaylistsPage(options = {}) {
   const libraryHref = videosCtx ? '/workspace/videos?view=library' : '/workspace/media';
   const pageTitle = videosCtx ? 'Videos' : 'Playlists';
   const pageSubtitle = videosCtx
-    ? 'Sua biblioteca de vídeos e organização de playlists em um só lugar.'
+    ? 'Sua biblioteca de videos e organizacao de playlists em um so lugar.'
     : 'Organize videos em playlists a partir de pastas locais.';
 
   const [playlistsResult, mediaResult] = await Promise.all([api.playlists(), api.media()]);
@@ -12329,9 +13713,29 @@ async function renderRoute() {
   clearAutoRefreshTimer();
   state.routeInFlight = true;
   try {
-    const path = window.location.pathname;
+    const rawPath = window.location.pathname;
+    const path = rawPath.length > 1 && rawPath.endsWith('/') ? rawPath.replace(/\/+$/, '') : rawPath;
+    if (path !== rawPath) {
+      navigate(`${path}${window.location.search || ''}`, true);
+      return;
+    }
     if (path === '/') {
-      renderPublicLandingPage();
+      await renderPublicLandingPage();
+      return;
+    }
+
+    if (path === '/privacy') {
+      renderPrivacyPolicyPage();
+      return;
+    }
+
+    if (path === '/terms') {
+      renderTermsOfServicePage();
+      return;
+    }
+
+    if (path === '/data-deletion') {
+      renderDataDeletionPage();
       return;
     }
 

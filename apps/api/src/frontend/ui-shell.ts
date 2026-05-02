@@ -1,4 +1,5 @@
 import { readFileSync, statSync } from 'node:fs';
+import { LEGAL_DOCUMENTS, type LegalDocument, type LegalDocumentKey } from './legal-documents';
 
 interface FrontendAsset {
   contentType: string;
@@ -97,8 +98,56 @@ function buildAbsoluteUrl(path: string): string {
   return `${normalizePublicBaseUrl()}${normalizedPath}`;
 }
 
+function repairUtf8Mojibake(value: string): string {
+  if (!/[ÃÂâð]/.test(value)) return value;
+  try {
+    return Buffer.from(value, 'latin1').toString('utf8');
+  } catch {
+    return value;
+  }
+}
+
+const PUBLIC_INDEXABLE_PATHS = ['/', '/privacy', '/terms', '/data-deletion'] as const;
+const LEGAL_PATH_TO_DOCUMENT_KEY: Partial<Record<string, LegalDocumentKey>> = {
+  '/privacy': 'privacy',
+  '/terms': 'terms',
+  '/data-deletion': 'data-deletion',
+};
+
+function normalizeFrontendPath(path: string): string {
+  if (path.length > 1 && path.endsWith('/')) {
+    return path.replace(/\/+$/, '');
+  }
+  return path || '/';
+}
+
 function shouldIndexPath(path: string): boolean {
-  return path === '/';
+  const normalizedPath = normalizeFrontendPath(path);
+  return PUBLIC_INDEXABLE_PATHS.includes(normalizedPath as (typeof PUBLIC_INDEXABLE_PATHS)[number]);
+}
+
+function getLegalDocumentKeyForPath(path: string): LegalDocumentKey | null {
+  return LEGAL_PATH_TO_DOCUMENT_KEY[normalizeFrontendPath(path)] ?? null;
+}
+
+function renderLegalDocumentBodyHtml(document: LegalDocument): string {
+  return document.sections
+    .map((section) => `
+        <section>
+          <h2>${escapeHtml(section.heading)}</h2>
+          ${section.html}
+        </section>
+      `)
+    .join('');
+}
+
+function renderLegalDocumentsInlineJson(): string {
+  return JSON.stringify(LEGAL_DOCUMENTS)
+    .replaceAll('<', '\\u003c')
+    .replaceAll('>', '\\u003e')
+    .replaceAll('&', '\\u0026')
+    .replaceAll('\u2028', '\\u2028')
+    .replaceAll('\u2029', '\\u2029');
 }
 
 function buildRobotsTxt(): string {
@@ -118,23 +167,30 @@ function buildRobotsTxt(): string {
 }
 
 function buildSitemapXml(): string {
-  const rootUrl = escapeXml(buildAbsoluteUrl('/'));
+  const entries = PUBLIC_INDEXABLE_PATHS
+    .map((path) => {
+      const priority = path === '/' ? '1.0' : '0.7';
+      return [
+        '  <url>',
+        `    <loc>${escapeXml(buildAbsoluteUrl(path))}</loc>`,
+        '    <changefreq>monthly</changefreq>',
+        `    <priority>${priority}</priority>`,
+        '  </url>',
+      ].join('\n');
+    })
+    .join('\n');
 
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-    '  <url>',
-    `    <loc>${rootUrl}</loc>`,
-    '    <changefreq>weekly</changefreq>',
-    '    <priority>1.0</priority>',
-    '  </url>',
+    entries,
     '</urlset>',
     '',
   ].join('\n');
 }
 
 function buildStructuredData(locale: FrontendLocale = DEFAULT_LOCALE): string {
-  const seo = SEO_METADATA[locale] ?? SEO_METADATA[DEFAULT_LOCALE];
+  const seo = getSeoForLocale(locale);
   const json = JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
@@ -172,11 +228,59 @@ export function normalizeFrontendLocale(rawLocale: string | null | undefined): F
 }
 
 function getSeoForLocale(locale: FrontendLocale) {
-  return SEO_METADATA[locale];
+  const seo = SEO_METADATA[locale] ?? SEO_METADATA[DEFAULT_LOCALE];
+  return {
+    ...seo,
+    title: repairUtf8Mojibake(seo.title),
+    description: repairUtf8Mojibake(seo.description),
+    keywords: seo.keywords.map(repairUtf8Mojibake),
+    initialTitle: repairUtf8Mojibake(seo.initialTitle),
+    initialText: repairUtf8Mojibake(seo.initialText),
+    initialPublicSectionTitle: repairUtf8Mojibake(seo.initialPublicSectionTitle),
+    initialPublicSectionText: repairUtf8Mojibake(seo.initialPublicSectionText),
+    initialIndexSectionTitle: repairUtf8Mojibake(seo.initialIndexSectionTitle),
+    initialIndexSectionText: repairUtf8Mojibake(seo.initialIndexSectionText),
+  };
 }
 
+function getSeoForPath(path: string, locale: FrontendLocale) {
+  const normalizedPath = normalizeFrontendPath(path);
+  const base = getSeoForLocale(locale);
+  const legalDocumentKey = getLegalDocumentKeyForPath(normalizedPath);
+  if (legalDocumentKey) {
+    const document = LEGAL_DOCUMENTS[legalDocumentKey];
+    return {
+      ...base,
+      title: `${document.title} | Platform Multi Publisher`,
+      description: document.subtitle,
+    };
+  }
+  return base;
+}
+
+function renderInitialLegalContent(path: string): string {
+  const legalDocumentKey = getLegalDocumentKeyForPath(path);
+  if (!legalDocumentKey) return '';
+  const document = LEGAL_DOCUMENTS[legalDocumentKey];
+  const bodyHtml = renderLegalDocumentBodyHtml(document);
+
+  return `
+      <main class="seo-static-content legal-static-content">
+        <h1>${escapeHtml(document.title)}</h1>
+        <p>${escapeHtml(document.subtitle)}</p>
+        <p>Document last updated: ${escapeHtml(document.lastUpdated)}.</p>
+        <p>${escapeHtml(document.reviewNote)}</p>
+        <p>Platform Multi Publisher is not owned by, endorsed by, sponsored by, or officially operated by TikTok, YouTube, Google, Instagram, Meta, or their affiliates.</p>
+        ${bodyHtml}
+      </main>
+    `;
+}
 function renderInitialAppContent(path: string, locale: FrontendLocale): string {
   const seo = getSeoForLocale(locale);
+  const normalizedPath = normalizeFrontendPath(path);
+  if (normalizedPath === '/privacy' || normalizedPath === '/terms' || normalizedPath === '/data-deletion') {
+    return renderInitialLegalContent(normalizedPath);
+  }
   if (!shouldIndexPath(path)) {
     return '';
   }
@@ -194,16 +298,25 @@ function renderInitialAppContent(path: string, locale: FrontendLocale): string {
           <h2>${escapeHtml(seo.initialIndexSectionTitle)}</h2>
           <p>${escapeHtml(seo.initialIndexSectionText)}</p>
         </section>
+        <nav aria-label="Legal links">
+          <a href="/privacy">Privacy Policy</a>
+          <a href="/terms">Terms of Service</a>
+          <a href="/data-deletion">User Data Deletion</a>
+        </nav>
       </main>
     `;
 }
 
 export function isFrontendRoute(path: string): boolean {
-  return path === '/'
-    || path === '/login'
-    || path === '/login/callback'
-    || path === '/onboarding/plan'
-    || path.startsWith('/workspace');
+  const normalizedPath = normalizeFrontendPath(path);
+  return normalizedPath === '/'
+    || normalizedPath === '/privacy'
+    || normalizedPath === '/terms'
+    || normalizedPath === '/data-deletion'
+    || normalizedPath === '/login'
+    || normalizedPath === '/login/callback'
+    || normalizedPath === '/onboarding/plan'
+    || normalizedPath.startsWith('/workspace');
 }
 
 export function resolveFrontendAsset(path: string): FrontendAsset | null {
@@ -305,10 +418,13 @@ export function resolveFrontendAsset(path: string): FrontendAsset | null {
 
 export function renderFrontendDocument(path: string, locale: FrontendLocale = DEFAULT_LOCALE): string {
   const safeLocale = normalizeFrontendLocale(locale);
-  const initialPath = escapeHtml(path);
-  const canonicalUrl = escapeHtml(buildAbsoluteUrl(shouldIndexPath(path) ? '/' : path));
-  const robotsMeta = shouldIndexPath(path) ? 'index,follow' : 'noindex,nofollow';
-  const seo = getSeoForLocale(safeLocale);
+  const normalizedPath = normalizeFrontendPath(path);
+  const legalDocumentKey = getLegalDocumentKeyForPath(normalizedPath);
+  const initialPath = escapeHtml(normalizedPath);
+  const canonicalPath = normalizedPath === '/' ? '/' : normalizedPath;
+  const canonicalUrl = escapeHtml(buildAbsoluteUrl(canonicalPath));
+  const robotsMeta = shouldIndexPath(normalizedPath) ? 'index,follow' : 'noindex,nofollow';
+  const seo = getSeoForPath(normalizedPath, safeLocale);
   const tiktokVerification = process.env.TIKTOK_DEVELOPER_VERIFICATION || '';
   const tiktokMetaTag = tiktokVerification
     ? `    <meta name="tiktok-developers-site-verification" content="${escapeHtml(tiktokVerification)}" />\n`
@@ -318,7 +434,10 @@ export function renderFrontendDocument(path: string, locale: FrontendLocale = DE
     ? `    <meta name="google-site-verification" content="${escapeHtml(googleVerification)}" />\n`
     : '';
   const structuredData = buildStructuredData(safeLocale);
-  const initialContent = renderInitialAppContent(path, safeLocale);
+  const initialContent = renderInitialAppContent(normalizedPath, safeLocale);
+  const legalDocumentsBootstrap = legalDocumentKey
+    ? `    <script>window.__PMP_LEGAL_DOCUMENTS__=${renderLegalDocumentsInlineJson()};</script>\n`
+    : '';
   return `<!doctype html>
 <html lang="${escapeHtml(safeLocale)}">
   <head>
@@ -347,7 +466,7 @@ ${googleMetaTag}${tiktokMetaTag}    <script type="application/ld+json">${structu
   </head>
     <body data-initial-path="${initialPath}" data-initial-locale="${escapeHtml(safeLocale)}">
     <div id="app">${initialContent}</div>
-    <script src="/i18n.js?v=${FRONTEND_ASSET_VERSION}"></script>
+${legalDocumentsBootstrap}    <script src="/i18n.js?v=${FRONTEND_ASSET_VERSION}"></script>
     <script type="module" src="/app.js?v=${FRONTEND_ASSET_VERSION}"></script>
   </body>
 </html>`;

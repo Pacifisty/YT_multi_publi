@@ -15,7 +15,7 @@ export interface LegalDocument {
   sections: LegalDocumentSection[];
 }
 
-export const LEGAL_CONTACT_EMAIL = 'Domingues_eu@Hotmail.com';
+export const LEGAL_CONTACT_EMAIL = 'PlataformMultiPublisher@gmail.com';
 export const LEGAL_LAST_UPDATED = 'May 2, 2026';
 export const LEGAL_REVIEW_NOTE = 'This document should be reviewed by a qualified legal professional before publishing or relying on it for platform approval.';
 export const LEGAL_TRANSPARENCY_NOTICE =
@@ -24,7 +24,7 @@ export const LEGAL_TRANSPARENCY_NOTICE =
 export const LEGAL_DOCUMENTS: Record<LegalDocumentKey, LegalDocument> = {
   privacy: {
     key: 'privacy',
-    title: 'Privacy Policy',
+    title: 'Politica de Privacidade',
     ptTitle: 'Politica de Privacidade',
     subtitle: 'How Platform Multi Publisher handles account, media, campaign and platform API data for YouTube, TikTok and Instagram integrations.',
     lastUpdated: LEGAL_LAST_UPDATED,
@@ -118,7 +118,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentKey, LegalDocument> = {
   },
   terms: {
     key: 'terms',
-    title: 'Terms of Service',
+    title: 'Termos de Servico',
     ptTitle: 'Termos de Servico',
     subtitle: 'The rules for using Platform Multi Publisher to connect accounts, manage campaigns and publish user-selected videos to YouTube, TikTok and Instagram.',
     lastUpdated: LEGAL_LAST_UPDATED,
@@ -208,7 +208,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentKey, LegalDocument> = {
   },
   'data-deletion': {
     key: 'data-deletion',
-    title: 'User Data Deletion',
+    title: 'Exclusao de Dados do Usuario',
     ptTitle: 'Exclusao de Dados do Usuario',
     subtitle: 'How users can request deletion of Platform Multi Publisher account data, connected account data and platform integration data.',
     lastUpdated: LEGAL_LAST_UPDATED,

@@ -31,6 +31,8 @@ Immediate rollback triggers:
 - Data corruption or migration break symptoms.
 - Unrecoverable runtime errors after patch attempt.
 
+Before executing rollback, or immediately after if the incident is time-critical, record the decision in `INCIDENT_RESPONSE.md` section 4 with UTC timestamp, trigger/gate ID, operator, reason, and verification result.
+
 ---
 
 ## 2) API Rollback (< 5 min target)
@@ -148,4 +150,3 @@ Unset skip toggle and verify job execution recovers.
 | Worker rollback | < 10 min |
 | Database rollback | < 30 min |
 | Multi-failure stabilization | < 30 min |
-

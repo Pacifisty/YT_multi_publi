@@ -21,10 +21,12 @@ import { AccountPlanService, type AccountPlanStore } from './account-plan/accoun
 import { AccountPlanController } from './account-plan/account-plan.controller';
 import { PaymentService } from './account-plan/payment.service';
 import { MercadoPagoPaymentProviderAdapter } from './account-plan/mercadopago-payment.adapter';
-import { PrismaWebhookDeduplicator } from './account-plan/webhook-deduplication';
+import type { WebhookDeduplicator } from './account-plan/webhook-deduplication';
 import { validatePaymentConfig } from './startup/payment-startup-validator';
 import { SessionGuard } from './auth/session.guard';
 import { EmailService, selectEmailProvider } from './integrations/email/email-service';
+import { GrowthScriptController } from './growth/growth-script.controller';
+import { GrowthScriptService } from './growth/growth-script.service';
 
 const optionalRequire = createRequire(import.meta.url);
 
@@ -45,6 +47,7 @@ export interface AppConfig {
   accountsModuleOptions?: AccountsServiceOptions;
   mediaModuleOptions?: MediaModuleOptions;
   accountPlanStore?: AccountPlanStore;
+  paymentWebhookDeduplicator?: WebhookDeduplicator | null;
 }
 
 export interface HttpRequest {
@@ -73,6 +76,7 @@ export interface AppInstance {
   publicMediaUrlService?: PublicMediaUrlService;
   accountPlanService: AccountPlanService;
   accountPlanController: AccountPlanController;
+  growthScriptController: GrowthScriptController;
 }
 
 /**
@@ -124,9 +128,10 @@ export function createApp(config: AppConfig = {}): AppInstance {
       })
     : undefined;
   const paymentProviderName = paymentProvider?.name ?? 'mock';
+  const paymentWebhookDeduplicator = config.paymentWebhookDeduplicator ?? null;
   console.log(`[api] payment provider: ${paymentProviderName}`);
   console.log(`[api] mercadopago api timeout: ${MERCADOPAGO_TIMEOUT_MS}ms`);
-  console.log('[api] webhook deduplication: disabled (prisma not initialized)');
+  console.log(`[api] webhook deduplication: ${paymentWebhookDeduplicator ? 'enabled' : 'disabled (no persistent deduplicator configured)'}`);
 
   // Initialize email service
   const emailProvider = selectEmailProvider();
@@ -136,7 +141,7 @@ export function createApp(config: AppConfig = {}): AppInstance {
 
   const paymentService = new PaymentService({
     provider: paymentProvider,
-    webhookDeduplicator: null,
+    webhookDeduplicator: paymentWebhookDeduplicator,
     emailService,
     accountPlanService,
     defaultSuccessUrl: config.env?.PAYMENT_SUCCESS_URL,
@@ -157,6 +162,14 @@ export function createApp(config: AppConfig = {}): AppInstance {
     getAccessTokenForChannel: (channelId, options) =>
       accountsModule.accountsService.resolveAccessTokenForChannel(channelId, options),
   });
+  const growthScriptController = new GrowthScriptController(
+    new GrowthScriptService({
+      dashboardService: campaignsModule.dashboardService,
+      campaignService: campaignsModule.campaignService,
+      accountsService: accountsModule.accountsService,
+    }),
+    new SessionGuard(),
+  );
   const mediaModule = createMediaModule(config.mediaModuleOptions);
   let processingQueue = false;
 
@@ -244,6 +257,7 @@ export function createApp(config: AppConfig = {}): AppInstance {
     playlistController: mediaModule.playlistController,
     backgroundProcessor,
     accountPlanController,
+    growthScriptController,
   });
 
   async function handleRequest(request: HttpRequest): Promise<HttpResponse> {
@@ -291,6 +305,7 @@ export function createApp(config: AppConfig = {}): AppInstance {
     publicMediaUrlService,
     accountPlanService,
     accountPlanController,
+    growthScriptController,
   };
 }
 

@@ -8,6 +8,7 @@ import type { UploadProgressService } from './campaigns/upload-progress.service'
 import type { AuthController } from './auth/auth.controller';
 import type { BackgroundProcessor } from './app';
 import type { AccountPlanController, AccountPlanRequest } from './account-plan/account-plan.controller';
+import type { GrowthScriptController, GrowthScriptRequest } from './growth/growth-script.controller';
 
 export interface ApiRequest {
   method: string;
@@ -44,6 +45,7 @@ export function createApiRouter(options: {
   authController?: AuthController;
   backgroundProcessor?: BackgroundProcessor | null;
   accountPlanController?: AccountPlanController;
+  growthScriptController?: GrowthScriptController;
 }): ApiRouter {
   const {
     campaignsModule,
@@ -54,10 +56,20 @@ export function createApiRouter(options: {
     authController,
     backgroundProcessor,
     accountPlanController,
+    growthScriptController,
   } = options;
   const ctrl = campaignsModule.campaignsController;
 
   const routes: Route[] = [];
+
+  if (growthScriptController) {
+    routes.push({
+      method: 'POST',
+      pattern: /^\/api\/growth\/script\/generate$/,
+      paramNames: [],
+      handler: (req: GrowthScriptRequest) => growthScriptController.generate(req),
+    });
+  }
 
   // Auth routes
   if (authController) {

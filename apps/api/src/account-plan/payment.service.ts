@@ -1,6 +1,7 @@
 import type { AccountPlanType, AccountPlanDefinition, TokenPackDefinition } from './account-plan.service';
 import { paymentLogger } from '../common/payment-logger';
 import type { EmailService } from '../integrations/email/email-service';
+import type { WebhookDeduplicator } from './webhook-deduplication';
 
 export type PaymentProvider = 'stripe' | 'mercadopago' | 'mock';
 export type PaymentStatus = 'pending' | 'processing' | 'paid' | 'failed' | 'cancelled' | 'refunded';
@@ -81,7 +82,7 @@ export interface PaymentRepository {
 export interface PaymentServiceOptions {
   provider?: PaymentProviderAdapter;
   repository?: PaymentRepository;
-  webhookDeduplicator?: any;
+  webhookDeduplicator?: WebhookDeduplicator | null;
   emailService?: EmailService;
   accountPlanService?: any; // Optional to get plan definitions for emails
   logger?: any;
@@ -94,7 +95,7 @@ export interface PaymentServiceOptions {
 export class PaymentService {
   private readonly provider: PaymentProviderAdapter;
   private readonly repository: PaymentRepository;
-  private readonly webhookDeduplicator: any;
+  private readonly webhookDeduplicator: WebhookDeduplicator | null;
   private readonly emailService?: EmailService;
   private readonly accountPlanService?: any;
   private readonly logger?: any;

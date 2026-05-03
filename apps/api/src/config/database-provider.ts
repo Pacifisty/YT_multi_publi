@@ -8,6 +8,7 @@ import { PrismaPublishJobRepository } from '../campaigns/prisma-publish-job.repo
 import { PrismaYouTubeChannelRepository } from '../channels/prisma-youtube-channel.repository';
 import { PrismaMediaAssetRepository } from '../media/prisma-media-asset.repository';
 import { PrismaPlaylistRepository, PrismaPresetRepository } from '../media/prisma-playlist.repository';
+import { PrismaWebhookDeduplicator } from '../account-plan/webhook-deduplication';
 
 const require = createRequire(import.meta.url);
 
@@ -38,6 +39,7 @@ export interface DatabaseProviderInstance {
   mediaAssetRepository: PrismaMediaAssetRepository | null;
   playlistRepository: PrismaPlaylistRepository | null;
   presetRepository: PrismaPresetRepository | null;
+  webhookDeduplicator: PrismaWebhookDeduplicator | null;
   isConnected(): boolean;
   connect(): Promise<void>;
   disconnect(): Promise<void>;
@@ -53,6 +55,7 @@ const REQUIRED_POSTGRES_TABLES = [
   'campaign_targets',
   'publish_jobs',
   'audit_events',
+  'webhook_events',
 ] as const;
 
 function createPrismaUnavailableMessage(): string {
@@ -140,6 +143,7 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
   let mediaAssetRepository: PrismaMediaAssetRepository | null = null;
   let playlistRepository: PrismaPlaylistRepository | null = null;
   let presetRepository: PrismaPresetRepository | null = null;
+  let webhookDeduplicator: PrismaWebhookDeduplicator | null = null;
   let startupIssue: string | null = null;
 
   if (databaseUrl) {
@@ -155,6 +159,7 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
       mediaAssetRepository = new PrismaMediaAssetRepository(prismaClient);
       playlistRepository = new PrismaPlaylistRepository(prismaClient);
       presetRepository = new PrismaPresetRepository(prismaClient);
+      webhookDeduplicator = new PrismaWebhookDeduplicator(prismaClient);
     } else {
       startupIssue = createPrismaUnavailableMessage();
     }
@@ -199,6 +204,10 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
 
     get presetRepository() {
       return presetRepository;
+    },
+
+    get webhookDeduplicator() {
+      return webhookDeduplicator;
     },
 
     isConnected() {

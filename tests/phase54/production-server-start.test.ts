@@ -13,6 +13,11 @@ const baseEnv: Record<string, string> = {
   ADMIN_PASSWORD_HASH: '$2b$10$fakehash',
 };
 
+function withoutDatabaseUrl(env: Record<string, string>): Record<string, string> {
+  const { DATABASE_URL: _databaseUrl, ...rest } = env;
+  return rest;
+}
+
 // ── startServer function ─────────────────────────────────────────────────────
 
 describe('startServer', () => {
@@ -34,7 +39,7 @@ describe('startServer', () => {
     const { startServer } = await import('../../apps/api/src/start');
 
     const instance = await startServer({
-      env: baseEnv,
+      env: withoutDatabaseUrl(baseEnv),
       port: 0,
     });
     cleanup = instance.shutdown;
@@ -64,6 +69,8 @@ describe('startServer', () => {
     cleanup = instance.shutdown;
 
     expect(connectFn).toHaveBeenCalledOnce();
+    const paymentService = (instance.bootstrapResult.server.app.accountPlanController as any).paymentService;
+    expect(paymentService.webhookDeduplicator).toBeDefined();
   });
 
   test('shutdown closes HTTP server and disconnects database', async () => {
@@ -94,7 +101,7 @@ describe('startServer', () => {
   test('works without DATABASE_URL (in-memory mode)', async () => {
     const { startServer } = await import('../../apps/api/src/start');
 
-    const instance = await startServer({ env: baseEnv, port: 0 });
+    const instance = await startServer({ env: withoutDatabaseUrl(baseEnv), port: 0 });
     cleanup = instance.shutdown;
 
     const port = instance.port;
@@ -105,7 +112,7 @@ describe('startServer', () => {
   test('returns bootstrapResult with databaseProvider', async () => {
     const { startServer } = await import('../../apps/api/src/start');
 
-    const instance = await startServer({ env: baseEnv, port: 0 });
+    const instance = await startServer({ env: withoutDatabaseUrl(baseEnv), port: 0 });
     cleanup = instance.shutdown;
 
     expect(instance.bootstrapResult).toBeDefined();
@@ -116,7 +123,7 @@ describe('startServer', () => {
   test('API routes respond through HTTP — GET /api/dashboard returns 401 without auth', async () => {
     const { startServer } = await import('../../apps/api/src/start');
 
-    const instance = await startServer({ env: baseEnv, port: 0 });
+    const instance = await startServer({ env: withoutDatabaseUrl(baseEnv), port: 0 });
     cleanup = instance.shutdown;
 
     const response = await fetch(`http://127.0.0.1:${instance.port}/api/dashboard`);

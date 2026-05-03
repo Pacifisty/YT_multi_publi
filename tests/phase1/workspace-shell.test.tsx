@@ -51,6 +51,7 @@ describe('protected workspace shell', () => {
       { id: 'media', label: 'Media', selected: false },
       { id: 'campanhas', label: 'Campanhas', selected: false },
       { id: 'dashboard', label: 'Dashboard', selected: false },
+      { id: 'growth', label: 'Growth', selected: false },
     ]);
     expect(result.emptyStates.accounts).toEqual({
       heading: 'No accounts connected',

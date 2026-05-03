@@ -62,6 +62,7 @@ describe('database schema readiness', () => {
   test('connect succeeds when required Prisma tables exist', async () => {
     const prisma = createSchemaAwarePrisma([
       'admin_users',
+      'account_plans',
       'connected_accounts',
       'youtube_channels',
       'media_assets',
@@ -69,6 +70,7 @@ describe('database schema readiness', () => {
       'campaign_targets',
       'publish_jobs',
       'audit_events',
+      'webhook_events',
     ]);
 
     const provider = createDatabaseProvider({
@@ -99,7 +101,7 @@ describe('database schema readiness', () => {
     });
 
     await expect(provider.connect()).rejects.toThrow(
-      'Database schema is missing required tables: publish_jobs, audit_events. Run Prisma migrations before starting the server.',
+      'Database schema is missing required tables: account_plans, publish_jobs, audit_events, webhook_events. Run Prisma migrations before starting the server.',
     );
 
     expect(prisma.$connect).toHaveBeenCalledOnce();

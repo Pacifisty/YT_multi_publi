@@ -8,6 +8,7 @@ import type { AccountsServiceOptions } from './accounts/accounts.service';
 import type { MediaModuleOptions } from './media/media.module';
 import type { AuthServiceOptions } from './auth/auth.service';
 import type { AccountPlanStore } from './account-plan/account-plan.service';
+import type { WebhookDeduplicator } from './account-plan/webhook-deduplication';
 
 export interface ServerConfig extends EnvConfig {}
 
@@ -19,6 +20,7 @@ export interface ServerOptions {
   accountsModuleOptions?: AccountsServiceOptions;
   mediaModuleOptions?: MediaModuleOptions;
   accountPlanStore?: AccountPlanStore;
+  paymentWebhookDeduplicator?: WebhookDeduplicator | null;
 }
 
 export interface ServerInstance {
@@ -46,6 +48,7 @@ export function createServer(options: ServerOptions): ServerInstance {
       accountsModuleOptions: options.accountsModuleOptions,
       mediaModuleOptions: options.mediaModuleOptions,
       accountPlanStore: options.accountPlanStore,
+      paymentWebhookDeduplicator: options.paymentWebhookDeduplicator,
     });
   } catch (error) {
     console.error('[startup] Fatal error:', error instanceof Error ? error.message : String(error));

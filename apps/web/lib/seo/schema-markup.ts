@@ -21,7 +21,7 @@ export const createOrganizationSchema = () => ({
     '@type': 'ContactPoint',
     telephone: '+1-XXX-XXX-XXXX',
     contactType: 'Customer Support',
-    email: 'support@ytmultipubli.com',
+    email: 'PlataformMultiPublisher@gmail.com',
     availableLanguage: ['en', 'pt', 'es'],
   },
 });

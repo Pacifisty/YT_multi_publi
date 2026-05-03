@@ -77,6 +77,7 @@ Default action:
    - SEV-1: rollback
    - SEV-2: quick patch if safe, else rollback
    - SEV-3: monitor + scheduled patch
+3. If rollback is selected, add an entry to the Rollback Decision Log before execution or immediately after the emergency action.
 
 ### T+15 to T+45: Execute and Verify
 
@@ -98,7 +99,24 @@ Default action:
 
 ---
 
-## 4) Communication Templates
+## 4) Rollback Decision Log
+
+Every rollback decision must be recorded in the incident thread or launch evidence archive. Do not store secrets, raw tokens, database credentials, full customer payloads, or private provider responses in this log.
+
+| Timestamp (UTC) | Decision | Trigger / Gate ID | Reason | Operator | Verification Result |
+|---|---|---|---|---|---|
+| | `rollback` / `patch` / `monitor` | | | | |
+
+Required fields:
+- Timestamp in UTC.
+- Decision taken and operator.
+- Triggering gate ID, error type, or incident signal.
+- Short reason for the decision.
+- Verification result after action.
+
+---
+
+## 5) Communication Templates
 
 ### Internal Alert
 
@@ -138,20 +156,23 @@ We apologize for the disruption.
 Incident: [title]
 Severity: [SEV-1/2/3]
 Duration: [start-end]
-Root cause: [short]
+Root cause: [short, no secrets]
 Resolution: [rollback/patch]
 User impact: [scope]
+Evidence refs: [gate IDs and error types only]
 Follow-ups: [action items + owners]
 ```
 
+Post-incident summaries must reference gate IDs, error categories, and sanitized symptoms only. Never include API keys, OAuth tokens, payment secrets, raw webhook signatures, database credentials, customer private content, or full provider payloads.
+
 ---
 
-## 5) On-Call Quick Checklist
+## 6) On-Call Quick Checklist
 
 - [ ] Classify severity
 - [ ] Open incident record/thread
+- [ ] Record rollback decision if rollback or emergency patch is selected
 - [ ] Decide rollback vs patch
 - [ ] Verify health + critical gates
 - [ ] Send stakeholder update
 - [ ] Capture follow-up actions
-

@@ -113,6 +113,11 @@ const LEGAL_PATH_TO_DOCUMENT_KEY: Partial<Record<string, LegalDocumentKey>> = {
   '/terms': 'terms',
   '/data-deletion': 'data-deletion',
 };
+const LEGAL_EN_TITLES: Record<LegalDocumentKey, string> = {
+  privacy: 'Privacy Policy',
+  terms: 'Terms of Service',
+  'data-deletion': 'User Data Deletion',
+};
 
 function normalizeFrontendPath(path: string): string {
   if (path.length > 1 && path.endsWith('/')) {
@@ -128,6 +133,26 @@ function shouldIndexPath(path: string): boolean {
 
 function getLegalDocumentKeyForPath(path: string): LegalDocumentKey | null {
   return LEGAL_PATH_TO_DOCUMENT_KEY[normalizeFrontendPath(path)] ?? null;
+}
+
+function getLegalDocumentTitle(document: LegalDocument, locale: FrontendLocale): string {
+  if (locale === 'en') {
+    return LEGAL_EN_TITLES[document.key] ?? document.title;
+  }
+  return document.ptTitle || document.title;
+}
+
+function renderInitialLegalLinks(locale: FrontendLocale): string {
+  const links = ([
+    ['/privacy', locale === 'en' ? 'Privacy Policy' : 'Politica de Privacidade'],
+    ['/terms', locale === 'en' ? 'Terms of Service' : 'Termos de Servico'],
+    ['/data-deletion', locale === 'en' ? 'User Data Deletion' : 'Exclusao de Dados do Usuario'],
+  ] as const)
+    .map(([href, label]) => `<a href="${href}">${escapeHtml(label)}</a>`)
+    .join('\n          ');
+  return `<nav aria-label="Legal links">
+          ${links}
+        </nav>`;
 }
 
 function renderLegalDocumentBodyHtml(document: LegalDocument): string {
@@ -251,22 +276,23 @@ function getSeoForPath(path: string, locale: FrontendLocale) {
     const document = LEGAL_DOCUMENTS[legalDocumentKey];
     return {
       ...base,
-      title: `${document.title} | Platform Multi Publisher`,
+      title: `${getLegalDocumentTitle(document, locale)} | Platform Multi Publisher`,
       description: document.subtitle,
     };
   }
   return base;
 }
 
-function renderInitialLegalContent(path: string): string {
+function renderInitialLegalContent(path: string, locale: FrontendLocale): string {
   const legalDocumentKey = getLegalDocumentKeyForPath(path);
   if (!legalDocumentKey) return '';
   const document = LEGAL_DOCUMENTS[legalDocumentKey];
+  const title = getLegalDocumentTitle(document, locale);
   const bodyHtml = renderLegalDocumentBodyHtml(document);
 
   return `
       <main class="seo-static-content legal-static-content">
-        <h1>${escapeHtml(document.title)}</h1>
+        <h1>${escapeHtml(title)}</h1>
         <p>${escapeHtml(document.subtitle)}</p>
         <p>Document last updated: ${escapeHtml(document.lastUpdated)}.</p>
         <p>${escapeHtml(document.reviewNote)}</p>
@@ -279,7 +305,7 @@ function renderInitialAppContent(path: string, locale: FrontendLocale): string {
   const seo = getSeoForLocale(locale);
   const normalizedPath = normalizeFrontendPath(path);
   if (normalizedPath === '/privacy' || normalizedPath === '/terms' || normalizedPath === '/data-deletion') {
-    return renderInitialLegalContent(normalizedPath);
+    return renderInitialLegalContent(normalizedPath, locale);
   }
   if (!shouldIndexPath(path)) {
     return '';
@@ -298,11 +324,7 @@ function renderInitialAppContent(path: string, locale: FrontendLocale): string {
           <h2>${escapeHtml(seo.initialIndexSectionTitle)}</h2>
           <p>${escapeHtml(seo.initialIndexSectionText)}</p>
         </section>
-        <nav aria-label="Legal links">
-          <a href="/privacy">Privacy Policy</a>
-          <a href="/terms">Terms of Service</a>
-          <a href="/data-deletion">User Data Deletion</a>
-        </nav>
+        ${renderInitialLegalLinks(locale)}
       </main>
     `;
 }

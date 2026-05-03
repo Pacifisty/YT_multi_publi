@@ -288,9 +288,9 @@ describe('HTTP adapter — createRequestHandler', () => {
     expect(res._body).toContain('<link rel="canonical" href="https://platform.example/" />');
     expect(res._body).toContain('<script type="application/ld+json">');
     expect(res._body).toContain('Publicação multi plataforma');
-    expect(res._body).toContain('<a href="/privacy">Privacy Policy</a>');
-    expect(res._body).toContain('<a href="/terms">Terms of Service</a>');
-    expect(res._body).toContain('<a href="/data-deletion">User Data Deletion</a>');
+    expect(res._body).toContain('<a href="/privacy">Politica de Privacidade</a>');
+    expect(res._body).toContain('<a href="/terms">Termos de Servico</a>');
+    expect(res._body).toContain('<a href="/data-deletion">Exclusao de Dados do Usuario</a>');
     expect(res._body).not.toContain('window.__PMP_LEGAL_DOCUMENTS__');
     expect(res._body).toMatch(/<script src="\/i18n\.js\?v=[^"]+"><\/script>/);
   });
@@ -320,18 +320,18 @@ describe('HTTP adapter — createRequestHandler', () => {
     }
 
     expect(privacyRes._status).toBe(200);
-    expect(privacyRes._body).toContain('<title>Privacy Policy | Platform Multi Publisher</title>');
+    expect(privacyRes._body).toContain('<title>Politica de Privacidade | Platform Multi Publisher</title>');
     expect(privacyRes._body).toContain('<meta name="robots" content="index,follow" />');
     expect(privacyRes._body).toContain('<link rel="canonical" href="https://platform.example/privacy" />');
     expect(privacyRes._body).toContain('window.__PMP_LEGAL_DOCUMENTS__');
 
     expect(termsRes._status).toBe(200);
-    expect(termsRes._body).toContain('<title>Terms of Service | Platform Multi Publisher</title>');
+    expect(termsRes._body).toContain('<title>Termos de Servico | Platform Multi Publisher</title>');
     expect(termsRes._body).toContain('<meta name="robots" content="index,follow" />');
     expect(termsRes._body).toContain('<link rel="canonical" href="https://platform.example/terms" />');
 
     expect(deletionRes._status).toBe(200);
-    expect(deletionRes._body).toContain('<title>User Data Deletion | Platform Multi Publisher</title>');
+    expect(deletionRes._body).toContain('<title>Exclusao de Dados do Usuario | Platform Multi Publisher</title>');
     expect(deletionRes._body).toContain('<meta name="robots" content="index,follow" />');
     expect(deletionRes._body).toContain('<link rel="canonical" href="https://platform.example/data-deletion" />');
     expect(app.handleRequest).not.toHaveBeenCalled();
@@ -346,7 +346,7 @@ describe('HTTP adapter — createRequestHandler', () => {
     await handler(req, res as any);
 
     expect(res._status).toBe(200);
-    expect(res._body).toContain('<title>User Data Deletion | Platform Multi Publisher</title>');
+    expect(res._body).toContain('<title>Exclusao de Dados do Usuario | Platform Multi Publisher</title>');
     expect(res._body).toContain('<link rel="canonical" href="http://127.0.0.1:3000/data-deletion" />');
     expect(res._body).toContain('How to request deletion');
     expect(app.handleRequest).not.toHaveBeenCalled();
@@ -363,6 +363,26 @@ describe('HTTP adapter — createRequestHandler', () => {
     expect(res._status).toBe(200);
     expect(res._body).toContain('<html lang="en">');
     expect(res._body).toContain('Plan and publish your videos on YouTube, TikTok and Instagram');
+    expect(res._body).toContain('<a href="/privacy">Privacy Policy</a>');
+    expect(res._body).toContain('<a href="/terms">Terms of Service</a>');
+    expect(res._body).toContain('<a href="/data-deletion">User Data Deletion</a>');
+    expect(res._headers['set-cookie']).toContain('pmp_locale=en');
+    expect(app.handleRequest).not.toHaveBeenCalled();
+  });
+
+  test('serves legal frontend html with English titles when requested by locale', async () => {
+    const app = mockApp();
+    const handler = createRequestHandler({ app });
+    const req = mockReq({ method: 'GET', url: '/privacy?lang=en' });
+    const res = mockRes();
+
+    await handler(req, res as any);
+
+    expect(res._status).toBe(200);
+    expect(res._body).toContain('<html lang="en">');
+    expect(res._body).toContain('<title>Privacy Policy | Platform Multi Publisher</title>');
+    expect(res._body).toContain('<h1>Privacy Policy</h1>');
+    expect(res._body).not.toContain('<title>Politica de Privacidade | Platform Multi Publisher</title>');
     expect(res._headers['set-cookie']).toContain('pmp_locale=en');
     expect(app.handleRequest).not.toHaveBeenCalled();
   });

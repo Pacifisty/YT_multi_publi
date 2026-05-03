@@ -324,7 +324,7 @@ export default function PublicHomePage() {
                 <li>✅ Dedicated support</li>
               </ul>
 
-              <a href="mailto:sales@ytmultipubli.com">
+              <a href="mailto:PlataformMultiPublisher@gmail.com">
                 <Button variant="secondary" size="md">
                   Contact Sales
                 </Button>

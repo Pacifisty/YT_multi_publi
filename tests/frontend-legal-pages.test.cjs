@@ -25,9 +25,9 @@ test('public legal routes are served by the frontend shell and listed in the sit
   assert.match(UI_SHELL, /normalizedPath === '\/data-deletion'/);
   assert.match(UI_SHELL, /normalizeFrontendPath/);
   assert.match(UI_SHELL, /LEGAL_DOCUMENTS\[legalDocumentKey\]/);
-  assert.match(LEGAL_DOCS, /title: 'Privacy Policy'/);
-  assert.match(LEGAL_DOCS, /title: 'Terms of Service'/);
-  assert.match(LEGAL_DOCS, /title: 'User Data Deletion'/);
+  assert.match(LEGAL_DOCS, /title: 'Politica de Privacidade'/);
+  assert.match(LEGAL_DOCS, /title: 'Termos de Servico'/);
+  assert.match(LEGAL_DOCS, /title: 'Exclusao de Dados do Usuario'/);
 });
 
 test('privacy policy covers TikTok, YouTube, Instagram, data deletion, and reviewer-required topics', () => {
@@ -56,7 +56,7 @@ test('privacy policy covers TikTok, YouTube, Instagram, data deletion, and revie
 
   [
     'Lucas Domingues',
-    'Domingues_eu@Hotmail.com',
+    'PlataformMultiPublisher@gmail.com',
     'Alameda dos Mutuns',
     'Brazil',
     'Cloudflare',
@@ -84,25 +84,32 @@ test('terms of service covers platform authorization and third-party publishing 
 });
 
 test('legal links are visible from public website and styled', () => {
-  assert.match(APP_JS, /href="\/privacy" data-link>Privacy Policy/);
-  assert.match(APP_JS, /href="\/terms" data-link>Terms of Service/);
-  assert.match(APP_JS, /href="\/data-deletion" data-link>User Data Deletion/);
-  assert.match(APP_JS, /href="\/privacy" data-link>Privacy/);
-  assert.match(APP_JS, /href="\/terms" data-link>Terms/);
-  assert.match(APP_JS, /href="\/data-deletion" data-link>Data Deletion/);
+  assert.match(APP_JS, /href="\/privacy" data-link>Politica de Privacidade/);
+  assert.match(APP_JS, /href="\/terms" data-link>Termos de Servico/);
+  assert.match(APP_JS, /href="\/data-deletion" data-link>Exclusao de Dados do Usuario/);
+  assert.doesNotMatch(APP_JS, /href="\/privacy" data-link>Privacy Policy/);
+  assert.doesNotMatch(APP_JS, /href="\/terms" data-link>Terms of Service/);
+  assert.doesNotMatch(APP_JS, /href="\/data-deletion" data-link>User Data Deletion/);
+  assert.match(APP_JS, /href="\/privacy" data-link \$\{activePage === 'privacy' \? 'aria-current="page"' : ''\}>Privacidade/);
+  assert.match(APP_JS, /href="\/terms" data-link \$\{activePage === 'terms' \? 'aria-current="page"' : ''\}>Termos/);
+  assert.match(APP_JS, /href="\/data-deletion" data-link \$\{activePage === 'data-deletion' \? 'aria-current="page"' : ''\}>Exclusão de dados/);
   assert.match(CSS, /\.legal-document/);
   assert.match(CSS, /\.public-footer-links/);
 });
 
 test('legal pages keep reviewer hierarchy ahead of conversion actions', () => {
+  const legalNav = extractFunctionBody(APP_JS, 'function renderLegalPublicNav', 'function renderLegalShell');
   const legalShell = extractFunctionBody(APP_JS, 'function renderLegalShell', 'function renderLegalDocumentPage');
 
-  assert.match(legalShell, /href="\/" data-link>Ver pagina principal/);
+  assert.doesNotMatch(legalNav, /href="\/login\?mode=register"/);
+  assert.doesNotMatch(legalNav, /Começar agora/);
+  assert.match(legalShell, /href="\/" data-link>Ver página principal/);
   assert.match(legalShell, /href="#legal-contact">Entrar em contato/);
   assert.match(legalShell, /class="legal-content-shell"/);
   assert.match(legalShell, /class="legal-toc"/);
   assert.doesNotMatch(legalShell, /href="\/login\?mode=register"/);
   assert.doesNotMatch(legalShell, /Comecar agora/);
+  assert.doesNotMatch(legalShell, /Começar agora/);
   assert.doesNotMatch(legalShell, /Ver demonstracao/);
   assert.doesNotMatch(legalShell, /legal-final-cta/);
 });

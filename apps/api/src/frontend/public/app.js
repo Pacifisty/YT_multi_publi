@@ -349,6 +349,13 @@ const FONT_THEME_STORAGE_KEY = 'ytmp-font-theme';
 const OAUTH_PROVIDER_STORAGE_KEY = 'ytmp-pending-oauth-provider';
 const CAMPAIGN_REAUTH_RETURN_KEY = 'ytmp-campaign-reauth-return';
 const MEDIA_PREVIEW_SIZE_STORAGE_KEY = 'ytmp-media-preview-sizes';
+const GROWTH_PREFERENCES_STORAGE_KEY = 'ytmp-growth-preferences-v1';
+const GROWTH_PREFERENCE_OPTIONS = [
+  { id: 'retentionAlerts', label: 'Receber alertas de queda de retencao' },
+  { id: 'educationalTips', label: 'Mostrar dicas de conteudo educativo' },
+  { id: 'weeklyEmailSummary', label: 'Resumo semanal por e-mail' },
+  { id: 'useWorkspaceLocale', label: 'Usar idioma do painel principal' },
+];
 const DEFAULT_MEDIA_PREVIEW_SIZE = 'medium';
 const MEDIA_PREVIEW_SIZE_OPTIONS = [
   { id: 'low', label: 'Baixo' },
@@ -1429,6 +1436,37 @@ function readStoredFontTheme() {
   }
 }
 
+function getDefaultGrowthPreferences() {
+  return Object.fromEntries(GROWTH_PREFERENCE_OPTIONS.map((option) => [option.id, true]));
+}
+
+function normalizeGrowthPreferences(value) {
+  const defaults = getDefaultGrowthPreferences();
+  const input = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return Object.fromEntries(
+    GROWTH_PREFERENCE_OPTIONS.map((option) => [option.id, typeof input[option.id] === 'boolean' ? input[option.id] : defaults[option.id]])
+  );
+}
+
+function readStoredGrowthPreferences() {
+  try {
+    return normalizeGrowthPreferences(JSON.parse(localStorage.getItem(GROWTH_PREFERENCES_STORAGE_KEY) || '{}'));
+  } catch {
+    return getDefaultGrowthPreferences();
+  }
+}
+
+function writeStoredGrowthPreferences(preferences = state.growthPreferences) {
+  const normalized = normalizeGrowthPreferences(preferences);
+  state.growthPreferences = normalized;
+  try {
+    localStorage.setItem(GROWTH_PREFERENCES_STORAGE_KEY, JSON.stringify(normalized));
+  } catch {
+    // Ignore storage errors in private/sandboxed browsers.
+  }
+  return normalized;
+}
+
 function readPendingOauthProvider() {
   try {
     const value = localStorage.getItem(OAUTH_PROVIDER_STORAGE_KEY);
@@ -1575,6 +1613,7 @@ const api = {
   accountYouTubeOauthCallback: (code, stateParam) => apiRequest('GET', buildUrl('/api/accounts/oauth/youtube/callback', { code, state: stateParam })),
   accountTikTokOauthCallback: (code, stateParam) => apiRequest('GET', buildUrl('/api/accounts/oauth/tiktok/callback', { code, state: stateParam })),
   accountInstagramOauthCallback: (code, stateParam) => apiRequest('GET', buildUrl('/api/accounts/oauth/instagram/callback', { code, state: stateParam })),
+  generateGrowthScript: (payload) => apiRequest('POST', '/api/growth/script/generate', payload),
   accountChannels: (accountId) => apiRequest('GET', `/api/accounts/${encodeURIComponent(accountId)}/channels`),
   syncAccountChannels: (accountId) => apiRequest('POST', `/api/accounts/${encodeURIComponent(accountId)}/channels/sync`),
   toggleChannel: (accountId, channelId, isActive) => apiRequest('PATCH', `/api/accounts/${encodeURIComponent(accountId)}/channels/${encodeURIComponent(channelId)}`, { isActive }),
@@ -1609,9 +1648,15 @@ const state = {
   theme: 'light',
   fontTheme: readStoredFontTheme(),
   mediaPreviewSizes: readStoredMediaPreviewSizes(),
+  growthPreferences: readStoredGrowthPreferences(),
+  growthConnectedAccounts: [],
+  growthChannelLoadId: 0,
+  growthWorkspaceData: null,
+  growthMetricFilters: { date: 'all', platform: 'all' },
   mediaDurationBackfillInFlight: new Set(),
   uiNotice: null,
   autoRefreshTimer: null,
+  dashboardClockTimer: null,
   pulseRotateTimer: null,
 };
 
@@ -2052,6 +2097,33 @@ function clearAutoRefreshTimer() {
   }
 }
 
+function clearDashboardClockTimer() {
+  if (state.dashboardClockTimer) {
+    clearInterval(state.dashboardClockTimer);
+    state.dashboardClockTimer = null;
+  }
+}
+
+const DASHBOARD_AUTO_REFRESH_MS = 12000;
+const DASHBOARD_AUTO_REFRESH_RETRY_MS = 3000;
+
+function scheduleDashboardAutoRefresh({ delayMs = DASHBOARD_AUTO_REFRESH_MS, protectPlaylistPlayer = true } = {}) {
+  clearAutoRefreshTimer();
+  state.autoRefreshTimer = setTimeout(() => {
+    state.autoRefreshTimer = null;
+    if (window.location.pathname !== '/workspace/dashboard') return;
+    if (typeof document !== 'undefined' && document.hidden) {
+      scheduleDashboardAutoRefresh({ delayMs: DASHBOARD_AUTO_REFRESH_RETRY_MS, protectPlaylistPlayer });
+      return;
+    }
+    if (protectPlaylistPlayer && isDashboardPlaylistPlayerProtected()) {
+      scheduleDashboardAutoRefresh({ delayMs: DASHBOARD_AUTO_REFRESH_RETRY_MS, protectPlaylistPlayer });
+      return;
+    }
+    void renderPlatformDashboardPage();
+  }, delayMs);
+}
+
 function clearPulseRotateTimer() {
   if (state.pulseRotateTimer) {
     clearInterval(state.pulseRotateTimer);
@@ -2251,6 +2323,7 @@ async function showFormDialog({ title, message = '', fields, confirmLabel = 'Sav
 }
 
 function activeTab(pathname) {
+  if (pathname.startsWith('/workspace/growth')) return 'growth';
   if (pathname.startsWith('/workspace/accounts')) return 'accounts';
   if (
     pathname.startsWith('/workspace/videos')
@@ -2270,6 +2343,7 @@ function renderWorkspaceShell(options) {
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', href: '/workspace/dashboard' },
+    { id: 'growth', label: 'Growth', href: '/workspace/growth' },
     { id: 'campanhas', label: 'Campanhas', href: '/workspace/campanhas' },
     { id: 'accounts', label: 'Accounts', href: '/workspace/accounts' },
     { id: 'videos', label: 'Videos', href: '/workspace/videos' },
@@ -2624,9 +2698,9 @@ function renderPublicSaasNav(options = {}) {
       <nav class="public-nav-links" aria-label="Menu principal">
         <a href="${base}#recursos">Recursos</a>
         <a href="${base}#como-funciona">Como funciona</a>
-        <a href="${base}#integracoes">Integracoes</a>
-        <a href="${base}#seguranca">Seguranca</a>
-        <a href="${base}#planos">Precos</a>
+        <a href="${base}#integracoes">Integrações</a>
+        <a href="${base}#seguranca">Segurança</a>
+        <a href="${base}#planos">Preços</a>
         <a href="${base}#contato">Contato</a>
       </nav>
       <div class="public-nav-actions" data-no-i18n>
@@ -2948,7 +3022,7 @@ function renderModernLoginPage(options = {}) {
 
           <p class="login-modern-footnote">
             ${mode === 'register'
-              ? 'By creating an account you agree to our <a href="/terms" data-link>Terms of Service</a> and <a href="/privacy" data-link>Privacy Policy</a>.'
+              ? 'Ao criar uma conta, voce concorda com nossos <a href="/terms" data-link>Termos de Servico</a> e <a href="/privacy" data-link>Politica de Privacidade</a>.'
               : 'Use Google sign-in if you started with Google to restore your workspace correctly.'}
           </p>
         </div>
@@ -3713,6 +3787,10 @@ function renderWorkspacePlanCard(option, account) {
 
 async function renderSettingsPage() {
   await ensureAccountPlan();
+  const growthAccountsResult = await api.accounts().catch(() => null);
+  if (growthAccountsResult?.ok && Array.isArray(growthAccountsResult.body?.accounts)) {
+    state.growthConnectedAccounts = growthAccountsResult.body.accounts;
+  }
   const account = state.account;
   const planId = getCurrentAccountPlanId();
   const planConfig = getPlanVisualConfig(planId);
@@ -3751,6 +3829,14 @@ async function renderSettingsPage() {
           <span class="settings-hub-card-copy">
             <strong>Painel do perfil</strong>
             <small>Dados da conta, plano ativo, tokens e preferências persistidas.</small>
+          </span>
+        </a>
+
+        <a class="settings-hub-card settings-hub-link-card settings-hub-link-card-accounts" data-link href="/workspace/accounts">
+          <span class="settings-hub-card-icon">${renderNeonMediaIcon('playlist', 'stat', { state: 'info' })}</span>
+          <span class="settings-hub-card-copy">
+            <strong>Contas conectadas</strong>
+            <small>Conectar plataformas, revisar canais e resolver reconexoes.</small>
           </span>
         </a>
 
@@ -3798,8 +3884,13 @@ async function renderSettingsPage() {
           <a class="button button-secondary" data-link href="/workspace/planos">Abrir planos</a>
         </article>
       </section>
+
+      <section class="growth-module growth-settings-merged settings-growth-compact" aria-label="Funcoes Growth migradas para Configuracoes PMP">
+        ${renderGrowthSettingsPanel({ merged: true, compact: true })}
+      </section>
     `,
   });
+  bindGrowthInteractions();
 }
 
 async function renderProfilePage() {
@@ -4202,6 +4293,7 @@ function parseCurrentQuery() {
 function navigate(path, replace = false) {
   const target = String(path || '/');
   clearAutoRefreshTimer();
+  clearDashboardClockTimer();
   if (replace) {
     history.replaceState({}, '', target);
   } else {
@@ -4265,7 +4357,7 @@ function getLegalPagePresentation(activePage, title, subtitle) {
       ...base,
       eyebrow: 'Privacidade e dados',
       badge: 'Dados, APIs e retencao',
-      title: 'Privacy Policy',
+      title: 'Politica de Privacidade',
       ptTitle: 'Politica de Privacidade',
       summary: 'Explica quais dados sao coletados, por que sao usados, como sao protegidos e como usuarios podem solicitar acesso, correcao, exclusao ou exportacao.',
       accent: 'cyan',
@@ -4282,7 +4374,7 @@ function getLegalPagePresentation(activePage, title, subtitle) {
       ...base,
       eyebrow: 'Termos de uso',
       badge: 'Responsabilidades e limites',
-      title: 'Terms of Service',
+      title: 'Termos de Servico',
       ptTitle: 'Termos de Servico',
       summary: 'Define regras de uso, autorizacoes, responsabilidades por conteudo, limites de responsabilidade e relacao com plataformas independentes.',
       accent: 'violet',
@@ -4297,8 +4389,8 @@ function getLegalPagePresentation(activePage, title, subtitle) {
   return {
     ...base,
     eyebrow: 'Exclusao de dados',
-    badge: 'User Data Deletion',
-    title: 'User Data Deletion',
+    badge: 'Exclusao de dados',
+    title: 'Exclusao de Dados do Usuario',
     ptTitle: 'Exclusao de Dados do Usuario',
     summary: 'Mostra como solicitar exclusao de conta, contas conectadas, tokens OAuth, midias, campanhas e dados de integracao.',
     accent: 'green',
@@ -4352,10 +4444,9 @@ function renderPublicFooter() {
         <span>Publicacao profissional sem prometer resultados dependentes de terceiros.</span>
       </div>
       <nav class="public-footer-links" aria-label="Legal and account links">
-        <a href="/privacy" data-link>Privacy Policy</a>
-        <a href="/terms" data-link>Terms of Service</a>
-        <a href="/data-deletion" data-link>User Data Deletion</a>
-        <a href="/login?mode=register" data-link>Comecar agora</a>
+        <a href="/privacy" data-link>Politica de Privacidade</a>
+        <a href="/terms" data-link>Termos de Servico</a>
+        <a href="/data-deletion" data-link>Exclusao de Dados do Usuario</a>
       </nav>
     </footer>
   `;
@@ -4374,18 +4465,17 @@ function renderLegalPublicNav(activePage) {
       <nav class="public-nav-links" aria-label="Main website links">
         <a href="/#recursos" data-link>Recursos</a>
         <a href="/#como-funciona" data-link>Como funciona</a>
-        <a href="/#integracoes" data-link>Integracoes</a>
-        <a href="/#seguranca" data-link>Seguranca</a>
-        <a href="/#planos" data-link>Precos</a>
+        <a href="/#integracoes" data-link>Integrações</a>
+        <a href="/#seguranca" data-link>Segurança</a>
+        <a href="/#planos" data-link>Preços</a>
       </nav>
       <nav class="legal-nav-links" aria-label="Legal pages">
-        <a href="/privacy" data-link ${activePage === 'privacy' ? 'aria-current="page"' : ''}>Privacy</a>
-        <a href="/terms" data-link ${activePage === 'terms' ? 'aria-current="page"' : ''}>Terms</a>
-        <a href="/data-deletion" data-link ${activePage === 'data-deletion' ? 'aria-current="page"' : ''}>Data Deletion</a>
+        <a href="/privacy" data-link ${activePage === 'privacy' ? 'aria-current="page"' : ''}>Privacidade</a>
+        <a href="/terms" data-link ${activePage === 'terms' ? 'aria-current="page"' : ''}>Termos</a>
+        <a href="/data-deletion" data-link ${activePage === 'data-deletion' ? 'aria-current="page"' : ''}>Exclusão de dados</a>
       </nav>
       <div class="public-nav-actions">
         <a class="public-link" href="/login" data-link>Entrar</a>
-        <a class="public-button" href="/login?mode=register" data-link>Comecar agora</a>
       </div>
     </header>
   `;
@@ -4427,7 +4517,7 @@ function renderLegalShell(activePage, title, subtitle, bodyHtml, lastUpdated = L
                 <span>Brasil</span>
               </div>
               <div class="legal-hero-actions">
-                <a class="public-button public-button-large" href="/" data-link>Ver pagina principal</a>
+                <a class="public-button public-button-large" href="/" data-link>Ver página principal</a>
                 <a class="public-ghost-button" href="#legal-contact">Entrar em contato</a>
               </div>
             </div>
@@ -4462,8 +4552,8 @@ function renderLegalShell(activePage, title, subtitle, bodyHtml, lastUpdated = L
           </p>
 
           <section class="legal-content-shell">
-            <aside class="legal-toc" aria-label="Indice do documento">
-              <strong>Nesta pagina</strong>
+            <aside class="legal-toc" aria-label="Índice do documento">
+              <strong>Nesta página</strong>
               ${tocHtml}
             </aside>
             <article class="legal-document">
@@ -4601,7 +4691,7 @@ async function renderPublicLandingPage() {
     ['clock', 'Fila de publicacao', 'Acompanhe o que esta pronto, em envio, pendente, publicado ou com erro.', 'processing'],
     ['warning', 'Status e logs', 'Transforme falhas de API em mensagens operacionais para agir rapido.', 'warning'],
     ['folder', 'Organizacao por workspace', 'Separe operacoes por equipe, cliente, canal ou rotina de publicacao.', 'info'],
-    ['storage', 'Seguranca operacional', 'Tokens protegidos, permissoes claras e trilha de acoes importantes.', 'success'],
+    ['storage', 'Segurança operacional', 'Tokens protegidos, permissões claras e trilha de ações importantes.', 'success'],
     ['video', 'YouTube, TikTok e Instagram', 'Use os canais conectados sem insinuar parceria oficial com as plataformas.', 'info'],
   ].map(([icon, title, text, state]) => `
     <article class="public-feature">
@@ -4673,7 +4763,7 @@ async function renderPublicLandingPage() {
               <h1>Publique videos no YouTube, TikTok e Instagram sem repetir o trabalho.</h1>
               <p class="public-hero-text">Organize campanhas, conecte suas contas, acompanhe a fila de publicacao e gerencie tudo em um unico painel.</p>
               <div class="public-hero-actions">
-                <a class="public-button public-button-large" href="/login?mode=register" data-link>Comecar agora</a>
+                <a class="public-button public-button-large" href="/login?mode=register" data-link>Começar agora</a>
                 <a class="public-secondary-button" href="#demonstracao">Ver como funciona</a>
                 <a class="public-ghost-button" href="#contato">Entrar em contato</a>
               </div>
@@ -4787,7 +4877,7 @@ async function renderPublicLandingPage() {
 
           <section id="integracoes" class="public-section">
             <div class="public-section-head">
-              <p class="public-eyebrow">Integracoes</p>
+              <p class="public-eyebrow">Integrações</p>
               <h2>YouTube, TikTok e Instagram em uma rotina unica.</h2>
               <p class="public-section-note">Os icones identificam as plataformas suportadas e nao indicam afiliacao, patrocinio ou operacao oficial por elas.</p>
             </div>
@@ -4797,22 +4887,22 @@ async function renderPublicLandingPage() {
           <section id="seguranca" class="public-section public-security-section">
             <div class="public-security-card">
               <div>
-                <p class="public-eyebrow">Seguranca e conformidade</p>
+                <p class="public-eyebrow">Segurança e conformidade</p>
                 <h2>Controle de acesso claro para usuarios e equipes.</h2>
                 <p>As contas sao conectadas por autorizacao do usuario. Tokens devem ser protegidos, o usuario controla as contas conectadas e pode revogar acesso no workspace ou na propria plataforma.</p>
                 <p class="public-disclaimer">Platform Multi Publisher nao e afiliado, patrocinado ou operado oficialmente por YouTube, TikTok, Instagram, Google ou Meta.</p>
               </div>
               <div class="public-security-links">
-                <a href="/privacy" data-link>Privacy Policy</a>
-                <a href="/terms" data-link>Terms of Service</a>
-                <a href="/data-deletion" data-link>User Data Deletion</a>
+                <a href="/privacy" data-link>Politica de Privacidade</a>
+                <a href="/terms" data-link>Termos de Servico</a>
+                <a href="/data-deletion" data-link>Exclusao de Dados do Usuario</a>
               </div>
             </div>
           </section>
 
           <section id="planos" class="public-section">
             <div class="public-section-head">
-              <p class="public-eyebrow">Precos</p>
+              <p class="public-eyebrow">Preços</p>
               <h2>Planos reais do workspace, com limites claros.</h2>
               <p class="public-section-note">Valores, plataformas e tokens seguem a mesma configuracao da pagina Planos. Publicacoes podem depender de regras e disponibilidade das APIs de terceiros.</p>
             </div>
@@ -4849,7 +4939,7 @@ async function renderPublicLandingPage() {
             <p class="public-eyebrow">Comece pela organizacao</p>
             <h2>Pronto para centralizar sua operacao de videos?</h2>
             <div class="public-hero-actions">
-              <a class="public-button public-button-large" href="/login?mode=register" data-link>Comecar agora</a>
+              <a class="public-button public-button-large" href="/login?mode=register" data-link>Começar agora</a>
               <a class="public-secondary-button" href="#contato">Solicitar acesso</a>
             </div>
           </section>
@@ -4861,9 +4951,9 @@ async function renderPublicLandingPage() {
             <span>Publicacao profissional sem prometer resultados dependentes de terceiros.</span>
           </div>
           <nav class="public-footer-links" aria-label="Links institucionais">
-            <a href="/privacy" data-link>Privacy Policy</a>
-            <a href="/terms" data-link>Terms of Service</a>
-            <a href="/data-deletion" data-link>User Data Deletion</a>
+            <a href="/privacy" data-link>Politica de Privacidade</a>
+            <a href="/terms" data-link>Termos de Servico</a>
+            <a href="/data-deletion" data-link>Exclusao de Dados do Usuario</a>
             <a href="/login" data-link>Entrar</a>
           </nav>
         </footer>
@@ -5152,7 +5242,7 @@ async function renderPublicLandingPageLegacy() {
                 <p>Armazene videos, capas e copies para reaproveitamento entre canais e clientes.</p>
               </article>
               <article class="public-feature">
-                <p class="public-feature-kicker">Seguranca</p>
+                <p class="public-feature-kicker">Segurança</p>
                 <h3>Controle de acesso</h3>
                 <p>OAuth oficial por plataforma e trilha de acoes para reduzir falhas operacionais.</p>
               </article>
@@ -5190,7 +5280,7 @@ async function renderPublicLandingPageLegacy() {
 
           <section id="plataformas" class="public-section">
             <div class="public-section-head">
-              <p class="public-eyebrow">Integracoes oficiais</p>
+              <p class="public-eyebrow">Integrações oficiais</p>
               <h2>Conecte onde seu publico esta</h2>
             </div>
             <div class="public-platform-grid">${platformCardsHtml}</div>
@@ -5243,9 +5333,9 @@ async function renderPublicLandingPageLegacy() {
             <span>Publicacao profissional sem complicar a rotina.</span>
           </div>
           <nav class="public-footer-links" aria-label="Links institucionais">
-            <a href="/privacy" data-link>Privacy Policy</a>
-            <a href="/terms" data-link>Terms of Service</a>
-            <a href="/data-deletion" data-link>Data Deletion</a>
+            <a href="/privacy" data-link>Politica de Privacidade</a>
+            <a href="/terms" data-link>Termos de Servico</a>
+            <a href="/data-deletion" data-link>Exclusao de Dados do Usuario</a>
           </nav>
         </footer>
       </div>
@@ -5312,7 +5402,7 @@ function bindPublicContactForm() {
     ].join('\n');
 
     setFeedback('success', 'Mensagem preparada. Seu aplicativo de email sera aberto para concluir o envio.');
-    window.location.href = `mailto:domingues_eu@hotmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.location.href = `mailto:PlataformMultiPublisher@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   });
 }
 
@@ -5743,6 +5833,1734 @@ function shouldAutoRefreshDashboard(stats) {
 
 async function renderDashboardPage() {
   return renderPlatformDashboardPage();
+}
+
+const GROWTH_SECTIONS = [
+  { id: 'cockpit', label: 'Cockpit', href: '/workspace/growth', eyebrow: 'Centro de decisao' },
+  { id: 'conteudo', label: 'Conteudo', href: '/workspace/growth/conteudo', eyebrow: 'Laboratorio' },
+  { id: 'metricas', label: 'Metricas', href: '/workspace/growth/metricas', eyebrow: 'Metricas' },
+  { id: 'campanhas', label: 'Campanhas', href: '/workspace/growth/campanhas', eyebrow: 'Campanhas' },
+  { id: 'relatorios', label: 'Relatorios', href: '/workspace/growth/relatorios', eyebrow: 'Relatorios' },
+];
+
+const GROWTH_LEGACY_SECTION_MAP = Object.freeze({
+  overview: 'cockpit',
+  calendario: 'conteudo',
+  ideias: 'conteudo',
+  roteiro: 'conteudo',
+  biblioteca: 'conteudo',
+});
+
+const GROWTH_TEMPLATE_DATA = {
+  ideas: [
+    { title: '3 erros comuns que iniciantes cometem no seu nicho', platform: 'TikTok', format: 'TikTok', effort: 'Baixo', objective: 'Alcance' },
+    { title: 'Antes e depois de um processo real', platform: 'Instagram', format: 'Reels', effort: 'Medio', objective: 'Engajamento real' },
+    { title: 'O que ninguem te conta sobre esse assunto', platform: 'YouTube', format: 'Video longo', effort: 'Alto', objective: 'Educacao' },
+    { title: 'Checklist rapido para resolver um problema comum', platform: 'Instagram', format: 'Carrossel', effort: 'Baixo', objective: 'Conversao' },
+    { title: 'Respondendo uma duvida frequente da audiencia', platform: 'YouTube', format: 'Short', effort: 'Medio', objective: 'Educacao' },
+  ],
+  library: [
+    { title: 'Roteiro: gancho dos 3 segundos', type: 'Roteiro', platform: 'TikTok', status: 'Publicado', date: '01 Mai' },
+    { title: 'Legenda para conteudo educativo', type: 'Legenda', platform: 'Instagram', status: 'Rascunho', date: '03 Mai' },
+    { title: 'Hashtags para social media', type: 'Hashtags', platform: 'Instagram', status: 'Revisar', date: '05 Mai' },
+    { title: 'Modelo de CTA para YouTube', type: 'Modelo de CTA', platform: 'YouTube', status: 'Publicado', date: '07 Mai' },
+    { title: 'Briefing de campanha local', type: 'Briefing', platform: 'TikTok', status: 'Agendado', date: '09 Mai' },
+  ],
+};
+
+function getGrowthSectionFromPath(pathname = window.location.pathname) {
+  const match = pathname.match(/^\/workspace\/growth\/([^/?#]+)/);
+  const requested = match ? decodeURIComponent(match[1]) : 'cockpit';
+  const normalized = GROWTH_LEGACY_SECTION_MAP[requested] ?? requested;
+  return GROWTH_SECTIONS.some((section) => section.id === normalized) ? normalized : 'cockpit';
+}
+
+function renderGrowthHeader(sectionId, growthData = buildGrowthWorkspaceData()) {
+  const active = GROWTH_SECTIONS.find((section) => section.id === sectionId) ?? GROWTH_SECTIONS[0];
+  return `
+    <section class="growth-shell-hero" data-growth-header>
+      <div>
+        <span class="growth-eyebrow">${escapeHtml(active.eyebrow)}</span>
+        <h2>Growth</h2>
+        <p>Centro de decisao do PMP para escolher o que postar, onde publicar, o que corrigir e o que repetir a partir de sinais reais do workspace.</p>
+      </div>
+      <div class="growth-hero-stack" aria-label="Resumo Growth">
+        <strong>${escapeHtml(growthData.heroValue)}</strong>
+        <span>${escapeHtml(growthData.heroLabel)}</span>
+      </div>
+    </section>
+  `;
+}
+
+function renderGrowthNav(activeSection) {
+  return `
+    <nav class="growth-nav" aria-label="Growth sections">
+      ${GROWTH_SECTIONS.map((section) => `
+        <a class="growth-nav-link ${section.id === activeSection ? 'active' : ''}" data-link href="${escapeHtml(section.href)}">
+          ${escapeHtml(section.label)}
+        </a>
+      `).join('')}
+    </nav>
+  `;
+}
+
+function growthPlatformBadge(platform) {
+  const key = String(platform ?? '').toLowerCase();
+  const tone = key.includes('youtube') ? 'youtube' : key.includes('instagram') ? 'instagram' : key.includes('tiktok') ? 'tiktok' : 'neutral';
+  return `<span class="growth-badge growth-platform-${tone}">${escapeHtml(platform)}</span>`;
+}
+
+function growthStatusBadge(status) {
+  const normalized = String(status ?? '').toLowerCase();
+  const tone = normalized.includes('publicado') || normalized.includes('ativa') || normalized.includes('melhor') || normalized.includes('alta') || normalized.includes('completed') || normalized.includes('ready')
+    ? 'success'
+    : normalized.includes('revisar') || normalized.includes('agendado') || normalized.includes('draft') || normalized.includes('launching')
+      ? 'warning'
+      : normalized.includes('pausada') || normalized.includes('melhorar') || normalized.includes('failed') || normalized.includes('erro') || normalized.includes('reauth')
+        ? 'danger'
+        : 'neutral';
+  return `<span class="growth-badge growth-status-${tone}">${escapeHtml(status)}</span>`;
+}
+
+function renderGrowthMetricCard(metric) {
+  return `
+    <article class="growth-card growth-metric-card">
+      <div class="growth-card-topline">
+        <span>${escapeHtml(metric.label)}</span>
+        <span class="growth-card-icon">${renderNeonMediaIcon(metric.icon, 'chip', metric.tone)}</span>
+      </div>
+      <strong>${escapeHtml(metric.value)}</strong>
+      <small>${escapeHtml(metric.change)}</small>
+    </article>
+  `;
+}
+
+function renderGrowthBarChart(items) {
+  return `
+    <div class="growth-bars">
+      ${items.map((item) => `
+        <div class="growth-bar-row">
+          <div><span>${escapeHtml(item.label)}</span><strong>${formatNumber(item.value)}%</strong></div>
+          <span class="growth-bar-track"><span class="growth-bar-fill" style="width:${Math.max(0, Math.min(100, Number(item.value) || 0))}%"></span></span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderGrowthLineChart(values, ariaLabel = 'Grafico operacional Growth') {
+  const nums = (Array.isArray(values) ? values : []).map((value) => Number(value) || 0);
+  const max = Math.max(1, ...nums);
+  const points = nums.map((value, index) => {
+    const x = nums.length <= 1 ? 0 : (index / (nums.length - 1)) * 100;
+    const y = 92 - ((value / max) * 76);
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  }).join(' ');
+  return `
+    <div class="growth-chart-grid">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="${escapeAttribute(ariaLabel)}">
+        <polyline fill="none" points="${escapeAttribute(points)}" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"></polyline>
+      </svg>
+    </div>
+  `;
+}
+
+function renderGrowthChartCard(title, bodyHtml, description = '') {
+  return `
+    <section class="growth-card growth-chart-card">
+      <div class="growth-card-heading">
+        <div>
+          <h3>${escapeHtml(title)}</h3>
+          ${description ? `<p>${escapeHtml(description)}</p>` : ''}
+        </div>
+        <span>${renderNeonMediaIcon('star', 'chip', 'info')}</span>
+      </div>
+      ${bodyHtml}
+    </section>
+  `;
+}
+
+function renderGrowthContentCard(post) {
+  return `
+    <article class="growth-card growth-content-card">
+      <div class="growth-badge-row">${growthPlatformBadge(post.platform)}${growthStatusBadge(post.status)}</div>
+      <h3>${escapeHtml(post.title)}</h3>
+      <p>${escapeHtml(post.date)} as ${escapeHtml(post.time)}</p>
+      <small>${escapeHtml(post.caption)}</small>
+    </article>
+  `;
+}
+
+function renderGrowthIdeaCard(idea) {
+  return `
+    <article class="growth-card growth-idea-card" data-growth-idea-card>
+      <div class="growth-badge-row">${growthPlatformBadge(idea.platform)}<span class="growth-badge growth-status-neutral">${escapeHtml(idea.format)}</span></div>
+      <h3>${escapeHtml(idea.title)}</h3>
+      <div class="growth-mini-grid">
+        <span><strong>Esforco:</strong> ${escapeHtml(idea.effort)}</span>
+        <span><strong>Objetivo:</strong> ${escapeHtml(idea.objective)}</span>
+      </div>
+      <div class="growth-action-row">
+        <button class="button button-secondary" type="button" data-growth-save-idea>Separar nesta sessao</button>
+        <button class="button button-primary" type="button" data-growth-script-from-idea="${escapeAttribute(idea.title)}">Gerar roteiro</button>
+        <button class="button button-secondary" type="button" data-growth-campaign-from-idea="${escapeAttribute(idea.title)}">Criar campanha</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderGrowthReportCard(report) {
+  return `
+    <article class="growth-card">
+      <div class="growth-card-heading"><span>${renderNeonMediaIcon('library', 'chip', 'info')}</span><h3>${escapeHtml(report.title)}</h3></div>
+      <p>${escapeHtml(report.summary)}</p>
+    </article>
+  `;
+}
+
+function renderGrowthScriptList(items) {
+  const list = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!list.length) return '<p>Nenhum sinal disponivel ainda.</p>';
+  return `<ul>${list.map((item) => `<li>${escapeHtml(String(item))}</li>`).join('')}</ul>`;
+}
+
+function renderGrowthScriptTimeline(timeline) {
+  const rows = Array.isArray(timeline) ? timeline.filter(Boolean) : [];
+  if (!rows.length) return '';
+  return rows.map((block) => `
+    <div class="growth-script-timeline-row">
+      <span>${escapeHtml(block.time ?? '')}</span>
+      <p><strong>Fala:</strong> ${escapeHtml(block.speech ?? '')}</p>
+      <small>${escapeHtml(block.onScreen ?? '')}</small>
+    </div>
+  `).join('');
+}
+
+function renderGrowthScriptResearchResult(result = {}) {
+  const brief = result.brief ?? {};
+  const signals = result.signals ?? {};
+  const script = result.script ?? {};
+  return `
+    <section class="growth-script-brief">
+      <div class="growth-card-heading">
+        <div>
+          <h3>Brief usado para gerar o roteiro</h3>
+          <p>${escapeHtml(brief.summary ?? 'Brief operacional criado a partir do tema e dos sinais reais do Growth.')}</p>
+        </div>
+        <span>${renderNeonMediaIcon('star', 'chip', 'info')}</span>
+      </div>
+      <div class="growth-mini-grid growth-script-signal-grid">
+        <span><strong>Melhor plataforma</strong><small>${escapeHtml(signals.bestPlatform ?? 'Sem sinal')}</small></span>
+        <span><strong>Motivo</strong><small>${escapeHtml(signals.bestPlatformReason ?? 'Sem historico suficiente.')}</small></span>
+        <span><strong>Canais ativos</strong><small>${escapeHtml(String(signals.activeChannels ?? 0))}</small></span>
+        <span><strong>Falhas</strong><small>${escapeHtml(String(signals.failedTargets ?? 0))} destino(s)</small></span>
+      </div>
+      <div class="growth-script-brief-grid">
+        <div><strong>Termos relacionados</strong>${renderGrowthScriptList(brief.relatedTerms)}</div>
+        <div><strong>Duvidas frequentes</strong>${renderGrowthScriptList(brief.commonQuestions)}</div>
+        <div><strong>Riscos de informacao</strong>${renderGrowthScriptList(brief.risks)}</div>
+        <div><strong>Angulos atuais</strong>${renderGrowthScriptList(brief.currentAngles)}</div>
+      </div>
+    </section>
+    <section class="growth-script-output">
+      <div><strong>3 ganchos</strong>${renderGrowthScriptList(script.hooks)}</div>
+      <div><strong>Promessa clara</strong><p>${escapeHtml(script.promise ?? '')}</p></div>
+      <div><strong>Estrutura por segundos</strong><div class="growth-script-timeline">${renderGrowthScriptTimeline(script.timeline)}</div></div>
+      <div><strong>CTA</strong><p>${escapeHtml(script.cta ?? '')}</p></div>
+      <div><strong>Legenda</strong><p>${escapeHtml(script.caption ?? '')}</p></div>
+      <div><strong>Hashtags</strong><p>${Array.isArray(script.hashtags) ? script.hashtags.map((tag) => escapeHtml(String(tag))).join(' ') : ''}</p></div>
+      <div><strong>Adaptacao por plataforma</strong>${renderGrowthScriptList(script.platformAdaptation)}</div>
+    </section>
+  `;
+}
+
+function renderGrowthScriptResult(details = {}) {
+  if (details?.brief && details?.script) {
+    return renderGrowthScriptResearchResult(details);
+  }
+  const topic = String(details.topic ?? '').trim() || 'Como melhorar retencao em videos curtos';
+  const platform = String(details.platform ?? '').trim() || 'YouTube';
+  const duration = String(details.duration ?? '').trim() || '30 segundos';
+  const tone = String(details.tone ?? '').trim() || 'Direto';
+  const goal = String(details.goal ?? '').trim() || 'Educacao e retencao';
+
+  return `
+    ${details.error ? `<div class="growth-script-warning"><strong>Fallback local</strong><p>${escapeHtml(details.error)}</p></div>` : ''}
+    <section class="growth-script-brief">
+      <div class="growth-card-heading">
+        <div>
+          <h3>Brief usado para gerar o roteiro</h3>
+          <p>Previa local. Ao gerar, o backend monta um brief operacional, cruza sinais reais do Growth e substitui este bloco por uma estrutura publicavel.</p>
+        </div>
+      </div>
+      <div class="growth-script-brief-grid">
+        <div><strong>Contexto basico</strong><p>${escapeHtml(topic)} deve abrir com problema claro, criterio simples e uma acao repetivel.</p></div>
+        <div><strong>Risco principal</strong><p>Evitar promessa de engajamento garantido e separar opiniao de fato verificavel.</p></div>
+      </div>
+    </section>
+    <section class="growth-script-output">
+      <div><strong>3 ganchos</strong>${renderGrowthScriptList([
+        `${topic}: o erro nao e falta de ideia, e falta de sinal.`,
+        `Antes de publicar sobre ${topic}, use este checklist de ${duration}.`,
+        `Se voce posta sobre ${topic} no escuro, comece por este criterio.`,
+      ])}</div>
+      <div><strong>Promessa clara</strong><p>Em ${escapeHtml(duration)}, entregar uma estrutura pratica para ${escapeHtml(goal.toLowerCase())}, sem prometer resultado artificial.</p></div>
+      <div><strong>Estrutura por segundos</strong><div class="growth-script-timeline">${renderGrowthScriptTimeline([
+        { time: '0-3s', speech: `Abra com a dor central de ${topic}.`, onScreen: `Problema: ${topic}` },
+        { time: '3-9s', speech: `Mostre um exemplo rapido para ${platform}.`, onScreen: `Plataforma: ${platform}` },
+        { time: '9-20s', speech: 'Entregue um metodo com gancho, teste e sinal observado.', onScreen: 'Gancho > teste > sinal' },
+        { time: '20-30s', speech: 'Feche com uma acao simples para a proxima campanha.', onScreen: 'Salve e teste' },
+      ])}</div></div>
+      <div><strong>Tom e objetivo</strong><p>Tom ${escapeHtml(tone.toLowerCase())}. Objetivo: ${escapeHtml(goal)}.</p></div>
+      <div><strong>CTA</strong><p>Salve este roteiro e teste esse formato no proximo conteudo.</p></div>
+      <div><strong>Legenda</strong><p>Menos chute. Mais estrategia. Use um sinal de audiencia para ajustar seu proximo post.</p></div>
+      <div><strong>Hashtags</strong><p>#conteudodigital #socialmedia #crescimentoorganico #videoscurtos #estrategiadeconteudo</p></div>
+    </section>
+  `;
+}
+
+function buildGeneratedGrowthIdeas(topic) {
+  const safeTopic = String(topic ?? '').trim() || 'conteudo educativo';
+  return [
+    {
+      title: `3 erros sobre ${safeTopic} que reduzem retencao`,
+      platform: 'TikTok',
+      format: 'TikTok',
+      effort: 'Baixo',
+      objective: 'Alcance',
+    },
+    {
+      title: `Checklist rapido de ${safeTopic} para salvar hoje`,
+      platform: 'Instagram',
+      format: 'Reels',
+      effort: 'Baixo',
+      objective: 'Engajamento real',
+    },
+    {
+      title: `Como melhorar ${safeTopic} sem atalhos perigosos`,
+      platform: 'YouTube',
+      format: 'Video longo',
+      effort: 'Medio',
+      objective: 'Educacao',
+    },
+  ];
+}
+
+function renderGrowthEmptyState(title, description, action = '', actionHref = '') {
+  return `
+    <section class="growth-empty-state">
+      <span>${renderNeonMediaIcon('add', 'chip', 'warning')}</span>
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(description)}</p>
+      ${action && actionHref ? `<a class="button button-primary" data-link href="${escapeAttribute(actionHref)}">${escapeHtml(action)}</a>` : ''}
+    </section>
+  `;
+}
+
+const GROWTH_PLATFORM_KEYS = ['youtube', 'instagram', 'tiktok'];
+const GROWTH_CHANNEL_HYDRATED_SECTIONS = new Set(['cockpit', 'metricas', 'relatorios']);
+const GROWTH_CHANNEL_LOAD_CONCURRENCY = 4;
+const GROWTH_CHANNEL_LOAD_TIMEOUT_MS = 2500;
+const GROWTH_CHANNEL_TIMEOUT_RESULT = Object.freeze({ ok: false, timedOut: true });
+
+function clampGrowthPercent(value) {
+  const parsed = Number(value ?? 0);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.min(100, Math.round(parsed)));
+}
+
+function normalizeGrowthPlatformKey(platform) {
+  const normalized = String(platform ?? '').trim().toLowerCase();
+  if (normalized === 'youtube' || normalized === 'google') return 'youtube';
+  if (normalized === 'instagram') return 'instagram';
+  if (normalized === 'tiktok') return 'tiktok';
+  return null;
+}
+
+function formatGrowthShortDate(value) {
+  if (!value) return 'Sem data';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return parsed.toLocaleDateString(getActiveLocale(), { day: '2-digit', month: 'short' });
+}
+
+function formatGrowthShortTime(value) {
+  if (!value) return '--:--';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '--:--';
+  return parsed.toLocaleTimeString(getActiveLocale(), { hour: '2-digit', minute: '2-digit' });
+}
+
+function getGrowthEventDate(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getGrowthCampaignDate(campaign) {
+  const firstTarget = getGrowthCampaignTargets(campaign)[0];
+  return getGrowthEventDate(campaign?.scheduledAt)
+    ?? getGrowthEventDate(firstTarget?.publishAt)
+    ?? getGrowthEventDate(campaign?.updatedAt)
+    ?? getGrowthEventDate(campaign?.createdAt);
+}
+
+function isGrowthDateInFilter(date, filterValue) {
+  if (!date || filterValue === 'all') return filterValue === 'all';
+  const now = new Date();
+  if (filterValue === '7d' || filterValue === '30d') {
+    const days = filterValue === '7d' ? 7 : 30;
+    const cutoff = new Date(now.getTime() - (days * 24 * 60 * 60 * 1000));
+    return date >= cutoff && date <= now;
+  }
+  if (filterValue === 'month') {
+    return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+  }
+  return true;
+}
+
+function getGrowthCampaignTargets(campaign) {
+  return Array.isArray(campaign?.targets) ? campaign.targets : [];
+}
+
+function growthCampaignStatusLabel(status) {
+  switch (String(status ?? '').toLowerCase()) {
+    case 'ready':
+      return 'Pronta';
+    case 'launching':
+      return 'Publicando';
+    case 'completed':
+      return 'Concluida';
+    case 'failed':
+      return 'Com falha';
+    case 'draft':
+    default:
+      return 'Rascunho';
+  }
+}
+
+function getGrowthPrimaryPlatform(campaign) {
+  const target = getGrowthCampaignTargets(campaign)[0];
+  return dashboardPlatformLabel(normalizeGrowthPlatformKey(target?.platform));
+}
+
+function buildGrowthPosts(campaigns) {
+  return campaigns.slice(0, 8).map((campaign) => {
+    const targets = getGrowthCampaignTargets(campaign);
+    const firstTarget = targets[0];
+    const dateValue = campaign.scheduledAt ?? firstTarget?.publishAt ?? campaign.createdAt ?? campaign.updatedAt;
+    return {
+      title: campaign.title || 'Campanha sem titulo',
+      platform: getGrowthPrimaryPlatform(campaign),
+      date: formatGrowthShortDate(dateValue),
+      time: formatGrowthShortTime(dateValue),
+      status: growthCampaignStatusLabel(campaign.status),
+      caption: targets.length
+        ? `${formatNumber(targets.length)} destino${targets.length === 1 ? '' : 's'} conectado${targets.length === 1 ? '' : 's'} nesta campanha.`
+        : 'Campanha ainda sem destinos conectados.',
+    };
+  });
+}
+
+function buildGrowthCampaignRows(campaigns) {
+  return campaigns.slice(0, 9).map((campaign) => {
+    const targets = getGrowthCampaignTargets(campaign);
+    const published = targets.filter((target) => target.status === 'publicado').length;
+    const failed = targets.filter((target) => target.status === 'erro').length;
+    const platform = getGrowthPrimaryPlatform(campaign);
+    const periodSource = campaign.scheduledAt ?? campaign.createdAt ?? campaign.updatedAt;
+    return {
+      id: campaign.id,
+      name: campaign.title || 'Campanha sem titulo',
+      platform,
+      period: campaign.scheduledAt ? `Agendada: ${formatDate(campaign.scheduledAt)}` : `Criada: ${formatGrowthShortDate(periodSource)}`,
+      objective: `${formatNumber(targets.length)} destino${targets.length === 1 ? '' : 's'} - ${growthCampaignStatusLabel(campaign.status)}`,
+      link: `/workspace/campanhas/${campaign.id}`,
+      published,
+      failed,
+      status: growthCampaignStatusLabel(campaign.status),
+    };
+  });
+}
+
+function buildGrowthContentRanking(channels, campaigns) {
+  const channelRows = channels
+    .map((channel) => {
+      const title = channel.topVideoTitle || channel.channelLabel || channel.channelId || 'Canal conectado';
+      const reach = dashboardNumber(channel.topVideoViews || channel.totalViews);
+      return {
+        rawReach: reach,
+        title,
+        platform: 'YouTube',
+        date: 'Sincronizado',
+        reach: formatNumber(reach),
+        retention: formatPercent(channel.successRate ?? 0, 0),
+        comments: dashboardNumber(channel.published ?? 0),
+        status: reach > 0 ? 'Maior alcance' : 'Sem views',
+      };
+    })
+    .filter((row) => row.title);
+
+  if (channelRows.length) {
+    return channelRows
+      .sort((left, right) => right.rawReach - left.rawReach)
+      .slice(0, 8)
+      .map(({ rawReach, ...row }) => row);
+  }
+
+  return campaigns.slice(0, 8).map((campaign) => {
+    const targets = getGrowthCampaignTargets(campaign);
+    const published = targets.filter((target) => target.status === 'publicado').length;
+    const failed = targets.filter((target) => target.status === 'erro').length;
+    const completed = published + failed;
+    const successRate = completed > 0 ? (published / completed) * 100 : 0;
+    return {
+      title: campaign.title || 'Campanha sem titulo',
+      platform: getGrowthPrimaryPlatform(campaign),
+      date: formatGrowthShortDate(campaign.updatedAt ?? campaign.createdAt),
+      reach: formatNumber(targets.length),
+      retention: formatPercent(successRate, 0),
+      comments: published,
+      status: growthCampaignStatusLabel(campaign.status),
+    };
+  });
+}
+
+function buildGrowthRecommendations({ connectedAccounts, activeJobs, failedTargets, successRate, totalViews, campaigns }) {
+  const recommendations = [];
+  if (!connectedAccounts.length) {
+    recommendations.push('Conecte YouTube, TikTok ou Instagram para liberar sinais reais de distribuicao no Growth.');
+  }
+  if (failedTargets > 0) {
+    recommendations.push(`Revise ${formatNumber(failedTargets)} destino${failedTargets === 1 ? '' : 's'} com falha antes de criar novas campanhas.`);
+  }
+  if (activeJobs > 0) {
+    recommendations.push(`${formatNumber(activeJobs)} job${activeJobs === 1 ? '' : 's'} ainda estao na fila ou processando; acompanhe antes de reprogramar.`);
+  }
+  if (successRate >= 80) {
+    recommendations.push(`A taxa de sucesso esta em ${formatPercent(successRate, 0)}. Priorize ampliar campanhas que ja usam destinos estaveis.`);
+  }
+  if (totalViews > 0) {
+    recommendations.push(`O alcance sincronizado soma ${formatNumber(totalViews)} views. Use os canais com maior tracao para os proximos roteiros.`);
+  }
+  if (campaigns.length > 0) {
+    recommendations.push(`Transforme as ${formatNumber(campaigns.length)} campanhas recentes em ideias reutilizaveis para biblioteca e calendario.`);
+  }
+  return recommendations.slice(0, 5);
+}
+
+function buildGrowthReports(data) {
+  const channelLabel = data.activeChannels === 1 ? 'canal ativo' : 'canais ativos';
+  const connectionText = data.channelSyncStatus === 'partial'
+    ? `${formatNumber(data.connectedAccounts.length)} conta${data.connectedAccounts.length === 1 ? '' : 's'} conectada${data.connectedAccounts.length === 1 ? '' : 's'}, mas ${formatNumber(data.channelSync.failed)} conta${data.channelSync.failed === 1 ? '' : 's'} nao retornou${data.channelSync.failed === 1 ? '' : 'aram'} canais agora.`
+    : data.channelSyncStatus === 'pending'
+      ? `${formatNumber(data.connectedAccounts.length)} conta${data.connectedAccounts.length === 1 ? '' : 's'} conectada${data.connectedAccounts.length === 1 ? '' : 's'}; canais ainda estao sincronizando.`
+      : data.connectedAccounts.length
+    ? `${formatNumber(data.connectedAccounts.length)} conta${data.connectedAccounts.length === 1 ? '' : 's'} conectada${data.connectedAccounts.length === 1 ? '' : 's'} e ${formatNumber(data.activeChannels)} ${channelLabel}.`
+    : 'Nenhuma conta conectada ainda; o Growth esta pronto para usar assim que houver destinos reais.';
+  return [
+    {
+      title: 'Resumo operacional',
+      summary: `${formatNumber(data.campaignTotal)} campanha${data.campaignTotal === 1 ? '' : 's'}, ${formatNumber(data.publishedTargets)} destino${data.publishedTargets === 1 ? '' : 's'} publicado${data.publishedTargets === 1 ? '' : 's'} e taxa de sucesso de ${formatPercent(data.successRate, 0)}.`,
+    },
+    {
+      title: 'Saude das contas',
+      summary: connectionText,
+    },
+    {
+      title: data.failedTargets > 0 ? 'Risco atual' : 'Proxima oportunidade',
+      summary: data.failedTargets > 0
+        ? `${formatNumber(data.failedTargets)} falha${data.failedTargets === 1 ? '' : 's'} precisa${data.failedTargets === 1 ? '' : 'm'} de revisao antes de escalar a rotina.`
+        : 'Sem falhas recentes nos dados carregados. Use este momento para planejar uma nova rodada de conteudo.',
+    },
+  ];
+}
+
+function buildGrowthWorkspaceData(input = {}) {
+  const stats = input.stats && typeof input.stats === 'object' ? input.stats : {};
+  const campaigns = Array.isArray(input.campaigns) ? input.campaigns : [];
+  const accounts = Array.isArray(input.accounts) ? input.accounts : (Array.isArray(state.growthConnectedAccounts) ? state.growthConnectedAccounts : []);
+  const connectedAccounts = accounts.filter((account) => String(account?.status ?? '').toLowerCase() === 'connected');
+  const connectedAccountIds = new Set(
+    connectedAccounts.map((account) => String(account?.id ?? '')).filter(Boolean)
+  );
+  const rawAccountChannels = Array.isArray(input.accountChannels) ? input.accountChannels : [];
+  const accountChannels = rawAccountChannels.filter((channel) => {
+    const accountId = channel?.connectedAccountId ?? channel?.accountId;
+    return !accountId || connectedAccountIds.has(String(accountId));
+  });
+  const activeChannels = accountChannels.filter((channel) => channel?.isActive !== false).length;
+  const channels = Array.isArray(stats.channels) ? stats.channels : [];
+  const channelSync = input.channelSync && typeof input.channelSync === 'object'
+    ? input.channelSync
+    : { requested: 0, failed: 0, pending: false };
+  const channelSyncStatus = channelSync.pending
+    ? 'pending'
+    : dashboardNumber(channelSync.failed) > 0
+      ? 'partial'
+      : 'complete';
+  const channelMetricValue = channelSyncStatus === 'pending'
+    ? '--'
+    : channelSyncStatus === 'partial' && activeChannels === 0
+      ? 'Indisponivel'
+      : formatNumber(activeChannels);
+  const channelMetricChange = channelSyncStatus === 'pending'
+    ? 'sincronizando canais'
+    : channelSyncStatus === 'partial'
+      ? `${formatNumber(channelSync.failed)} conta${channelSync.failed === 1 ? '' : 's'} sem canais agora`
+      : 'sincronizados em contas';
+  const platformStats = Array.isArray(stats.platformStats) ? stats.platformStats : [];
+  const destinationStats = Array.isArray(stats.destinationStats) ? stats.destinationStats : [];
+  const campaignTotal = dashboardNumber(stats.campaigns?.total ?? campaigns.length);
+  const targetTotal = dashboardNumber(stats.targets?.total ?? campaigns.reduce((sum, campaign) => sum + getGrowthCampaignTargets(campaign).length, 0));
+  const publishedTargets = dashboardNumber(stats.targets?.byStatus?.publicado ?? campaigns.reduce((sum, campaign) => (
+    sum + getGrowthCampaignTargets(campaign).filter((target) => target.status === 'publicado').length
+  ), 0));
+  const failedTargets = dashboardNumber(stats.targets?.byStatus?.erro ?? campaigns.reduce((sum, campaign) => (
+    sum + getGrowthCampaignTargets(campaign).filter((target) => target.status === 'erro').length
+  ), 0));
+  const successRate = dashboardNumber(stats.targets?.successRate ?? (publishedTargets + failedTargets > 0 ? (publishedTargets / (publishedTargets + failedTargets)) * 100 : 0));
+  const activeJobs = dashboardNumber(stats.jobs?.byStatus?.queued) + dashboardNumber(stats.jobs?.byStatus?.processing);
+  const projectedQuota = dashboardNumber(stats.quota?.projectedPercent);
+  const totalViews = channels.reduce((sum, channel) => sum + dashboardNumber(channel.totalViews), 0);
+  const platformGrowth = GROWTH_PLATFORM_KEYS.map((platform) => {
+    const platformStat = platformStats.find((entry) => normalizeGrowthPlatformKey(entry?.platform) === platform);
+    const connectedForPlatform = connectedAccounts.filter((account) => normalizeGrowthPlatformKey(account?.provider) === platform).length;
+    const value = platformStat
+      ? clampGrowthPercent(platformStat.successRate)
+      : connectedForPlatform > 0
+        ? 100
+        : 0;
+    return { label: dashboardPlatformLabel(platform), value };
+  });
+  const reachSeries = channels
+    .map((channel) => dashboardNumber(channel.totalViews || channel.topVideoViews))
+    .filter((value) => value > 0);
+  const hasReachSeries = reachSeries.length > 0;
+  const lineValues = hasReachSeries
+    ? reachSeries.slice(0, 12)
+    : [campaignTotal, targetTotal, publishedTargets, activeJobs, failedTargets].map((value) => Math.max(0, dashboardNumber(value)));
+  const trendTitle = hasReachSeries ? 'Alcance observado por canal' : 'Pulso operacional do workspace';
+  const trendDescription = hasReachSeries
+    ? 'Views sincronizadas dos canais conectados.'
+    : 'Sem views sincronizadas; exibindo campanhas, destinos, publicados, fila e falhas.';
+  const trendAriaLabel = hasReachSeries
+    ? 'Alcance observado por canal'
+    : 'Volume operacional por campanhas, destinos, publicados, fila e falhas';
+  const destinationHealth = destinationStats.length
+    ? destinationStats.slice(0, 4).map((destination) => ({
+      label: destination.destinationLabel || dashboardPlatformLabel(destination.platform),
+      value: clampGrowthPercent(destination.successRate),
+    }))
+    : platformGrowth;
+  const data = {
+    accounts,
+    connectedAccounts,
+    accountChannels,
+    sourceStats: stats,
+    sourceCampaigns: campaigns,
+    sourceChannels: channels,
+    channelSync,
+    channelSyncStatus,
+    activeChannels,
+    campaignTotal,
+    targetTotal,
+    publishedTargets,
+    failedTargets,
+    successRate,
+    activeJobs,
+    projectedQuota,
+    totalViews,
+    heroValue: targetTotal > 0 ? formatPercent(successRate, 0) : formatNumber(connectedAccounts.length),
+    heroLabel: targetTotal > 0 ? 'taxa de sucesso real' : 'contas conectadas',
+    overviewSummary: `Campanhas: ${formatNumber(campaignTotal)} - Destinos: ${formatNumber(targetTotal)} - Publicados: ${formatNumber(publishedTargets)} - Falhas: ${formatNumber(failedTargets)} - Contas conectadas: ${formatNumber(connectedAccounts.length)}`,
+    metrics: [
+      { label: 'Campanhas reais', value: formatNumber(campaignTotal), change: `${formatNumber(campaigns.length)} carregadas`, icon: 'playlist', tone: 'info' },
+      { label: 'Destinos publicados', value: formatNumber(publishedTargets), change: `${formatPercent(successRate, 0)} sucesso`, icon: 'published', tone: 'success' },
+      { label: 'Falhas', value: formatNumber(failedTargets), change: failedTargets > 0 ? 'exigem revisao' : 'sem bloqueios recentes', icon: 'warning', tone: failedTargets > 0 ? 'warning' : 'success' },
+      { label: 'Contas conectadas', value: formatNumber(connectedAccounts.length), change: `${formatNumber(accounts.length)} cadastradas`, icon: 'available', tone: 'success' },
+      { label: 'Canais ativos', value: channelMetricValue, change: channelMetricChange, icon: 'video', tone: channelSyncStatus === 'partial' ? 'warning' : 'info' },
+      { label: 'Alcance observado', value: formatNumber(totalViews), change: totalViews > 0 ? 'views sincronizadas' : 'sem views sincronizadas', icon: 'star', tone: 'processing' },
+      { label: 'Fila ativa', value: formatNumber(activeJobs), change: 'queued + processing', icon: 'clock', tone: activeJobs > 0 ? 'warning' : 'success' },
+      { label: 'Cota projetada', value: formatPercent(projectedQuota, 0), change: 'uso estimado da API', icon: 'storage', tone: projectedQuota >= 80 ? 'warning' : 'info' },
+    ],
+    platformGrowth,
+    monthlyReach: lineValues.length ? lineValues : [0, 0, 0],
+    trendTitle,
+    trendDescription,
+    trendAriaLabel,
+    retentionBars: destinationHealth,
+    posts: buildGrowthPosts(campaigns),
+    campaigns: buildGrowthCampaignRows(campaigns),
+    contentRanking: buildGrowthContentRanking(channels, campaigns),
+  };
+  data.recommendations = buildGrowthRecommendations({ connectedAccounts, activeJobs, failedTargets, successRate, totalViews, campaigns });
+  data.reports = buildGrowthReports(data);
+  data.learnings = [
+    `${formatNumber(campaignTotal)} campanha${campaignTotal === 1 ? '' : 's'} registrada${campaignTotal === 1 ? '' : 's'} no workspace.`,
+    `${formatPercent(successRate, 0)} de sucesso nos destinos com resultado final.`,
+    connectedAccounts.length ? `${formatNumber(connectedAccounts.length)} conta${connectedAccounts.length === 1 ? '' : 's'} conectada${connectedAccounts.length === 1 ? '' : 's'} para alimentar o Growth.` : 'O modulo precisa de contas conectadas para sair do modo operacional basico.',
+  ];
+  data.nextSteps = [
+    failedTargets > 0 ? 'Abrir campanhas com falha e corrigir destinos antes de escalar publicacoes.' : 'Criar uma nova campanha a partir dos destinos que ja estao saudaveis.',
+    connectedAccounts.length ? 'Comparar plataformas com melhor taxa de sucesso antes de escolher o proximo formato.' : 'Conectar ao menos uma conta em Contas conectadas.',
+    totalViews > 0 ? 'Transformar o video/canal com maior alcance em roteiro reutilizavel.' : 'Sincronizar canais para capturar sinais de alcance.',
+  ];
+  return data;
+}
+
+function buildGrowthDecisionActions(growthData = buildGrowthWorkspaceData()) {
+  const actions = [];
+  if (!growthData.connectedAccounts?.length) {
+    actions.push({
+      eyebrow: 'Onde postar',
+      title: 'Conectar contas antes de decidir formato.',
+      description: 'Sem contas conectadas, o Growth fica limitado a campanha e fila. Conecte plataformas para liberar sinais reais.',
+      href: '/workspace/accounts',
+      action: 'Conectar contas',
+    });
+  }
+  if (growthData.failedTargets > 0) {
+    actions.push({
+      eyebrow: 'O que corrigir',
+      title: `${formatNumber(growthData.failedTargets)} destino${growthData.failedTargets === 1 ? '' : 's'} com falha.`,
+      description: 'Priorize campanhas com erro antes de publicar mais conteudo. Falha operacional reduz consistencia.',
+      href: '/workspace/growth/campanhas',
+      action: 'Corrigir falhas',
+    });
+  }
+  if (growthData.activeJobs > 0) {
+    actions.push({
+      eyebrow: 'Fila ativa',
+      title: `${formatNumber(growthData.activeJobs)} job${growthData.activeJobs === 1 ? '' : 's'} ainda em andamento.`,
+      description: 'Acompanhe a fila antes de reprogramar campanhas para evitar duplicidade ou leitura incompleta.',
+      href: '/workspace/dashboard',
+      action: 'Abrir dashboard',
+    });
+  }
+  actions.push({
+    eyebrow: 'O que repetir',
+    title: growthData.totalViews > 0 ? 'Reaproveitar o sinal com maior alcance.' : 'Criar uma campanha para gerar sinal real.',
+    description: growthData.totalViews > 0
+      ? 'Use Metricas para identificar o canal ou conteudo com tracao e transformar em nova pauta.'
+      : 'Sem alcance sincronizado, a melhor decisao e publicar uma campanha controlada e medir o resultado.',
+    href: growthData.totalViews > 0 ? '/workspace/growth/metricas' : '/workspace/campanhas/nova',
+    action: growthData.totalViews > 0 ? 'Ver metricas' : 'Criar campanha',
+  });
+  actions.push({
+    eyebrow: 'O que postar',
+    title: 'Transformar sinal operacional em conteudo.',
+    description: 'Use o laboratorio para gerar ideia, roteiro e campanha sem prometer engajamento artificial.',
+    href: '/workspace/growth/conteudo',
+    action: 'Abrir Conteudo',
+  });
+  return actions.slice(0, 4);
+}
+
+function renderGrowthDecisionAction(action) {
+  return `
+    <article class="growth-decision-card">
+      <div class="growth-decision-card-top">
+        <span class="growth-eyebrow">${escapeHtml(action.eyebrow)}</span>
+        <a class="growth-decision-action" data-link href="${escapeAttribute(action.href)}">${escapeHtml(action.action)}</a>
+      </div>
+      <h3>${escapeHtml(action.title)}</h3>
+      <p>${escapeHtml(action.description)}</p>
+    </article>
+  `;
+}
+
+function renderGrowthOverview(growthData = buildGrowthWorkspaceData()) {
+  const decisionActions = buildGrowthDecisionActions(growthData);
+  return `
+    <section class="growth-overview-banner">
+      <span class="growth-eyebrow">Cockpit</span>
+      <h3>O que fazer agora, com base nos sinais do PMP.</h3>
+      <p>${escapeHtml(growthData.overviewSummary)}</p>
+    </section>
+    <section class="growth-metric-grid">
+      ${growthData.metrics.map(renderGrowthMetricCard).join('')}
+    </section>
+    <section class="growth-grid-2">
+      <section class="growth-card">
+        <div class="growth-card-heading">
+          <div><h3>Painel de decisao</h3><p>O que postar, onde postar, o que corrigir e o que repetir.</p></div>
+          <span>${renderNeonMediaIcon('star', 'chip', 'info')}</span>
+        </div>
+        <div class="growth-list growth-decision-list">
+          ${decisionActions.map(renderGrowthDecisionAction).join('')}
+        </div>
+      </section>
+      ${renderGrowthChartCard(growthData.trendTitle, renderGrowthLineChart(growthData.monthlyReach, growthData.trendAriaLabel), growthData.trendDescription)}
+      ${renderGrowthChartCard('Saude por plataforma', renderGrowthBarChart(growthData.platformGrowth))}
+      ${renderGrowthChartCard('Saude por destino', renderGrowthBarChart(growthData.retentionBars))}
+      <section class="growth-card">
+        <div class="growth-card-heading">
+          <div><h3>Proxima melhor acao</h3><p>Recomendacoes praticas para consistencia, alcance observado e correcoes.</p></div>
+          <span>${renderNeonMediaIcon('published', 'chip', 'success')}</span>
+        </div>
+        <div class="growth-list">
+          ${growthData.recommendations.map((item) => `<article><span class="growth-list-marker"></span><p>${escapeHtml(item)}</p></article>`).join('')}
+        </div>
+      </section>
+    </section>
+  `;
+}
+
+function renderGrowthCalendar(growthData = buildGrowthWorkspaceData()) {
+  return renderGrowthContentHub(growthData);
+}
+
+function renderGrowthIdeas() {
+  return renderGrowthContentHub(buildGrowthWorkspaceData());
+}
+
+function renderGrowthScriptComposer() {
+  return `
+    <section class="growth-grid-2 growth-script-grid">
+      <form class="growth-card growth-form" data-growth-script-form>
+        <label>Tema do conteudo<input name="topic" data-growth-script-topic required placeholder="Ex: Como melhorar retencao em videos curtos" /></label>
+        <label>Plataforma<select name="platform"><option>YouTube</option><option>Instagram</option><option>TikTok</option></select></label>
+        <label>Duracao estimada<select name="duration"><option>15 segundos</option><option>30 segundos</option><option>60 segundos</option><option>5 minutos</option></select></label>
+        <label>Tom<select name="tone"><option>Profissional</option><option>Casual</option><option>Educativo</option><option>Inspirador</option><option>Direto</option></select></label>
+        <label>Objetivo do conteudo<input name="goal" placeholder="Ex: Educacao, conversao, alcance" /></label>
+        <button class="button button-primary" type="submit">Gerar brief e roteiro</button>
+      </form>
+      <article class="growth-card">
+        <div class="growth-card-heading"><div><h3>Brief + roteiro</h3><p>Brief do tema, sinais reais do Growth e estrutura pronta para adaptar.</p></div></div>
+        <div class="growth-script-blocks" data-growth-script-result>
+          ${renderGrowthScriptResult()}
+        </div>
+      </article>
+    </section>
+  `;
+}
+
+function renderGrowthScript() {
+  return `
+    <section class="growth-page-title">
+      <span class="growth-eyebrow">Gerador de roteiro</span>
+      <h3>Transforme uma ideia em estrutura de conteudo.</h3>
+      <p>Use uma previa local para estruturar gancho, desenvolvimento, legenda e CTA antes de criar a campanha.</p>
+    </section>
+    ${renderGrowthScriptComposer()}
+  `;
+}
+
+function renderGrowthContentHub(growthData = buildGrowthWorkspaceData()) {
+  const upcomingPosts = growthData.posts.slice(0, 4);
+  return `
+    <section class="growth-page-title growth-page-title-actions">
+      <div>
+        <span class="growth-eyebrow">Conteudo</span>
+        <h3>Laboratorio operacional de ideias, roteiros e campanhas.</h3>
+        <p>Fluxo em tres passos: gere uma ideia, transforme em roteiro e so entao abra campanha real no PMP.</p>
+      </div>
+      <a class="button button-secondary" data-link href="/workspace/growth/campanhas">Ver campanhas</a>
+    </section>
+    <section class="growth-filter-card growth-idea-generator">
+      <label>Nicho, sinal ou problema<input data-growth-idea-input value="" placeholder="Ex: falhas em Reels, topico educativo, duvida frequente" /></label>
+      <button class="button button-primary" type="button" data-growth-generate-ideas>Gerar ideias</button>
+      <a class="button button-secondary" data-link href="/workspace/growth/metricas">Ver sinais reais</a>
+    </section>
+    <section class="growth-card-grid" data-growth-ideas-grid>
+      ${GROWTH_TEMPLATE_DATA.ideas.map(renderGrowthIdeaCard).join('')}
+    </section>
+    <section class="growth-page-title">
+      <span class="growth-eyebrow">Roteiro</span>
+      <h3>Transforme a melhor ideia em estrutura publicavel.</h3>
+      <p>A previa e local. Para publicar, crie uma campanha real no PMP.</p>
+    </section>
+    ${renderGrowthScriptComposer()}
+    <section class="growth-grid-2">
+      <section class="growth-card">
+        <div class="growth-card-heading">
+          <div><h3>Proximas campanhas do PMP</h3><p>Visualizacao simples de campanhas recentes ou agendadas, sem filtros falsos.</p></div>
+          <span>${renderNeonMediaIcon('clock', 'chip', 'info')}</span>
+        </div>
+        ${upcomingPosts.length
+          ? `<div class="growth-card-grid">${upcomingPosts.map(renderGrowthContentCard).join('')}</div>`
+          : `<div class="growth-list"><article><p>Crie ou agende campanhas no PMP para alimentar esta fila de conteudo.</p><a class="button button-secondary" data-link href="/workspace/campanhas/nova">Criar campanha</a></article></div>`}
+      </section>
+      <section class="growth-card">
+        <div class="growth-card-heading">
+          <div><h3>Modelos para reutilizar</h3><p>Templates locais para acelerar roteiro e campanha. Nao substituem biblioteca persistida.</p></div>
+          <span>${renderNeonMediaIcon('library', 'chip', 'warning')}</span>
+        </div>
+        <div class="growth-list growth-list-plain">
+          ${GROWTH_TEMPLATE_DATA.library.map((item) => `
+            <article>
+              <p><strong>${escapeHtml(item.title)}</strong> - ${escapeHtml(item.type)} para ${escapeHtml(item.platform)}.</p>
+              <a class="button button-secondary" data-link href="${escapeAttribute(buildUrl('/workspace/growth/conteudo', { idea: item.title }))}">Usar no roteiro</a>
+            </article>
+          `).join('')}
+        </div>
+      </section>
+    </section>
+  `;
+}
+
+function renderGrowthMetrics(growthData = buildGrowthWorkspaceData()) {
+  const filters = state.growthMetricFilters ?? { date: 'all', platform: 'all' };
+  return `
+    <section class="growth-page-title">
+      <span class="growth-eyebrow">Metricas</span>
+      <h3>Analise clara para decisoes de conteudo.</h3>
+      <p>KPIs carregados do dashboard, campanhas e contas conectadas do workspace.</p>
+    </section>
+    <section class="growth-filter-card">
+      <label>Data<select data-growth-metrics-filter="date">
+        ${renderGrowthFilterOption('all', 'Todo periodo', filters.date)}
+        ${renderGrowthFilterOption('7d', 'Ultimos 7 dias', filters.date)}
+        ${renderGrowthFilterOption('30d', 'Ultimos 30 dias', filters.date)}
+        ${renderGrowthFilterOption('month', 'Este mes', filters.date)}
+      </select></label>
+      <label>Plataforma<select data-growth-metrics-filter="platform">
+        ${renderGrowthFilterOption('all', 'Todas', filters.platform)}
+        ${renderGrowthFilterOption('youtube', 'YouTube', filters.platform)}
+        ${renderGrowthFilterOption('instagram', 'Instagram', filters.platform)}
+        ${renderGrowthFilterOption('tiktok', 'TikTok', filters.platform)}
+      </select></label>
+    </section>
+    <section class="growth-metric-grid" data-growth-metrics-grid>${renderGrowthMetricsGridHtml(growthData)}</section>
+    <section class="growth-grid-2" data-growth-metrics-charts>
+      ${renderGrowthMetricsChartsHtml(growthData)}
+    </section>
+    <section class="growth-card growth-table-card">
+      <div class="growth-card-heading"><div><h3>Ranking de sinais operacionais</h3><p>Dados reais ou proxies operacionais vindos de canais, campanhas e destinos.</p></div></div>
+      <div class="growth-table-wrap">
+        <table class="growth-table">
+          <thead><tr>${['Conteudo', 'Plataforma', 'Data', 'Sinal', 'Taxa de sucesso', 'Publicados', 'Status'].map((header) => `<th>${header}</th>`).join('')}</tr></thead>
+          <tbody data-growth-ranking-body>
+            ${renderGrowthContentRankingRowsHtml(growthData)}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function renderGrowthReports(growthData = buildGrowthWorkspaceData()) {
+  return `
+    <section class="growth-page-title growth-page-title-actions">
+      <div>
+        <span class="growth-eyebrow">Relatorios</span>
+        <h3>Relatorios semanais e mensais.</h3>
+        <p>Resuma aprendizados, proximos passos e evolucao sem transformar analise em burocracia.</p>
+      </div>
+      <div class="growth-action-row">
+        <button class="button button-primary" type="button" data-growth-generate-report>Gerar relatorio</button>
+        <button class="button button-secondary" type="button" data-growth-export-report>Exportar HTML</button>
+      </div>
+    </section>
+    <section class="growth-card-grid" data-growth-reports-grid>
+      ${renderGrowthReportsGridHtml(growthData)}
+    </section>
+    <section class="growth-page-title">
+      <span class="growth-eyebrow">Manuais</span>
+      <h3>Relatorios gerados nesta sessao.</h3>
+      <p>Os resumos criados manualmente aparecem aqui imediatamente e tambem entram na exportacao HTML.</p>
+    </section>
+    <section class="growth-card-grid" data-growth-manual-reports-grid></section>
+    <div data-growth-manual-report-empty>
+      ${renderGrowthEmptyState('Nenhum relatorio gerado manualmente', 'Quando voce gerar um relatorio personalizado, ele aparecera aqui com aprendizados e proximos passos. Use o botao Gerar relatorio acima para criar um resumo local.')}
+    </div>
+    <div data-growth-reports-chart>
+      ${renderGrowthReportsChartHtml(growthData)}
+    </div>
+    <section class="growth-grid-2" data-growth-reports-insights>
+      ${renderGrowthReportsInsightsHtml(growthData)}
+    </section>
+  `;
+}
+
+function renderGrowthFilterOption(value, label, selectedValue) {
+  return `<option value="${escapeAttribute(value)}" ${value === selectedValue ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+}
+
+function renderGrowthMetricsGridHtml(growthData) {
+  return growthData.metrics.map(renderGrowthMetricCard).join('');
+}
+
+function renderGrowthMetricsChartsHtml(growthData) {
+  return `
+      ${renderGrowthChartCard(growthData.trendTitle, renderGrowthLineChart(growthData.monthlyReach, growthData.trendAriaLabel), growthData.trendDescription)}
+      ${renderGrowthChartCard('Saude entre plataformas', renderGrowthBarChart(growthData.platformGrowth))}
+      ${renderGrowthChartCard('Saude por destino', renderGrowthBarChart(growthData.retentionBars))}
+      ${renderGrowthChartCard('Uso de cota projetado', renderGrowthBarChart([{ label: 'Cota', value: growthData.projectedQuota }]))}
+  `;
+}
+
+function renderGrowthContentRankingRowsHtml(growthData) {
+  return growthData.contentRanking.map((row) => `
+              <tr>
+                <td><strong>${escapeHtml(row.title)}</strong></td>
+                <td>${growthPlatformBadge(row.platform)}</td>
+                <td>${escapeHtml(row.date)}</td>
+                <td>${escapeHtml(row.reach)}</td>
+                <td>${escapeHtml(row.retention)}</td>
+                <td>${formatNumber(row.comments)}</td>
+                <td>${growthStatusBadge(row.status)}</td>
+              </tr>
+            `).join('');
+}
+
+function renderGrowthReportsGridHtml(growthData) {
+  return growthData.reports.map(renderGrowthReportCard).join('');
+}
+
+function renderGrowthReportsChartHtml(growthData) {
+  return renderGrowthChartCard(growthData.trendTitle, renderGrowthLineChart(growthData.monthlyReach, growthData.trendAriaLabel), growthData.trendDescription);
+}
+
+function renderGrowthReportsInsightsHtml(growthData) {
+  return `
+      ${renderGrowthListPanel('Aprendizados', growthData.learnings)}
+      ${renderGrowthListPanel('Proximos passos', growthData.nextSteps)}
+  `;
+}
+
+function getGrowthMetricsFilters(rootEl = document.querySelector('.growth-module')) {
+  const dateValue = rootEl?.querySelector?.('[data-growth-metrics-filter="date"]')?.value ?? state.growthMetricFilters?.date ?? 'all';
+  const platformValue = rootEl?.querySelector?.('[data-growth-metrics-filter="platform"]')?.value ?? state.growthMetricFilters?.platform ?? 'all';
+  return {
+    date: ['all', '7d', '30d', 'month'].includes(dateValue) ? dateValue : 'all',
+    platform: ['all', ...GROWTH_PLATFORM_KEYS].includes(platformValue) ? platformValue : 'all',
+  };
+}
+
+function getGrowthTargetsForFilters(campaign, platformFilter) {
+  const targets = getGrowthCampaignTargets(campaign);
+  if (platformFilter === 'all') return targets;
+  return targets.filter((target) => normalizeGrowthPlatformKey(target?.platform) === platformFilter);
+}
+
+function buildGrowthStatsFromFilteredCampaigns(campaigns, sourceStats, platformFilter) {
+  const targets = campaigns.flatMap((campaign) => getGrowthTargetsForFilters(campaign, platformFilter));
+  const published = targets.filter((target) => target.status === 'publicado').length;
+  const failed = targets.filter((target) => target.status === 'erro').length;
+  const terminal = published + failed;
+  const platformMap = new Map();
+  const destinationMap = new Map();
+
+  targets.forEach((target) => {
+    const platform = normalizeGrowthPlatformKey(target?.platform);
+    if (!platform) return;
+    if (!platformMap.has(platform)) {
+      platformMap.set(platform, { platform, totalTargets: 0, published: 0, failed: 0 });
+    }
+    const platformEntry = platformMap.get(platform);
+    platformEntry.totalTargets += 1;
+    if (target.status === 'publicado') platformEntry.published += 1;
+    if (target.status === 'erro') platformEntry.failed += 1;
+
+    const destinationId = target.destinationId || target.channelId || target.id || platform;
+    const destinationKey = `${platform}:${destinationId}`;
+    if (!destinationMap.has(destinationKey)) {
+      destinationMap.set(destinationKey, {
+        destinationId,
+        destinationLabel: target.destinationLabel ?? dashboardPlatformLabel(platform),
+        platform,
+        totalTargets: 0,
+        published: 0,
+        failed: 0,
+      });
+    }
+    const destinationEntry = destinationMap.get(destinationKey);
+    destinationEntry.totalTargets += 1;
+    if (target.status === 'publicado') destinationEntry.published += 1;
+    if (target.status === 'erro') destinationEntry.failed += 1;
+  });
+
+  const platformStats = Array.from(platformMap.values()).map((entry) => {
+    const entryTerminal = entry.published + entry.failed;
+    return {
+      ...entry,
+      successRate: entryTerminal > 0 ? (entry.published / entryTerminal) * 100 : 0,
+    };
+  });
+  const destinationStats = Array.from(destinationMap.values()).map((entry) => {
+    const entryTerminal = entry.published + entry.failed;
+    return {
+      ...entry,
+      successRate: entryTerminal > 0 ? (entry.published / entryTerminal) * 100 : 0,
+    };
+  });
+
+  return {
+    jobs: sourceStats.jobs,
+    quota: sourceStats.quota,
+    channels: [],
+    platformStats,
+    destinationStats,
+    campaigns: { total: campaigns.length },
+    targets: {
+      total: targets.length,
+      byStatus: { publicado: published, erro: failed },
+      successRate: terminal > 0 ? (published / terminal) * 100 : 0,
+    },
+  };
+}
+
+function getGrowthFilteredMetricsData(growthData, filters = state.growthMetricFilters ?? { date: 'all', platform: 'all' }) {
+  if (!growthData || (filters.date === 'all' && filters.platform === 'all')) return growthData;
+  const sourceCampaigns = Array.isArray(growthData.sourceCampaigns) ? growthData.sourceCampaigns : [];
+  const sourceStats = growthData.sourceStats && typeof growthData.sourceStats === 'object' ? growthData.sourceStats : {};
+  const filteredCampaigns = sourceCampaigns.filter((campaign) => {
+    const dateMatches = isGrowthDateInFilter(getGrowthCampaignDate(campaign), filters.date);
+    const platformMatches = filters.platform === 'all' || getGrowthTargetsForFilters(campaign, filters.platform).length > 0;
+    return dateMatches && platformMatches;
+  });
+  const stats = buildGrowthStatsFromFilteredCampaigns(filteredCampaigns, sourceStats, filters.platform);
+  const includeAccountChannels = filters.platform === 'all' || filters.platform === 'youtube';
+  return buildGrowthWorkspaceData({
+    stats,
+    campaigns: filteredCampaigns,
+    accounts: growthData.accounts,
+    accountChannels: includeAccountChannels ? growthData.accountChannels : [],
+    channelSync: includeAccountChannels ? growthData.channelSync : { requested: 0, failed: 0, pending: false },
+  });
+}
+
+function applyGrowthMetricsFilters(rootEl = document.querySelector('.growth-module'), growthData = state.growthWorkspaceData) {
+  if (!rootEl || !growthData) return;
+  state.growthMetricFilters = getGrowthMetricsFilters(rootEl);
+  updateGrowthMetricsSection(rootEl, growthData);
+}
+
+function renderGrowthListPanel(title, items) {
+  return `
+    <section class="growth-card">
+      <div class="growth-card-heading"><div><h3>${escapeHtml(title)}</h3></div></div>
+      <div class="growth-list growth-list-plain">
+        ${items.map((item) => `<article><p>${escapeHtml(item)}</p></article>`).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function renderGrowthCampaigns(growthData = buildGrowthWorkspaceData()) {
+  return `
+    <section class="growth-page-title growth-page-title-actions">
+      <div>
+        <span class="growth-eyebrow">Campanhas</span>
+        <h3>Campanhas com links rastreaveis.</h3>
+        <p>Use campanhas reais do PMP para ver destinos, publicacoes e falhas sem manipular engajamento.</p>
+      </div>
+      <a class="button button-primary" data-link href="/workspace/campanhas/nova">Nova campanha</a>
+    </section>
+    <section class="growth-card-grid">
+      ${growthData.campaigns.map((campaign) => `
+        <article class="growth-card growth-campaign-card">
+          <div class="growth-badge-row">${growthPlatformBadge(campaign.platform)}${growthStatusBadge(campaign.status)}</div>
+          <h3>${escapeHtml(campaign.name)}</h3>
+          <p>${escapeHtml(campaign.period)} - ${escapeHtml(campaign.objective)}</p>
+          <div class="growth-link-pill">${escapeHtml(campaign.link)}</div>
+          <div class="growth-mini-grid">
+            <span><strong>${formatNumber(campaign.published)}</strong><small>publicados</small></span>
+            <span><strong>${formatNumber(campaign.failed)}</strong><small>falhas</small></span>
+          </div>
+          <div class="growth-action-row"><button class="button button-secondary" type="button">Copiar link</button><a class="button button-primary" data-link href="${escapeAttribute(campaign.link)}">Ver desempenho</a></div>
+        </article>
+      `).join('')}
+    </section>
+    ${growthData.campaigns.length ? '' : renderGrowthEmptyState('Nenhuma campanha criada no PMP', 'Crie uma campanha para alimentar Growth com dados reais de publicacao.', 'Criar nova campanha', '/workspace/campanhas/nova')}
+  `;
+}
+
+function renderGrowthLibrary() {
+  return renderGrowthContentHub(buildGrowthWorkspaceData());
+}
+
+function getGrowthPlatformSettingsRows() {
+  const allowedPlatforms = new Set(
+    (state.account?.allowedPlatforms ?? []).map((platform) => String(platform).toLowerCase())
+  );
+  const connectedAccounts = Array.isArray(state.growthConnectedAccounts) ? state.growthConnectedAccounts : [];
+  const hasPlanContext = Boolean(state.account);
+  const rows = [
+    { key: 'youtube', name: 'YouTube' },
+    { key: 'instagram', name: 'Instagram' },
+    { key: 'tiktok', name: 'TikTok' },
+  ];
+
+  return rows.map((row) => {
+    const allowedByPlan = !hasPlanContext
+      || allowedPlatforms.has(row.key)
+      || (row.key === 'youtube' && allowedPlatforms.has('google'));
+    const matchingAccounts = connectedAccounts.filter((account) => normalizeGrowthPlatformKey(account?.provider) === row.key);
+    const connectedCount = matchingAccounts.filter((account) => String(account?.status ?? '').toLowerCase() === 'connected').length;
+    const reauthCount = matchingAccounts.filter((account) => String(account?.status ?? '').toLowerCase() === 'reauth_required').length;
+    const status = !allowedByPlan
+      ? 'exige PRO ou Premium'
+      : connectedCount > 0
+        ? `${formatNumber(connectedCount)} conectado${connectedCount === 1 ? '' : 's'}`
+        : reauthCount > 0
+          ? 'reautorizacao necessaria'
+          : 'sem conta conectada';
+    return {
+      ...row,
+      status,
+      href: allowedByPlan ? '/workspace/accounts' : '/workspace/planos',
+      action: allowedByPlan ? (connectedCount > 0 || reauthCount > 0 ? 'Gerenciar' : 'Conectar') : 'Ver planos',
+    };
+  });
+}
+
+function renderGrowthSettingsPanel(options = {}) {
+  const merged = options.merged === true;
+  const platformRows = getGrowthPlatformSettingsRows();
+  const growthPreferences = normalizeGrowthPreferences(state.growthPreferences);
+
+  return `
+    <section class="growth-page-title growth-page-title-actions growth-settings-title">
+      <div>
+        <span class="growth-eyebrow">${merged ? 'Growth operacional' : 'Configuracoes'}</span>
+        <h3>${merged ? 'Growth integrado ao painel principal.' : 'Conta, seguranca, plataformas e preferencias.'}</h3>
+        <p>${merged
+          ? 'Somente controles acionaveis: plataformas, alertas e exportacao. Perfil, contas e plano ficam nos atalhos essenciais acima.'
+          : 'Growth usa as mesmas configuracoes do painel principal para evitar duplicidade entre produtos.'}</p>
+      </div>
+      ${merged
+        ? '<a class="button button-secondary" data-link href="/workspace/growth">Abrir Growth</a>'
+        : '<a class="button button-secondary" data-link href="/workspace/configuracoes">Configuracoes principais</a>'}
+    </section>
+    <section class="growth-grid-2 growth-settings-grid-compact">
+      <section class="growth-card">
+        <div class="growth-card-heading"><div><h3>Plataformas</h3><p>Leitura direta do plano e das contas conectadas.</p></div></div>
+        <div class="growth-platform-list">
+          ${platformRows.map((platform) => `
+            <article>
+              ${growthPlatformBadge(platform.name)}
+              <span>${escapeHtml(platform.status)}</span>
+              <a class="button button-secondary" data-link href="${escapeAttribute(platform.href)}">${escapeHtml(platform.action)}</a>
+            </article>
+          `).join('')}
+        </div>
+      </section>
+      <section class="growth-card">
+        <div class="growth-card-heading"><div><h3>Alertas e exportacao</h3><p>Preferencias operacionais do modulo Growth.</p></div></div>
+        <div class="growth-check-list">
+          ${GROWTH_PREFERENCE_OPTIONS.map((item) => `
+            <label><input type="checkbox" data-growth-preference="${escapeAttribute(item.id)}" ${growthPreferences[item.id] ? 'checked' : ''} />${escapeHtml(item.label)}</label>
+          `).join('')}
+        </div>
+        <div class="growth-action-row">
+          <button class="button button-secondary" type="button" data-growth-export-preferences>Exportar preferencias</button>
+        </div>
+      </section>
+      <section class="growth-card growth-settings-actions">
+        <div class="growth-card-heading"><div><h3>Controles sensiveis</h3><p>Sem duplicidade: perfil, contas e plano continuam sendo configurados nas areas principais.</p></div></div>
+        <div class="growth-settings-grid">
+          <a data-link href="/workspace/perfil">Perfil e conta</a>
+          <a data-link href="/workspace/accounts">Contas conectadas</a>
+          <a data-link href="/workspace/planos">Plano e tokens</a>
+        </div>
+      </section>
+    </section>
+  `;
+}
+
+function renderGrowthBody(sectionId, growthData = buildGrowthWorkspaceData()) {
+  if (sectionId === 'conteudo') return renderGrowthContentHub(growthData);
+  if (sectionId === 'metricas') return renderGrowthMetrics(growthData);
+  if (sectionId === 'campanhas') return renderGrowthCampaigns(growthData);
+  if (sectionId === 'relatorios') return renderGrowthReports(growthData);
+  return renderGrowthOverview(growthData);
+}
+
+function setGrowthButtonFeedback(button, label, restoreDelay = 1600) {
+  if (!button) return;
+  const original = button.textContent;
+  button.textContent = label;
+  button.classList.add('growth-action-done');
+  if (restoreDelay <= 0) return;
+  setTimeout(() => {
+    button.textContent = original;
+    button.classList.remove('growth-action-done');
+  }, restoreDelay);
+}
+
+function buildGrowthPreferencesExportPayload() {
+  return {
+    exportedAt: new Date().toISOString(),
+    profile: {
+      name: state.me?.fullName || state.me?.name || null,
+      email: state.me?.email || state.account?.email || null,
+    },
+    workspace: {
+      locale: state.locale,
+      plan: state.account?.plan ?? null,
+      planLabel: state.account?.planLabel ?? getPlanVisualConfig().label,
+      backgroundTheme: state.backgroundTheme,
+      fontTheme: state.fontTheme,
+    },
+    platforms: getGrowthPlatformSettingsRows().map((platform) => ({
+      key: platform.key,
+      name: platform.name,
+      status: platform.status,
+    })),
+    preferences: normalizeGrowthPreferences(state.growthPreferences),
+  };
+}
+
+function exportGrowthPreferences(button) {
+  const payload = JSON.stringify(buildGrowthPreferencesExportPayload(), null, 2);
+  const fileName = `pmp-growth-preferencias-${new Date().toISOString().slice(0, 10)}.json`;
+
+  try {
+    const blob = new Blob([payload], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setGrowthButtonFeedback(button, 'Preferencias exportadas');
+  } catch {
+    try {
+      void navigator.clipboard?.writeText(payload);
+      setGrowthButtonFeedback(button, 'Preferencias copiadas');
+    } catch {
+      setGrowthButtonFeedback(button, 'Exportacao indisponivel');
+    }
+  }
+}
+
+function getGrowthReportExportHtml(rootEl = document.querySelector('.growth-module')) {
+  const cards = Array.from(rootEl?.querySelectorAll?.('[data-growth-manual-reports-grid] .growth-card, [data-growth-reports-grid] .growth-card') ?? [])
+    .map((card) => ({
+      title: card.querySelector('h3')?.textContent?.trim() || 'Relatorio Growth',
+      summary: card.querySelector('p')?.textContent?.trim() || '',
+    }));
+  const insights = Array.from(rootEl?.querySelectorAll?.('[data-growth-reports-insights] p') ?? [])
+    .map((item) => item.textContent?.trim())
+    .filter(Boolean);
+  const generatedAt = new Date().toISOString();
+
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Relatorio Growth PMP</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; color: #172033; background: #f8fbff; }
+    main { max-width: 880px; margin: 0 auto; }
+    h1 { margin-bottom: 4px; }
+    article, section { background: #fff; border: 1px solid #d8e3f0; border-radius: 18px; padding: 20px; margin: 16px 0; }
+    small { color: #64748b; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Relatorio Growth PMP</h1>
+    <small>Gerado em ${escapeHtml(generatedAt)}</small>
+    ${cards.map((card) => `<article><h2>${escapeHtml(card.title)}</h2><p>${escapeHtml(card.summary)}</p></article>`).join('')}
+    ${insights.length ? `<section><h2>Aprendizados e proximos passos</h2><ul>${insights.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul></section>` : ''}
+  </main>
+</body>
+</html>`;
+}
+
+function exportGrowthReport(button) {
+  const rootEl = button?.closest?.('.growth-module') ?? document.querySelector('.growth-module');
+  const payload = getGrowthReportExportHtml(rootEl);
+  const fileName = `pmp-growth-relatorio-${new Date().toISOString().slice(0, 10)}.html`;
+
+  try {
+    const blob = new Blob([payload], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setGrowthButtonFeedback(button, 'HTML exportado');
+  } catch {
+    try {
+      void navigator.clipboard?.writeText(payload);
+      setGrowthButtonFeedback(button, 'Relatorio copiado');
+    } catch {
+      setGrowthButtonFeedback(button, 'Exportacao indisponivel');
+    }
+  }
+}
+
+function addGrowthGeneratedReport(rootEl, report) {
+  const manualReportsGrid = rootEl?.querySelector?.('[data-growth-manual-reports-grid]');
+  const reportsGrid = rootEl?.querySelector?.('[data-growth-reports-grid]');
+  const targetGrid = manualReportsGrid || reportsGrid;
+  if (!targetGrid) return false;
+  targetGrid.insertAdjacentHTML('afterbegin', renderGrowthReportCard(report));
+  targetGrid.firstElementChild?.classList?.add('is-new');
+  rootEl?.querySelector?.('[data-growth-manual-report-empty]')?.remove?.();
+  return true;
+}
+
+function bindGrowthInteractions() {
+  const rootEl = document.querySelector('.growth-module');
+  if (!rootEl) return;
+
+  const ideaInput = rootEl.querySelector('[data-growth-idea-input]');
+  const ideasGrid = rootEl.querySelector('[data-growth-ideas-grid]');
+  const generateIdeasButton = rootEl.querySelector('[data-growth-generate-ideas]');
+  if (generateIdeasButton && ideasGrid) {
+    generateIdeasButton.addEventListener('click', () => {
+      const ideas = buildGeneratedGrowthIdeas(ideaInput?.value ?? '');
+      ideasGrid.insertAdjacentHTML('afterbegin', ideas.map(renderGrowthIdeaCard).join(''));
+      ideasGrid.querySelectorAll('[data-growth-idea-card]').forEach((card, index) => {
+        card.classList.toggle('is-new', index < ideas.length);
+      });
+      setGrowthButtonFeedback(generateIdeasButton, 'Ideias geradas');
+    });
+  }
+
+  if (!rootEl.__growthDelegatedBound) {
+    rootEl.addEventListener('click', (event) => {
+      const saveButton = event.target.closest('[data-growth-save-idea]');
+      if (saveButton && rootEl.contains(saveButton)) {
+        saveButton.setAttribute('disabled', 'disabled');
+        setGrowthButtonFeedback(saveButton, 'Separado nesta sessao', 0);
+        return;
+      }
+
+      const campaignButton = event.target.closest('[data-growth-campaign-from-idea]');
+      if (campaignButton && rootEl.contains(campaignButton)) {
+        const idea = campaignButton.getAttribute('data-growth-campaign-from-idea') || campaignButton.closest('[data-growth-idea-card]')?.querySelector('h3')?.textContent?.trim() || '';
+        navigate(buildUrl('/workspace/campanhas/nova', { idea }));
+        return;
+      }
+
+      const scriptButton = event.target.closest('[data-growth-script-from-idea]');
+      if (scriptButton && rootEl.contains(scriptButton)) {
+        const idea = scriptButton.getAttribute('data-growth-script-from-idea') || '';
+        navigate(buildUrl('/workspace/growth/conteudo', { idea }));
+      }
+    });
+
+    rootEl.addEventListener('change', (event) => {
+      const target = event.target;
+      if (target?.matches?.('[data-growth-metrics-filter]')) {
+        applyGrowthMetricsFilters(rootEl);
+        return;
+      }
+      if (!(target instanceof HTMLInputElement)) return;
+      const preferenceId = target.getAttribute('data-growth-preference');
+      if (!preferenceId) return;
+      writeStoredGrowthPreferences({
+        ...state.growthPreferences,
+        [preferenceId]: target.checked,
+      });
+    });
+
+    rootEl.__growthDelegatedBound = true;
+  }
+
+  const scriptForm = rootEl.querySelector('[data-growth-script-form]');
+  const scriptResult = rootEl.querySelector('[data-growth-script-result]');
+  if (scriptForm && scriptResult) {
+    const queryIdea = parseCurrentQuery().get('idea');
+    const topicInput = scriptForm.querySelector('[data-growth-script-topic]');
+    if (queryIdea && topicInput) {
+      topicInput.value = queryIdea;
+    }
+
+    scriptForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const formData = new FormData(scriptForm);
+      const details = Object.fromEntries(formData.entries());
+      const submitButton = scriptForm.querySelector('button[type="submit"]');
+      const originalLabel = submitButton?.textContent ?? 'Gerar brief e roteiro';
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = 'Gerando brief...';
+      }
+
+      try {
+        const response = await api.generateGrowthScript(details);
+        if (!response.ok) {
+          throw new Error(response.error || response.body?.error || 'Nao foi possivel gerar o brief.');
+        }
+        scriptResult.innerHTML = renderGrowthScriptResult(response.body);
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = originalLabel;
+        }
+        setGrowthButtonFeedback(submitButton, 'Brief + roteiro gerados');
+      } catch (error) {
+        scriptResult.innerHTML = renderGrowthScriptResult({
+          ...details,
+          error: error?.message || 'Backend indisponivel; usando roteiro local sem brief do workspace.',
+        });
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = originalLabel;
+        }
+        setGrowthButtonFeedback(submitButton, 'Fallback local');
+      }
+      scriptResult.classList.remove('is-updated');
+      void scriptResult.offsetWidth;
+      scriptResult.classList.add('is-updated');
+    });
+  }
+
+  rootEl.querySelectorAll('[data-growth-generate-report]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const report = {
+        title: `Relatorio rapido - ${formatClockLabel()}`,
+        summary: 'Resumo criado a partir dos sinais atuais: manter conteudo educativo, testar ganchos diretos e acompanhar retencao nos primeiros segundos.',
+      };
+      addGrowthGeneratedReport(rootEl, report);
+      setGrowthButtonFeedback(button, 'Relatorio gerado');
+    });
+  });
+
+  rootEl.querySelectorAll('[data-growth-export-report]').forEach((button) => {
+    button.addEventListener('click', () => exportGrowthReport(button));
+  });
+
+  rootEl.querySelectorAll('[data-growth-export-preferences]').forEach((button) => {
+    button.addEventListener('click', () => exportGrowthPreferences(button));
+  });
+
+  rootEl.querySelectorAll('.growth-campaign-card .growth-action-row button:first-child').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const link = button.closest('.growth-campaign-card')?.querySelector('.growth-link-pill')?.textContent?.trim() ?? '';
+      try {
+        if (navigator.clipboard && link) await navigator.clipboard.writeText(link);
+      } catch {
+        // Clipboard permission is optional; visual feedback still confirms the user action.
+      }
+      setGrowthButtonFeedback(button, 'Link copiado');
+    });
+  });
+}
+
+function withGrowthTimeout(promise, timeoutMs = GROWTH_CHANNEL_LOAD_TIMEOUT_MS) {
+  if (!timeoutMs || timeoutMs <= 0) return promise;
+  let timeoutId;
+  const timeoutPromise = new Promise((resolve) => {
+    timeoutId = setTimeout(() => resolve(GROWTH_CHANNEL_TIMEOUT_RESULT), timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutId));
+}
+
+async function loadGrowthAccountChannels(accounts, options = {}) {
+  const validAccounts = Array.isArray(accounts)
+    ? accounts.filter((account) => account?.id)
+    : [];
+  if (!validAccounts.length) return { channels: [], requested: 0, failed: 0 };
+
+  const concurrency = Math.max(1, Math.min(
+    Number(options.concurrency ?? GROWTH_CHANNEL_LOAD_CONCURRENCY) || GROWTH_CHANNEL_LOAD_CONCURRENCY,
+    validAccounts.length
+  ));
+  const timeoutMs = Number(options.timeoutMs ?? GROWTH_CHANNEL_LOAD_TIMEOUT_MS) || GROWTH_CHANNEL_LOAD_TIMEOUT_MS;
+  const channels = [];
+  let failed = 0;
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < validAccounts.length) {
+      const account = validAccounts[cursor];
+      cursor += 1;
+      const response = await withGrowthTimeout(
+        api.accountChannels(account.id).catch(() => null),
+        timeoutMs
+      );
+      if (response?.ok && Array.isArray(response.body?.channels)) {
+        channels.push(...response.body.channels);
+      } else {
+        failed += 1;
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: concurrency }, worker));
+  return { channels, requested: validAccounts.length, failed };
+}
+
+async function loadGrowthWorkspaceData(sectionId = 'cockpit') {
+  let dashboardResult;
+  let campaignsResult;
+  let accountsResult;
+
+  try {
+    [dashboardResult, campaignsResult, accountsResult] = await Promise.all([
+      api.dashboard(),
+      api.campaigns({ limit: 50, offset: 0 }),
+      api.accounts(),
+    ]);
+  } catch (error) {
+    return {
+      data: buildGrowthWorkspaceData(),
+      error: error?.message ?? 'Nao foi possivel carregar dados reais do Growth.',
+    };
+  }
+
+  const authFailure = [dashboardResult, campaignsResult, accountsResult]
+    .find((entry) => entry && !entry.ok && entry.status === 401);
+  if (authFailure) {
+    return { unauthorized: true, data: buildGrowthWorkspaceData(), error: authFailure.error };
+  }
+
+  const accounts = accountsResult?.ok && Array.isArray(accountsResult.body?.accounts)
+    ? accountsResult.body.accounts
+    : [];
+  const connectedAccounts = accounts.filter((account) => String(account?.status ?? '').toLowerCase() === 'connected');
+  state.growthConnectedAccounts = accounts;
+
+  const baseInput = {
+    stats: dashboardResult?.ok ? dashboardResult.body : {},
+    campaigns: campaignsResult?.ok && Array.isArray(campaignsResult.body?.campaigns) ? campaignsResult.body.campaigns : [],
+    accounts,
+    accountChannels: [],
+    channelSync: {
+      requested: connectedAccounts.length,
+      failed: 0,
+      pending: GROWTH_CHANNEL_HYDRATED_SECTIONS.has(sectionId) && connectedAccounts.length > 0,
+    },
+  };
+  const shouldHydrateChannels = GROWTH_CHANNEL_HYDRATED_SECTIONS.has(sectionId);
+  const channelDataPromise = shouldHydrateChannels && connectedAccounts.length
+    ? loadGrowthAccountChannels(connectedAccounts)
+      .then((channelResult) => buildGrowthWorkspaceData({
+        ...baseInput,
+        accountChannels: channelResult.channels,
+        channelSync: { requested: channelResult.requested, failed: channelResult.failed, pending: false },
+      }))
+      .catch(() => buildGrowthWorkspaceData({
+        ...baseInput,
+        channelSync: { requested: connectedAccounts.length, failed: connectedAccounts.length, pending: false },
+      }))
+    : null;
+
+  const failures = [dashboardResult, campaignsResult, accountsResult]
+    .filter((entry) => entry && !entry.ok);
+  return {
+    data: buildGrowthWorkspaceData(baseInput),
+    channelDataPromise,
+    error: failures.length
+      ? failures.map((entry) => entry.error).filter(Boolean).join(' | ') || 'Dados parciais carregados.'
+      : '',
+  };
+}
+
+function renderGrowthShellContent(sectionId, growthData) {
+  return `
+      ${renderGrowthHeader(sectionId, growthData)}
+      ${renderGrowthNav(sectionId)}
+      <section class="growth-content" data-growth-content>
+        ${renderGrowthBody(sectionId, growthData)}
+      </section>
+  `;
+}
+
+function updateGrowthMetricsSection(moduleEl, growthData) {
+  const metricsData = getGrowthFilteredMetricsData(growthData, state.growthMetricFilters ?? { date: 'all', platform: 'all' });
+  const metricsGrid = moduleEl.querySelector('[data-growth-metrics-grid]');
+  if (metricsGrid) {
+    metricsGrid.innerHTML = renderGrowthMetricsGridHtml(metricsData);
+  }
+
+  const chartsGrid = moduleEl.querySelector('[data-growth-metrics-charts]');
+  if (chartsGrid) {
+    chartsGrid.innerHTML = renderGrowthMetricsChartsHtml(metricsData);
+  }
+
+  const rankingBody = moduleEl.querySelector('[data-growth-ranking-body]');
+  if (rankingBody) {
+    rankingBody.innerHTML = renderGrowthContentRankingRowsHtml(metricsData);
+  }
+}
+
+function updateGrowthReportsSection(moduleEl, growthData) {
+  const reportsGrid = moduleEl.querySelector('[data-growth-reports-grid]');
+  if (reportsGrid) {
+    const generatedReportsHtml = Array.from(reportsGrid.children)
+      .filter((card) => card.classList?.contains('is-new'))
+      .map((card) => card.outerHTML)
+      .join('');
+    reportsGrid.innerHTML = `${generatedReportsHtml}${renderGrowthReportsGridHtml(growthData)}`;
+  }
+
+  const chartSlot = moduleEl.querySelector('[data-growth-reports-chart]');
+  if (chartSlot) {
+    chartSlot.innerHTML = renderGrowthReportsChartHtml(growthData);
+  }
+
+  const insightsSlot = moduleEl.querySelector('[data-growth-reports-insights]');
+  if (insightsSlot) {
+    insightsSlot.innerHTML = renderGrowthReportsInsightsHtml(growthData);
+  }
+}
+
+function applyGrowthWorkspaceData(sectionId, growthData) {
+  const moduleEl = document.querySelector('.growth-module');
+  if (!moduleEl || moduleEl.getAttribute('data-growth-section') !== sectionId) return false;
+  state.growthWorkspaceData = growthData;
+
+  const headerEl = moduleEl.querySelector('[data-growth-header]');
+  if (headerEl) {
+    headerEl.outerHTML = renderGrowthHeader(sectionId, growthData);
+  }
+
+  if (sectionId === 'metricas') {
+    updateGrowthMetricsSection(moduleEl, growthData);
+    return true;
+  }
+
+  if (sectionId === 'relatorios') {
+    updateGrowthReportsSection(moduleEl, growthData);
+    return true;
+  }
+
+  const contentEl = moduleEl.querySelector('[data-growth-content]');
+  if (contentEl) {
+    contentEl.innerHTML = renderGrowthBody(sectionId, growthData);
+  }
+
+  bindGrowthInteractions();
+  return true;
+}
+
+async function hydrateGrowthAccountChannels(sectionId, channelDataPromise) {
+  if (!channelDataPromise || !GROWTH_CHANNEL_HYDRATED_SECTIONS.has(sectionId)) return;
+  const loadId = ++state.growthChannelLoadId;
+  const growthData = await channelDataPromise;
+  if (!growthData || loadId !== state.growthChannelLoadId) return;
+  if (getGrowthSectionFromPath(window.location.pathname) !== sectionId) return;
+  applyGrowthWorkspaceData(sectionId, growthData);
+}
+
+async function renderGrowthPage(pathname = window.location.pathname) {
+  const sectionId = getGrowthSectionFromPath(pathname);
+  const growthResult = await loadGrowthWorkspaceData(sectionId);
+  if (growthResult.unauthorized) {
+    unauthorizedRedirect();
+    return;
+  }
+  const growthData = growthResult.data;
+  state.growthWorkspaceData = growthData;
+  const contentHtml = `
+    <div class="growth-module" data-growth-section="${escapeAttribute(sectionId)}">
+      ${renderGrowthShellContent(sectionId, growthData)}
+    </div>
+  `;
+
+  renderWorkspaceShell({
+    title: '',
+    noticeHtml: growthResult.error ? `<div class="notice warning">${escapeHtml(growthResult.error)}</div>` : '',
+    contentHtml,
+  });
+  bindGrowthInteractions();
+  void hydrateGrowthAccountChannels(sectionId, growthResult.channelDataPromise);
 }
 
 
@@ -6419,7 +8237,7 @@ function buildDashboardPlaylistPlayerData(playlists, assets) {
 }
 
 function renderDashboardPlaylistPlayerItem(playlist, video, isActive = false) {
-  const stateLabel = video.item?.usedAt ? 'usado' : 'disponivel';
+  const stateLabel = video.item?.usedAt ? 'usado' : 'disponível';
   const metaLabel = `${playlist.name} - ${video.durationLabel}`;
 
   return `
@@ -6456,7 +8274,7 @@ function renderDashboardPlaylistPanel(playlists, assets) {
   const selectedPlaylist = playerPlaylists[0] ?? null;
   const selectedVideo = selectedPlaylist?.videos?.[0] ?? null;
   const playlistLabel = playlistCount === 1 ? '1 playlist' : `${formatNumber(playlistCount)} playlists`;
-  const videoLabel = videoCount === 1 ? '1 video' : `${formatNumber(videoCount)} videos`;
+  const videoLabel = videoCount === 1 ? '1 vídeo' : `${formatNumber(videoCount)} vídeos`;
   const selectedMeta = selectedPlaylist && selectedVideo ? `${selectedPlaylist.name} - ${selectedVideo.durationLabel}` : '';
   const playlistOptionsHtml = playerPlaylists.map((playlist) => `
     <option value="${escapeAttribute(playlist.id)}">${escapeHtml(playlist.name)} (${formatNumber(playlist.videos.length)})</option>
@@ -6468,24 +8286,31 @@ function renderDashboardPlaylistPanel(playlists, assets) {
     .join('');
 
   return `
-    <aside class="od-hero-playlist-player od-panel" aria-label="Player de videos das playlists" data-playlist-player>
+    <aside class="od-hero-playlist-player od-panel" aria-label="Player de vídeos das playlists" data-playlist-player>
       <div class="od-hero-playlist-player-head">
-        <span class="od-kpi-label od-mono">Player de playlist</span>
+        <span class="od-kpi-label od-mono">Playlist em reprodução</span>
         <span class="od-panel-meta od-muted od-mono">${escapeHtml(videoLabel)} - ${escapeHtml(playlistLabel)}</span>
       </div>
       ${selectedPlaylist && selectedVideo
-          ? `
+            ? `
             <label class="od-playlist-player-select-wrap">
-              <span class="od-mono">Playlist selecionada</span>
+              <span class="od-mono">Escolher playlist</span>
               <select data-playlist-player-select>
                 ${playlistOptionsHtml}
               </select>
             </label>
+            <div class="od-playlist-player-controls">
+              <button type="button" class="od-playlist-player-auto" data-playlist-player-autoplay aria-pressed="false">
+                <span class="od-playlist-player-auto-dot" aria-hidden="true"></span>
+                <span data-playlist-player-autoplay-label>Automático desligado</span>
+              </button>
+            </div>
             <div class="od-playlist-player-frame">
               <video
                 class="od-playlist-player-video"
                 data-playlist-player-video
                 controls
+                playsinline
                 preload="metadata"
                 src="${escapeAttribute(selectedVideo.sourceUrl)}"
                 ${selectedVideo.posterUrl ? `poster="${escapeAttribute(selectedVideo.posterUrl)}"` : ''}
@@ -6496,19 +8321,19 @@ function renderDashboardPlaylistPanel(playlists, assets) {
               <strong data-playlist-player-title>${escapeHtml(selectedVideo.title)}</strong>
               <span data-playlist-player-meta>${escapeHtml(selectedMeta)}</span>
             </div>
-            <div class="od-playlist-player-list" data-playlist-player-list>
+            <div class="od-playlist-player-list" data-playlist-player-list aria-label="Fila de vídeos da playlist">
               ${playlistItemsHtml}
             </div>
           `
           : `
             <div class="od-playlist-player-empty">
               ${renderNeonMediaIcon('playlist', 'stat', { state: 'processing' })}
-              <strong>Nenhuma playlist com videos prontos</strong>
-              <span>Crie uma playlist com videos da biblioteca para reproduzir aqui.</span>
+              <strong>Nenhuma playlist com vídeos prontos</strong>
+              <span>Crie uma playlist com vídeos da biblioteca para reproduzir aqui.</span>
               <a class="button button-secondary" data-link href="/workspace/videos?view=playlists">Abrir playlists</a>
             </div>
           `}
-      <small class="od-hero-playlist-player-disclaimer od-muted od-mono">Selecione uma playlist e toque qualquer video salvo nela</small>
+      <small class="od-hero-playlist-player-disclaimer od-muted od-mono">Modo automático avança para o próximo vídeo da playlist</small>
     </aside>
   `;
 }
@@ -6520,8 +8345,36 @@ function bindDashboardPlaylistPlayer(root) {
   const video = panel.querySelector('[data-playlist-player-video]');
   const titleTarget = panel.querySelector('[data-playlist-player-title]');
   const metaTarget = panel.querySelector('[data-playlist-player-meta]');
+  const autoButton = panel.querySelector('[data-playlist-player-autoplay]');
+  const autoLabel = panel.querySelector('[data-playlist-player-autoplay-label]');
   const items = Array.from(panel.querySelectorAll('[data-playlist-player-item]'));
   if (!items.length) return;
+  let autoplayEnabled = false;
+
+  const markPlayerEngaged = () => {
+    panel.setAttribute?.('data-playlist-player-engaged', 'true');
+  };
+
+  const getVisibleItems = () => items.filter((item) => !item.hidden);
+
+  const getActiveItem = () => items.find((item) => item.classList.contains('active')) ?? null;
+
+  const getNextVisibleItem = () => {
+    const visibleItems = getVisibleItems();
+    if (!visibleItems.length) return null;
+    const activeItem = getActiveItem();
+    const activeIndex = visibleItems.indexOf(activeItem);
+    return visibleItems[(activeIndex + 1 + visibleItems.length) % visibleItems.length] ?? visibleItems[0];
+  };
+
+  const syncAutoplayButton = () => {
+    if (!autoButton) return;
+    autoButton.classList.toggle('active', autoplayEnabled);
+    autoButton.setAttribute('aria-pressed', autoplayEnabled ? 'true' : 'false');
+    if (autoLabel) {
+      autoLabel.textContent = autoplayEnabled ? 'Automático ligado' : 'Automático desligado';
+    }
+  };
 
   const activateItem = (item, { autoplay = false } = {}) => {
     if (!item || !video) return;
@@ -6546,6 +8399,7 @@ function bindDashboardPlaylistPlayer(root) {
       video.load();
     }
     if (autoplay) {
+      markPlayerEngaged();
       const playResult = video.play();
       if (playResult && typeof playResult.catch === 'function') playResult.catch(() => {});
     }
@@ -6561,25 +8415,80 @@ function bindDashboardPlaylistPlayer(root) {
       if (!firstVisible) firstVisible = item;
       if (item.classList.contains('active')) activeVisible = item;
     });
-    activateItem(activeVisible ?? firstVisible);
+    activateItem(activeVisible ?? firstVisible, { autoplay: autoplayEnabled });
   };
 
   items.forEach((item) => {
-    item.addEventListener('click', () => activateItem(item, { autoplay: true }));
+    item.addEventListener('click', () => {
+      markPlayerEngaged();
+      activateItem(item, { autoplay: true });
+    });
   });
 
   if (select) {
-    select.addEventListener('change', () => setPlaylist(select.value));
+    select.addEventListener('change', () => {
+      markPlayerEngaged();
+      setPlaylist(select.value);
+    });
     setPlaylist(select.value);
   } else {
     activateItem(items[0]);
   }
+
+  if (autoButton) {
+    autoButton.addEventListener('click', () => {
+      markPlayerEngaged();
+      autoplayEnabled = !autoplayEnabled;
+      syncAutoplayButton();
+      if (autoplayEnabled) {
+        activateItem(getActiveItem() ?? getVisibleItems()[0], { autoplay: true });
+      }
+    });
+    syncAutoplayButton();
+  }
+
+  if (video) {
+    ['play', 'playing', 'seeking', 'timeupdate'].forEach((eventName) => {
+      video.addEventListener(eventName, markPlayerEngaged);
+    });
+    video.addEventListener('ended', () => {
+      if (!autoplayEnabled) {
+        panel.removeAttribute?.('data-playlist-player-engaged');
+        return;
+      }
+      const nextItem = getNextVisibleItem();
+      if (nextItem) activateItem(nextItem, { autoplay: true });
+    });
+  }
+}
+
+function isDashboardPlaylistPlayerProtected() {
+  const dashboardVideo = document.querySelector('[data-playlist-player-video]');
+  if (!(dashboardVideo instanceof HTMLVideoElement)) return false;
+  return Boolean(dashboardVideo.closest?.('[data-playlist-player]'));
+}
+
+function startDashboardClock(root) {
+  clearDashboardClockTimer();
+  const clockTargets = Array.from(root?.querySelectorAll?.('[data-dashboard-clock]') ?? []);
+  if (!clockTargets.length) return;
+
+  const updateClock = () => {
+    const clockLabel = formatClockLabel();
+    clockTargets.forEach((target) => {
+      target.textContent = clockLabel;
+    });
+  };
+
+  updateClock();
+  state.dashboardClockTimer = setInterval(updateClock, 1000);
 }
 
 function bindDashboardInteractions() {
   const dashboardRoot = document.getElementById('od-root');
   if (!dashboardRoot) return;
   clearPulseRotateTimer();
+  startDashboardClock(dashboardRoot);
   startChannelKpiCarousel(dashboardRoot);
   bindDashboardPlaylistPlayer(dashboardRoot);
 
@@ -6794,14 +8703,20 @@ async function renderPlatformDashboardPage() {
           <span class="od-muted">Signal-rich overview for operations and publishing.</span>
         </div>
         <div class="od-topbar-right od-muted od-mono">
-          <span class="od-live-dot"></span>${escapeHtml(liveClock)}
+          <span class="od-live-dot"></span><span data-dashboard-clock>${escapeHtml(liveClock)}</span>
           <button type="button" class="od-refresh-button od-mono" data-action="dashboard-refresh">Refresh</button>
         </div>
       </div>
 
       <section class="od-command-hero od-command-hero-split">
         <div class="od-hero-copy od-panel">
-          <span class="od-kpi-label od-mono">Editorial Pulse</span>
+          <div class="od-pulse-header">
+            <span class="od-kpi-label od-mono">Editorial Pulse</span>
+            <span class="od-pulse-clock od-mono" aria-label="Current time">
+              <span>Now</span>
+              <strong data-dashboard-clock>${escapeHtml(liveClock)}</strong>
+            </span>
+          </div>
           <div class="od-pulse-rotator" aria-live="polite">
             ${pulseAds.map((line, index) => `<h1 class="od-pulse-line${index === 0 ? ' active' : ''}" data-pulse-line>${escapeHtml(line)}</h1>`).join('')}
           </div>
@@ -6886,11 +8801,7 @@ async function renderPlatformDashboardPage() {
   clearAutoRefreshTimer();
 
   if (typeof shouldAutoRefreshDashboard === 'function' && shouldAutoRefreshDashboard(stats)) {
-    state.autoRefreshTimer = setTimeout(() => {
-      if (window.location.pathname !== '/workspace/dashboard') return;
-      if (typeof document !== 'undefined' && document.hidden) return;
-      void renderPlatformDashboardPage();
-    }, 12000);
+    scheduleDashboardAutoRefresh({ protectPlaylistPlayer: true });
   }
 }
 
@@ -7079,11 +8990,7 @@ async function renderPlatformDashboardLegacyPage() {
   clearAutoRefreshTimer();
 
   if (shouldAutoRefreshDashboard(stats)) {
-    state.autoRefreshTimer = setTimeout(() => {
-      if (window.location.pathname !== '/workspace/dashboard') return;
-      if (typeof document !== 'undefined' && document.hidden) return;
-      void renderPlatformDashboardPage();
-    }, 12000);
+    scheduleDashboardAutoRefresh({ protectPlaylistPlayer: false });
   }
 }
 
@@ -13711,6 +15618,7 @@ function renderNotFoundPage() {
 async function renderRoute() {
   if (state.routeInFlight) return;
   clearAutoRefreshTimer();
+  clearDashboardClockTimer();
   state.routeInFlight = true;
   try {
     const rawPath = window.location.pathname;
@@ -13788,6 +15696,16 @@ async function renderRoute() {
 
       if (path === '/workspace/dashboard') {
         await renderDashboardPage();
+        return;
+      }
+
+      if (path === '/workspace/growth/configuracoes') {
+        navigate('/workspace/configuracoes', true);
+        return;
+      }
+
+      if (path === '/workspace/growth' || path.startsWith('/workspace/growth/')) {
+        await renderGrowthPage(path);
         return;
       }
 

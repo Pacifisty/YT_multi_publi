@@ -89,6 +89,7 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
     accountsModuleOptions,
     mediaModuleOptions,
     accountPlanStore: databaseProvider.accountPlanRepository ?? undefined,
+    paymentWebhookDeduplicator: databaseProvider.webhookDeduplicator,
   });
 
   // Determine allowed origins

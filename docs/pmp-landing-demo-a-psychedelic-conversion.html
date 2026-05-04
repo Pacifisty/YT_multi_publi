@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Platform Multi Publisher | Publique videos no YouTube, TikTok e Instagram</title>
+  <meta name="description" content="Planeje, automatize e acompanhe publicacoes em video no YouTube, TikTok e Instagram em um unico painel, com campanhas, biblioteca de midia e relatorios." />
+  <link rel="canonical" href="https://www.plataformmultipublisher.com/" />
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Platform Multi Publisher",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "description": "Planeje, automatize e acompanhe publicacoes em video no YouTube, TikTok e Instagram em um unico painel.",
+      "url": "https://www.plataformmultipublisher.com/"
+    }
+  </script>
+  <style>
+    :root {
+      --ink: #21121c;
+      --paper: #fff3cf;
+      --yellow: #ffe000;
+      --orange: #ff5f00;
+      --pink: #ff3da7;
+      --blue: #20bfff;
+      --green: #61d96d;
+      --violet: #8c65ff;
+      --shadow: rgba(33, 18, 28, .38);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 20% 8%, rgba(255,255,255,.54), transparent 15rem),
+        linear-gradient(135deg, #ffe300 0%, #ff7a00 48%, #ec208d 100%);
+      font-family: "Cooper Black", "Bookman Old Style", Georgia, serif;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: -12%;
+      z-index: -1;
+      opacity: .18;
+      background-image:
+        radial-gradient(circle, rgba(33,18,28,.9) 0 1px, transparent 1.5px),
+        repeating-linear-gradient(35deg, transparent 0 24px, rgba(255,255,255,.25) 24px 27px);
+      background-size: 17px 17px, auto;
+      animation: paperDrift 8s steps(5) infinite;
+      pointer-events: none;
+    }
+
+    a { color: inherit; }
+
+    .page {
+      width: min(1520px, 100%);
+      margin: 0 auto;
+    }
+
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 18px clamp(18px, 4vw, 54px);
+      background: rgba(255, 243, 207, .82);
+      border-bottom: 4px solid rgba(33, 18, 28, .16);
+      backdrop-filter: blur(18px);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      font: 950 18px/1 "Arial Black", Impact, sans-serif;
+      text-transform: uppercase;
+      text-decoration: none;
+      letter-spacing: -.02em;
+    }
+
+    .brand-mark {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      border: 3px solid var(--ink);
+      border-radius: 50%;
+      color: var(--ink);
+      background: conic-gradient(from 12deg, var(--yellow), var(--pink), var(--blue), var(--green), var(--yellow));
+      box-shadow: 5px 5px 0 var(--ink);
+      animation: logoSpin 8s linear infinite;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font: 900 13px/1 "Arial Black", Impact, sans-serif;
+      text-transform: uppercase;
+    }
+
+    .nav-links a {
+      padding: 11px 13px;
+      border: 2px solid transparent;
+      border-radius: 999px;
+      text-decoration: none;
+    }
+
+    .nav-links a:hover {
+      border-color: var(--ink);
+      background: var(--paper);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 52px;
+      padding: 0 24px;
+      border: 4px solid var(--ink);
+      border-radius: 999px;
+      color: var(--ink);
+      background: var(--paper);
+      box-shadow: 0 9px 0 var(--ink);
+      font: 950 15px/1 "Arial Black", Impact, sans-serif;
+      text-decoration: none;
+      text-transform: uppercase;
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+
+    .btn:hover {
+      transform: translateY(4px);
+      box-shadow: 0 5px 0 var(--ink);
+    }
+
+    .btn.primary {
+      background: var(--yellow);
+    }
+
+    .hero {
+      min-height: calc(100vh - 86px);
+      display: grid;
+      grid-template-columns: minmax(0, .92fr) minmax(420px, 1.08fr);
+      align-items: center;
+      gap: clamp(28px, 4vw, 64px);
+      padding: clamp(42px, 7vw, 96px) clamp(18px, 5vw, 74px);
+    }
+
+    .hero-copy {
+      display: grid;
+      gap: 22px;
+      max-width: 740px;
+    }
+
+    .eyebrow {
+      width: max-content;
+      max-width: 100%;
+      margin: 0;
+      padding: 10px 15px;
+      border: 3px solid var(--ink);
+      border-radius: 999px;
+      background: var(--green);
+      box-shadow: 5px 5px 0 var(--ink);
+      font: 950 13px/1 "Arial Black", Impact, sans-serif;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 11ch;
+      font-size: clamp(3.4rem, 8.8vw, 8.8rem);
+      line-height: .78;
+      letter-spacing: -.08em;
+      color: var(--yellow);
+      -webkit-text-stroke: 4px var(--ink);
+      text-shadow: 9px 9px 0 var(--pink), 16px 16px 0 rgba(33,18,28,.58);
+      animation: headlineWave 4.8s ease-in-out infinite;
+    }
+
+    .hero-copy > p:not(.eyebrow) {
+      max-width: 690px;
+      margin: 0;
+      font: 800 clamp(1.02rem, 2vw, 1.28rem)/1.58 "Aptos", "Trebuchet MS", sans-serif;
+    }
+
+    .hero-actions,
+    .hero-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .hero-chips span {
+      padding: 9px 12px;
+      border: 2px solid var(--ink);
+      border-radius: 999px;
+      background: rgba(255, 243, 207, .64);
+      font: 900 12px/1 "Arial Black", Impact, sans-serif;
+      text-transform: uppercase;
+    }
+
+    .poster-frame {
+      position: relative;
+      min-height: 620px;
+      border: 8px solid var(--ink);
+      border-radius: 46px;
+      background:
+        radial-gradient(circle at 50% 45%, rgba(255,255,255,.38), transparent 8rem),
+        repeating-radial-gradient(circle at 50% 48%, rgba(140,101,255,.22) 0 12px, rgba(97,217,109,.18) 12px 24px),
+        linear-gradient(180deg, #35cfff, #fa7be8 64%, #321b4e);
+      box-shadow:
+        0 0 0 10px var(--blue),
+        0 0 0 19px var(--green),
+        0 34px 0 rgba(33,18,28,.38);
+      overflow: hidden;
+      animation: frameBreathe 5s ease-in-out infinite;
+    }
+
+    .poster-frame::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(62deg, transparent 0 43%, rgba(255,224,0,.78) 43% 47%, transparent 47%),
+        linear-gradient(118deg, transparent 0 47%, rgba(255,224,0,.72) 47% 51%, transparent 51%),
+        linear-gradient(248deg, transparent 0 48%, rgba(32,191,255,.68) 48% 52%, transparent 52%);
+      animation: rayShift 6s ease-in-out infinite;
+    }
+
+    .dashboard-card {
+      position: absolute;
+      left: 50%;
+      top: 51%;
+      width: min(560px, 88%);
+      transform: translate(-50%, -50%);
+      display: grid;
+      gap: 14px;
+      padding: 20px;
+      border: 5px solid var(--ink);
+      border-radius: 30px;
+      background: rgba(255, 243, 207, .92);
+      box-shadow: 13px 15px 0 var(--shadow);
+      font-family: "Aptos", "Trebuchet MS", sans-serif;
+    }
+
+    .dash-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+
+    .platforms {
+      display: flex;
+      gap: 8px;
+    }
+
+    .platforms span {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border: 3px solid var(--ink);
+      border-radius: 14px;
+      background: var(--yellow);
+      font: 950 13px/1 "Arial Black", Impact, sans-serif;
+      box-shadow: 4px 4px 0 var(--ink);
+    }
+
+    .workflow {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 9px;
+    }
+
+    .workflow div {
+      min-height: 108px;
+      padding: 12px;
+      border: 3px solid var(--ink);
+      border-radius: 18px;
+      background: #fff;
+      box-shadow: 4px 4px 0 rgba(33,18,28,.22);
+      font-weight: 900;
+    }
+
+    .workflow b {
+      display: block;
+      margin-bottom: 9px;
+      font: 950 28px/1 "Arial Black", Impact, sans-serif;
+      color: var(--pink);
+    }
+
+    .status-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .status-list span {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 10px 12px;
+      border: 2px solid var(--ink);
+      border-radius: 14px;
+      background: rgba(97,217,109,.22);
+      font-weight: 900;
+    }
+
+    .cloud {
+      position: absolute;
+      width: 128px;
+      height: 34px;
+      border: 3px solid var(--ink);
+      border-radius: 999px;
+      background: var(--paper);
+      box-shadow: 0 11px 0 rgba(33,18,28,.18);
+      animation: cloudFloat 8s ease-in-out infinite;
+    }
+
+    .cloud::before,
+    .cloud::after {
+      content: "";
+      position: absolute;
+      bottom: 8px;
+      width: 46px;
+      height: 46px;
+      border: 3px solid var(--ink);
+      border-bottom: 0;
+      border-radius: 50% 50% 0 0;
+      background: var(--paper);
+    }
+
+    .cloud::before { left: 18px; }
+    .cloud::after { right: 21px; }
+    .cloud.one { left: 56px; top: 142px; }
+    .cloud.two { right: 54px; bottom: 118px; animation-delay: -3s; }
+
+    .section {
+      padding: clamp(56px, 8vw, 108px) clamp(18px, 5vw, 74px);
+    }
+
+    .section-head {
+      max-width: 860px;
+      margin-bottom: 28px;
+    }
+
+    .section h2 {
+      margin: 12px 0 0;
+      font-size: clamp(2.4rem, 5vw, 5.2rem);
+      line-height: .86;
+      letter-spacing: -.06em;
+    }
+
+    .grid {
+      display: grid;
+      gap: 18px;
+    }
+
+    .steps { grid-template-columns: repeat(4, 1fr); }
+    .features { grid-template-columns: repeat(3, 1fr); }
+
+    .card {
+      min-height: 210px;
+      padding: 22px;
+      border: 4px solid var(--ink);
+      border-radius: 28px;
+      background: rgba(255, 243, 207, .78);
+      box-shadow: 9px 11px 0 rgba(33,18,28,.22);
+      font-family: "Aptos", "Trebuchet MS", sans-serif;
+    }
+
+    .card strong {
+      display: inline-grid;
+      place-items: center;
+      min-width: 48px;
+      height: 48px;
+      margin-bottom: 18px;
+      border: 3px solid var(--ink);
+      border-radius: 16px;
+      background: var(--pink);
+      font: 950 20px/1 "Arial Black", Impact, sans-serif;
+      box-shadow: 4px 4px 0 var(--ink);
+    }
+
+    .card h3 {
+      margin: 0 0 10px;
+      font: 950 1.22rem/1.08 "Arial Black", Impact, sans-serif;
+    }
+
+    .card p {
+      margin: 0;
+      line-height: 1.58;
+      font-weight: 750;
+    }
+
+    .cta-band {
+      margin: clamp(28px, 5vw, 72px) clamp(18px, 5vw, 74px) clamp(72px, 8vw, 116px);
+      padding: clamp(28px, 6vw, 68px);
+      border: 7px solid var(--ink);
+      border-radius: 42px;
+      background: var(--paper);
+      box-shadow: 0 24px 0 rgba(33,18,28,.32);
+    }
+
+    .cta-band h2 {
+      margin: 0 0 18px;
+      max-width: 900px;
+      font-size: clamp(2.5rem, 6vw, 6rem);
+      line-height: .86;
+      letter-spacing: -.07em;
+    }
+
+    .legal-note {
+      margin-top: 18px;
+      font: 800 13px/1.5 "Aptos", sans-serif;
+      opacity: .8;
+    }
+
+    @media (max-width: 980px) {
+      .hero,
+      .steps,
+      .features {
+        grid-template-columns: 1fr;
+      }
+
+      .poster-frame {
+        min-height: 540px;
+      }
+
+      .nav {
+        flex-wrap: wrap;
+      }
+
+      .nav-links {
+        width: 100%;
+        justify-content: flex-start;
+        overflow-x: auto;
+      }
+    }
+
+    @media (max-width: 620px) {
+      h1 { -webkit-text-stroke-width: 2px; text-shadow: 5px 5px 0 var(--pink); }
+      .workflow { grid-template-columns: 1fr; }
+      .dashboard-card { position: relative; top: auto; left: auto; transform: none; margin: 120px auto 36px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; scroll-behavior: auto !important; }
+    }
+
+    @keyframes logoSpin { to { transform: rotate(360deg); } }
+    @keyframes paperDrift { 50% { transform: translate(-12px, 8px); } }
+    @keyframes headlineWave { 50% { transform: rotate(-1deg) translateY(5px); } }
+    @keyframes frameBreathe { 0%,100% { transform: rotate(-.5deg) scale(1); } 50% { transform: rotate(.7deg) scale(1.01); } }
+    @keyframes rayShift { 50% { filter: hue-rotate(22deg) saturate(1.18); transform: scale(1.02); } }
+    @keyframes cloudFloat { 50% { translate: 24px -9px; } }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <nav class="nav" aria-label="Navegacao principal">
+      <a class="brand" href="/"><span class="brand-mark">PMP</span> Platform Multi Publisher</a>
+      <div class="nav-links">
+        <a href="#como-funciona">Como funciona</a>
+        <a href="#recursos">Recursos</a>
+        <a href="#planos">Planos</a>
+        <a href="/login">Entrar</a>
+      </div>
+      <a class="btn primary" href="/login?mode=register">Comecar agora</a>
+    </nav>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Landing SEO + conversao</p>
+          <h1>Publique videos no YouTube, TikTok e Instagram em um so painel</h1>
+          <p>Organize campanhas, conecte suas contas, acompanhe falhas e mantenha sua rotina de conteudo sem retrabalho.</p>
+          <div class="hero-actions">
+            <a class="btn primary" href="/login?mode=register">Comecar agora</a>
+            <a class="btn" href="#como-funciona">Ver como funciona</a>
+          </div>
+          <div class="hero-chips" aria-label="Plataformas suportadas">
+            <span>YouTube</span><span>TikTok</span><span>Instagram</span><span>Campanhas</span><span>Relatorios</span>
+          </div>
+        </div>
+
+        <div class="poster-frame" role="img" aria-label="Preview do produto mostrando campanhas, plataformas e fila de publicacao">
+          <i class="cloud one"></i>
+          <i class="cloud two"></i>
+          <div class="dashboard-card">
+            <div class="dash-head">
+              <span>Workspace de publicacao</span>
+              <div class="platforms"><span>YT</span><span>TT</span><span>IG</span></div>
+            </div>
+            <div class="workflow">
+              <div><b>01</b>Conectar contas</div>
+              <div><b>02</b>Criar campanha</div>
+              <div><b>03</b>Publicar videos</div>
+              <div><b>04</b>Acompanhar status</div>
+            </div>
+            <div class="status-list">
+              <span><b>Videos prontos</b><em>128</em></span>
+              <span><b>Campanhas ativas</b><em>16</em></span>
+              <span><b>Falhas para revisar</b><em>6</em></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="como-funciona" class="section">
+        <div class="section-head">
+          <p class="eyebrow">Fluxo em 4 passos</p>
+          <h2>Da conta conectada ao relatorio semanal.</h2>
+        </div>
+        <div class="grid steps">
+          <article class="card"><strong>01</strong><h3>Conecte contas</h3><p>Autorize YouTube, TikTok e Instagram por fluxos oficiais e controle cada destino conectado.</p></article>
+          <article class="card"><strong>02</strong><h3>Crie campanhas</h3><p>Escolha video, legenda, plataforma, privacidade, agenda e regras antes de publicar.</p></article>
+          <article class="card"><strong>03</strong><h3>Publique sem repetir</h3><p>Reaproveite midias e copies em multiplos canais sem recriar tudo manualmente.</p></article>
+          <article class="card"><strong>04</strong><h3>Acompanhe falhas</h3><p>Veja fila, status, jobs publicados, pendencias e erros que precisam de acao.</p></article>
+        </div>
+      </section>
+
+      <section id="recursos" class="section">
+        <div class="section-head">
+          <p class="eyebrow">O que a primeira pagina precisa vender</p>
+          <h2>Uma operacao de video mais clara.</h2>
+        </div>
+        <div class="grid features">
+          <article class="card"><strong>YT</strong><h3>YouTube</h3><p>Envio de videos, Shorts, canais, status e historico operacional por campanha.</p></article>
+          <article class="card"><strong>TT</strong><h3>TikTok</h3><p>Preparacao de videos curtos, fila de revisao e tratamento de erros por destino.</p></article>
+          <article class="card"><strong>IG</strong><h3>Instagram</h3><p>Reels, legendas e acompanhamento consolidado em contas profissionais conectadas.</p></article>
+          <article class="card"><strong>LIB</strong><h3>Biblioteca de midia</h3><p>Centralize videos, thumbnails, copies e arquivos prontos para reutilizar.</p></article>
+          <article class="card"><strong>LOG</strong><h3>Status e logs</h3><p>Transforme falhas de API em mensagens operacionais para agir mais rapido.</p></article>
+          <article class="card"><strong>REP</strong><h3>Relatorios</h3><p>Resuma campanhas, pendencias, sinais de performance e proximos passos.</p></article>
+        </div>
+      </section>
+
+      <section id="planos" class="cta-band">
+        <h2>Pronto para centralizar sua rotina de videos?</h2>
+        <div class="hero-actions">
+          <a class="btn primary" href="/login?mode=register">Comecar agora</a>
+          <a class="btn" href="/pricing">Ver planos</a>
+        </div>
+        <p class="legal-note">Platform Multi Publisher nao e afiliado, patrocinado ou operado oficialmente por YouTube, TikTok, Instagram, Google ou Meta.</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

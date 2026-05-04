@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PMP Workspace Direction 01 - Pentagram Operational Grid</title>
+  <style>
+    :root {
+      --paper: #f7f4ed;
+      --ink: #101216;
+      --muted: #6d6f76;
+      --line: #1b1d21;
+      --accent: #d93636;
+      --ok: #18734c;
+      --warn: #b56a15;
+      --bad: #b42318;
+      --card: #fffdf8;
+      --mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+      --sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--sans);
+    }
+
+    .stage {
+      width: min(1440px, 100%);
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 220px 1fr auto;
+      align-items: center;
+      gap: 24px;
+      border: 2px solid var(--line);
+      background: var(--card);
+    }
+
+    .brand {
+      padding: 20px 22px;
+      border-right: 2px solid var(--line);
+      font-weight: 900;
+      letter-spacing: -0.06em;
+      font-size: 28px;
+      line-height: 0.95;
+    }
+
+    .nav {
+      display: flex;
+      gap: 4px;
+      padding: 10px 0;
+      overflow: auto;
+    }
+
+    .nav span {
+      display: inline-flex;
+      align-items: center;
+      min-height: 42px;
+      padding: 0 14px;
+      border: 1px solid transparent;
+      font-size: 13px;
+      font-weight: 850;
+      letter-spacing: -0.02em;
+      white-space: nowrap;
+    }
+
+    .nav span[data-active="true"] {
+      border-color: var(--line);
+      background: var(--accent);
+      color: white;
+    }
+
+    .audit {
+      padding: 12px 16px;
+      border-left: 2px solid var(--line);
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.12fr) minmax(320px, 0.88fr);
+      gap: 24px;
+      margin-top: 24px;
+    }
+
+    .headline {
+      min-height: 420px;
+      padding: 36px;
+      border: 2px solid var(--line);
+      background: var(--card);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .headline::after {
+      content: "07";
+      position: absolute;
+      right: 28px;
+      bottom: -34px;
+      font-size: 210px;
+      font-weight: 950;
+      letter-spacing: -0.14em;
+      color: rgba(217, 54, 54, 0.12);
+    }
+
+    .kicker,
+    .mark,
+    .small {
+      font-family: var(--mono);
+      text-transform: uppercase;
+      letter-spacing: 0.13em;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    h1 {
+      max-width: 760px;
+      margin: 18px 0 18px;
+      font-size: clamp(56px, 7vw, 112px);
+      line-height: 0.84;
+      letter-spacing: -0.08em;
+    }
+
+    .hero p {
+      max-width: 560px;
+      color: #34363b;
+      font-size: 17px;
+      line-height: 1.55;
+    }
+
+    .decision-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 32px;
+    }
+
+    .decision {
+      border: 1.5px solid var(--line);
+      padding: 18px;
+      background: #fff;
+      min-height: 122px;
+    }
+
+    .decision strong {
+      display: block;
+      margin-top: 16px;
+      font-size: 22px;
+      letter-spacing: -0.05em;
+    }
+
+    .scorecard {
+      display: grid;
+      gap: 12px;
+    }
+
+    .score,
+    .panel,
+    .page-card {
+      border: 2px solid var(--line);
+      background: var(--card);
+      padding: 20px;
+    }
+
+    .score h2 {
+      margin: 0;
+      font-size: 48px;
+      letter-spacing: -0.08em;
+    }
+
+    .radar {
+      width: 210px;
+      height: 210px;
+      margin: 16px auto 0;
+      background:
+        linear-gradient(30deg, transparent 49.5%, rgba(16,18,22,0.16) 50%, transparent 50.5%),
+        linear-gradient(90deg, transparent 49.5%, rgba(16,18,22,0.16) 50%, transparent 50.5%),
+        linear-gradient(150deg, transparent 49.5%, rgba(16,18,22,0.16) 50%, transparent 50.5%);
+      border: 1px solid var(--line);
+      clip-path: polygon(50% 2%, 98% 37%, 80% 96%, 20% 96%, 2% 37%);
+      position: relative;
+    }
+
+    .radar::after {
+      content: "";
+      position: absolute;
+      inset: 31px 28px 36px 33px;
+      background: rgba(217, 54, 54, 0.72);
+      clip-path: polygon(50% 0%, 91% 32%, 76% 86%, 25% 87%, 8% 34%);
+    }
+
+    .pages {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(140px, 1fr));
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .page-card {
+      min-height: 176px;
+      display: grid;
+      align-content: space-between;
+    }
+
+    .mark {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      width: 46px;
+      height: 34px;
+      border: 1.5px solid var(--line);
+      color: var(--ink);
+      background: white;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+    }
+
+    .page-card strong {
+      display: block;
+      margin-top: 18px;
+      font-size: 20px;
+      letter-spacing: -0.04em;
+    }
+
+    .page-card p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .matrix {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 0;
+      margin-top: 24px;
+      border: 2px solid var(--line);
+      background: var(--card);
+    }
+
+    .matrix div {
+      min-height: 96px;
+      padding: 14px;
+      border-right: 1px solid var(--line);
+    }
+
+    .matrix div:last-child { border-right: 0; }
+    .matrix strong { display: block; font-size: 26px; letter-spacing: -0.07em; }
+
+    @media (max-width: 980px) {
+      .topbar,
+      .hero { grid-template-columns: 1fr; }
+      .brand,
+      .audit { border: 0; border-bottom: 2px solid var(--line); }
+      .pages { grid-template-columns: repeat(2, 1fr); }
+      .decision-grid,
+      .matrix { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <header class="topbar">
+      <div class="brand">PMP<br />OPS</div>
+      <nav class="nav" aria-label="Workspace">
+        <span>Dashboard</span>
+        <span>Growth</span>
+        <span>Campanhas</span>
+        <span>Contas</span>
+        <span data-active="true">Videos</span>
+        <span>Planos</span>
+        <span>Configuracoes</span>
+      </nav>
+      <div class="audit">Direction 01<br />Pentagram Grid</div>
+    </header>
+
+    <section class="hero">
+      <div class="headline">
+        <span class="kicker">Information architecture school / Michael Bierut</span>
+        <h1>Operational clarity before decoration.</h1>
+        <p>Every page becomes a decision board: one primary question, one visible state, one next action. Icons become typographic marks, not illustrations.</p>
+        <div class="decision-grid">
+          <article class="decision"><span class="mark">PUB</span><strong>What to publish</strong><span class="small">Dashboard + Growth</span></article>
+          <article class="decision"><span class="mark">FIX</span><strong>What to repair</strong><span class="small">Campanhas + Contas</span></article>
+          <article class="decision"><span class="mark">RUN</span><strong>What to manage</strong><span class="small">Videos + Planos + Config</span></article>
+        </div>
+      </div>
+      <aside class="scorecard">
+        <article class="score">
+          <span class="kicker">5D radar</span>
+          <h2>8.2</h2>
+          <div class="radar" role="img" aria-label="Radar score visualization"></div>
+        </article>
+        <article class="panel">
+          <span class="kicker">Flagship reference</span>
+          <p><strong>Hillary Clinton 2016 identity</strong><br />Grid, symbols and hierarchy as a system.</p>
+        </article>
+      </aside>
+    </section>
+
+    <section class="pages" aria-label="Page treatment">
+      <article class="page-card"><span class="mark">DB</span><strong>Dashboard</strong><p>Above the fold becomes next action + pulse + player only.</p></article>
+      <article class="page-card"><span class="mark">GR</span><strong>Growth</strong><p>Cockpit labels become operational signals, not growth promises.</p></article>
+      <article class="page-card"><span class="mark">CMP</span><strong>Campanhas</strong><p>Queue board dominates; filters attach directly to the launch list.</p></article>
+      <article class="page-card"><span class="mark">CTA</span><strong>Contas</strong><p>Health states use AUTH, OK, SYNC, ERR marks.</p></article>
+      <article class="page-card"><span class="mark">VID</span><strong>Videos</strong><p>Vault structure moves to labels: LIB, LIST, DUR, STO.</p></article>
+      <article class="page-card"><span class="mark">PLN</span><strong>Planos</strong><p>Pricing becomes limits and token clarity, not marketing cards.</p></article>
+      <article class="page-card"><span class="mark">CFG</span><strong>Configuracoes</strong><p>Preferences are grouped by risk and operational impact.</p></article>
+    </section>
+
+    <section class="matrix" aria-label="Critique scores">
+      <div><span class="small">Philosophy</span><strong>8.6</strong></div>
+      <div><span class="small">Hierarchy</span><strong>8.8</strong></div>
+      <div><span class="small">Craft</span><strong>8.1</strong></div>
+      <div><span class="small">Function</span><strong>8.9</strong></div>
+      <div><span class="small">Innovation</span><strong>6.7</strong></div>
+    </section>
+  </main>
+</body>
+</html>

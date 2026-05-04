@@ -105,6 +105,18 @@ export function createApiRouter(options: {
         handler: (req) => authController.logout(req),
       },
       {
+        method: 'POST',
+        pattern: /^\/auth\/account-deletion\/challenge$/,
+        paramNames: [],
+        handler: (req) => authController.sendAccountDeletionConfirmation(req),
+      },
+      {
+        method: 'POST',
+        pattern: /^\/auth\/account-deletion\/request$/,
+        paramNames: [],
+        handler: (req) => authController.requestAccountDeletion(req),
+      },
+      {
         method: 'GET',
         pattern: /^\/auth\/me$/,
         paramNames: [],

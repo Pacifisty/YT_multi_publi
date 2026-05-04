@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PMP Animated Logo 06 - Switchboard Mascot</title>
+  <style>
+    :root {
+      --ink: #21190f;
+      --paper: #fff2cc;
+      --pink: #ff9fd0;
+      --green: #65c78c;
+      --blue: #70c4f3;
+      --line: rgba(255,242,204,.42);
+      --shadow: rgba(0,0,0,.38);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      color: var(--paper);
+      background:
+        radial-gradient(circle at 52% 36%, rgba(255,159,208,.18), transparent 18rem),
+        linear-gradient(135deg, #1c150d, #281b12 52%, #18100a);
+      font-family: "Cooper Black", "Arial Rounded MT Bold", "Aptos", sans-serif;
+      overflow: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      opacity: .4;
+      pointer-events: none;
+      background:
+        radial-gradient(circle, var(--pink) 0 3px, transparent 3.8px) 28px 26px / 22px 22px,
+        linear-gradient(90deg, transparent 0 96%, rgba(255,242,204,.08) 96% 100%) 0 0 / 88px 88px;
+      mask-image: radial-gradient(circle at center, black, transparent 72%);
+      animation: bulbRows 2.2s steps(2) infinite;
+    }
+
+    .board {
+      position: relative;
+      width: min(1060px, 94vw);
+      min-height: min(720px, 92vh);
+      display: grid;
+      grid-template-columns: .85fr 1.15fr;
+      gap: 34px;
+      align-items: center;
+      padding: clamp(26px, 5vw, 58px);
+    }
+
+    .keypad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 13px;
+      padding: 18px;
+      border: 3px solid var(--line);
+      border-radius: 28px;
+      background: rgba(0,0,0,.18);
+      box-shadow: inset 0 0 0 2px rgba(255,242,204,.1), 0 30px 60px var(--shadow);
+      transform: rotate(-2deg);
+    }
+
+    .key {
+      min-width: 72px;
+      aspect-ratio: 1;
+      display: grid;
+      place-items: center;
+      border: 3px solid var(--paper);
+      border-radius: 18px;
+      color: var(--paper);
+      font: 950 clamp(28px, 4vw, 54px)/1 "Arial Black", Impact, sans-serif;
+      box-shadow: 0 8px 0 rgba(0,0,0,.35);
+      animation: keyPress 4.8s ease-in-out infinite;
+    }
+
+    .key:nth-child(2) { animation-delay: .15s; }
+    .key:nth-child(3) { animation-delay: .3s; }
+    .key:nth-child(5) { color: var(--pink); border-color: var(--pink); animation-delay: .45s; }
+    .key:nth-child(8) { color: var(--green); border-color: var(--green); animation-delay: .6s; }
+
+    .hero {
+      position: relative;
+      min-height: 500px;
+      display: grid;
+      align-content: center;
+      gap: 20px;
+    }
+
+    .callout {
+      width: max-content;
+      max-width: 100%;
+      padding: 11px 18px;
+      border: 3px solid var(--paper);
+      border-radius: 999px;
+      color: var(--ink);
+      background: var(--paper);
+      font: 950 clamp(18px, 2.5vw, 32px)/1 "Arial Black", Impact, sans-serif;
+      text-transform: uppercase;
+      box-shadow: 8px 8px 0 var(--pink);
+      animation: popCallout 2.8s ease-in-out infinite;
+    }
+
+    .wordmark {
+      position: relative;
+      margin: 0;
+      font: 950 clamp(82px, 14vw, 168px)/.78 "Arial Black", Impact, sans-serif;
+      letter-spacing: -.1em;
+      color: var(--pink);
+      -webkit-text-stroke: 3px var(--paper);
+      text-shadow:
+        7px 7px 0 var(--ink),
+        13px 13px 0 rgba(255,242,204,.18);
+      animation: slideDisplay 5.4s cubic-bezier(.2,.8,.2,1) infinite;
+    }
+
+    .wordmark::after {
+      content: "PUBLISH";
+      position: absolute;
+      left: 10px;
+      bottom: -48px;
+      color: transparent;
+      -webkit-text-stroke: 2px var(--paper);
+      font-size: clamp(38px, 6vw, 72px);
+      letter-spacing: .04em;
+      opacity: .58;
+      animation: ghostScan 3.2s linear infinite;
+    }
+
+    .mascot {
+      position: absolute;
+      right: 38px;
+      top: 70px;
+      width: 132px;
+      height: 132px;
+      border: 5px solid var(--green);
+      border-radius: 50% 50% 45% 45%;
+      background: var(--paper);
+      box-shadow: 0 12px 0 var(--green), 0 24px 40px var(--shadow);
+      animation: mascotNod 3.4s ease-in-out infinite;
+    }
+
+    .mascot::before {
+      content: "";
+      position: absolute;
+      left: 19px;
+      right: 19px;
+      top: -35px;
+      height: 54px;
+      border: 5px solid var(--green);
+      border-radius: 24px 24px 8px 8px;
+      background: var(--paper);
+    }
+
+    .mascot::after {
+      content: "";
+      position: absolute;
+      left: 34px;
+      top: 48px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 50px 0 0 var(--green), 23px 36px 0 -3px var(--green);
+    }
+
+    .baseline {
+      margin-top: 44px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      color: rgba(255,242,204,.78);
+      font: 800 13px/1 "Aptos", sans-serif;
+      letter-spacing: .24em;
+      text-transform: uppercase;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--blue);
+      box-shadow: 18px 0 0 var(--pink), 36px 0 0 var(--green);
+      animation: statusBlink 1.4s steps(2) infinite;
+    }
+
+    .assumptions {
+      position: absolute;
+      right: 42px;
+      bottom: 34px;
+      width: min(380px, 80vw);
+      color: rgba(255,242,204,.72);
+      font: 700 12px/1.5 "Aptos", sans-serif;
+      text-align: right;
+    }
+
+    @media (max-width: 820px) {
+      .board { grid-template-columns: 1fr; }
+      .keypad { order: 2; }
+      .assumptions { position: static; text-align: left; }
+    }
+
+    @keyframes bulbRows {
+      50% { opacity: .24; transform: translateX(11px); }
+    }
+
+    @keyframes keyPress {
+      0%, 100% { transform: translateY(0); background: transparent; }
+      18% { transform: translateY(5px); background: rgba(255,159,208,.16); }
+    }
+
+    @keyframes popCallout {
+      50% { transform: rotate(-2deg) scale(1.04); }
+    }
+
+    @keyframes slideDisplay {
+      0%, 100% { transform: translateX(0) skewX(-4deg); }
+      50% { transform: translateX(-8px) skewX(1deg); }
+    }
+
+    @keyframes ghostScan {
+      50% { opacity: .28; transform: translateX(10px); }
+    }
+
+    @keyframes mascotNod {
+      0%, 100% { transform: rotate(0deg) translateY(0); }
+      50% { transform: rotate(3deg) translateY(-6px); }
+    }
+
+    @keyframes statusBlink {
+      50% { filter: brightness(1.6); }
+    }
+  </style>
+</head>
+<body>
+  <main class="board" aria-label="Animated PMP logo direction, switchboard mascot">
+    <section class="keypad" aria-hidden="true">
+      <span class="key">1</span>
+      <span class="key">2</span>
+      <span class="key">3</span>
+      <span class="key">4</span>
+      <span class="key">P</span>
+      <span class="key">6</span>
+      <span class="key">7</span>
+      <span class="key">M</span>
+      <span class="key">P</span>
+    </section>
+    <section class="hero">
+      <div class="callout">call publish now</div>
+      <h1 class="wordmark">PMP</h1>
+      <div class="mascot" aria-hidden="true"></div>
+      <div class="baseline"><i class="dot"></i> Platform Multi Publisher</div>
+    </section>
+    <aside class="assumptions">
+      Assumptions: social-first animated logo, still usable in a product splash. Placeholder: mascot can be removed if PMP needs a stricter enterprise identity.
+    </aside>
+  </main>
+</body>
+</html>

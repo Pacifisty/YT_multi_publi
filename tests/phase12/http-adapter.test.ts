@@ -287,7 +287,7 @@ describe('HTTP adapter — createRequestHandler', () => {
     expect(res._body).toContain('<meta name="robots" content="index,follow" />');
     expect(res._body).toContain('<link rel="canonical" href="https://platform.example/" />');
     expect(res._body).toContain('<script type="application/ld+json">');
-    expect(res._body).toContain('Publicação multi plataforma');
+    expect(res._body).toContain('Fluxo de publicacao multi plataforma');
     expect(res._body).toContain('<a href="/privacy">Politica de Privacidade</a>');
     expect(res._body).toContain('<a href="/terms">Termos de Servico</a>');
     expect(res._body).toContain('<a href="/data-deletion">Exclusao de Dados do Usuario</a>');

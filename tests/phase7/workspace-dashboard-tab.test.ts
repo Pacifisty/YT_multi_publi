@@ -4,7 +4,7 @@ import { buildGrowthPageView } from '../../apps/web/app/(admin)/workspace/growth
 import { buildWorkspaceLayout } from '../../apps/web/app/(admin)/workspace/layout';
 
 describe('workspace layout includes Dashboard and Growth tabs', () => {
-  test('layout has 5 tabs: Accounts, Media, Campanhas, Dashboard, Growth', async () => {
+  test('layout has 5 tabs: Contas, Media, Campanhas, Dashboard, Growth', async () => {
     const mockFetcher = async () => ({
       status: 200,
       json: async () => ({ user: { email: 'admin@test.com' } }),
@@ -14,6 +14,7 @@ describe('workspace layout includes Dashboard and Growth tabs', () => {
 
     expect(view.tabs).toHaveLength(5);
     expect(view.tabs![0].id).toBe('accounts');
+    expect(view.tabs![0].label).toBe('Contas');
     expect(view.tabs![1].id).toBe('media');
     expect(view.tabs![2].id).toBe('campanhas');
     expect(view.tabs![3].id).toBe('dashboard');

@@ -119,7 +119,7 @@ test('dashboard playlist player keeps the enlarged panel without automatic scrol
 test('dashboard editorial pulse shows current time without resizing the panel layout', () => {
   assert.match(
     APP_JS,
-    /<div class="od-pulse-header">[\s\S]*?<span class="od-kpi-label od-mono">Editorial Pulse<\/span>[\s\S]*?<span class="od-pulse-clock od-mono" aria-label="Current time">[\s\S]*?<span>Now<\/span>[\s\S]*?<strong data-dashboard-clock>\$\{escapeHtml\(liveClock\)\}<\/strong>/
+    /<div class="od-pulse-header">[\s\S]*?<span class="od-kpi-label od-mono">Pulso editorial<\/span>[\s\S]*?<span class="od-pulse-clock od-mono" aria-label="Hora atual">[\s\S]*?<span>Agora<\/span>[\s\S]*?<strong data-dashboard-clock>\$\{escapeHtml\(liveClock\)\}<\/strong>/
   );
   assert.match(APP_JS, /<span class="od-live-dot"><\/span><span data-dashboard-clock>\$\{escapeHtml\(liveClock\)\}<\/span>/);
   assert.match(APP_JS, /function startDashboardClock\(root\)/);
@@ -142,6 +142,38 @@ test('dashboard editorial pulse shows current time without resizing the panel la
   assert.match(clockRule, /transform:\s*translateY\(-50%\)/);
   assert.match(clockRule, /white-space:\s*nowrap/);
   assert.doesNotMatch(clockRule, /min-height/);
+});
+
+test('dashboard prioritizes three operational decisions above the KPI grid', () => {
+  const actionMark = extractFunctionSource(APP_JS, 'renderDashboardActionMark');
+  const channelIcon = extractFunctionSource(APP_JS, 'renderChannelKpiIcon');
+  const rankBadge = extractFunctionSource(APP_JS, 'renderRankBadge');
+  const deltaArrow = extractFunctionSource(APP_JS, 'renderDeltaArrow');
+
+  assert.match(APP_JS, /od-decision-strip/);
+  assert.match(APP_JS, /Proxima melhor acao/);
+  assert.match(APP_JS, /O que publicar/);
+  assert.match(APP_JS, /O que corrigir/);
+  assert.match(APP_JS, /O que esta performando/);
+  assert.match(APP_JS, /Painel editorial/);
+  assert.match(APP_JS, /Contas conectadas/);
+  assert.match(actionMark, /renderCampaignMark\(meta\.label, meta\.tone, 'od-hero-action-mark'\)/);
+  assert.match(channelIcon, /renderCampaignPlatformMark\(provider, 'od-channel-platform-mark'\)/);
+  assert.match(rankBadge, /renderCampaignMark\(rank === 1 \? 'TOP'/);
+  assert.match(deltaArrow, /renderCampaignMark\('DN', 'danger', 'od-delta-mark'\)/);
+  assert.doesNotMatch(APP_JS, /const CHANNEL_KPI_ICONS\s*=/);
+  assert.doesNotMatch(APP_JS, /<div class="od-brand">Editorial Dashboard<\/div>/);
+  assert.doesNotMatch(APP_JS, /<button type="button" class="od-refresh-button od-mono" data-action="dashboard-refresh">Refresh<\/button>/);
+  assert.doesNotMatch(APP_JS, /function renderEditorialPulseIcon/);
+  assert.doesNotMatch(APP_JS, /renderPlatformLogo3d\('youtube', 42, 'od-channel-platform-logo'\)/);
+
+  assert.match(CSS, /\.od-decision-strip/);
+  assert.match(CSS, /\.od-decision-grid/);
+  assert.match(CSS, /\.od-decision-card/);
+  assert.match(CSS, /\.od-hero-action-mark/);
+  assert.match(CSS, /\.od-channel-platform-mark/);
+  assert.match(CSS, /\.od-rank-mark/);
+  assert.match(CSS, /\.od-delta-mark/);
 });
 
 test('dashboard editorial pulse clock updates without dashboard re-rendering', () => {
@@ -337,4 +369,36 @@ test('dashboard playlist now-playing caption stays outside native video controls
   assert.doesNotMatch(nowRule, /(^|\n)\s*bottom:/);
   assert.doesNotMatch(nowRule, /(^|\n)\s*left:/);
   assert.doesNotMatch(nowRule, /(^|\n)\s*right:/);
+});
+
+test('dashboard panels keep labels and large metrics inside their cards', () => {
+  const legacyGridRule = extractCssRule(CSS, '.dash-hero {');
+  const legacyCardRule = extractCssRule(CSS, '.dash-hero-card {');
+  const legacyValueRule = extractCssRule(CSS, '.dash-hero-value {');
+  const modeGridRule = extractCssRule(CSS, '.od-mode-switch {');
+  const actionRule = extractCssRule(CSS, '.od-hero-action-btn {');
+  const healthGridRule = extractCssRule(CSS, '.od-health-metrics {');
+  const healthCardRule = extractCssRule(CSS, '.od-health-metrics div {');
+  const channelHeadRule = extractCssRule(CSS, '.od-channel-card-head {');
+  const channelNameRule = extractCssRule(CSS, '.od-channel-name {');
+  const channelValueRule = extractCssRule(CSS, '.od-channel-total {');
+  const kpiValueRule = extractCssRule(CSS, '.od-kpi-card strong {');
+
+  assert.match(legacyGridRule, /repeat\(4, minmax\(0, 1fr\)\)/);
+  assert.match(legacyCardRule, /min-width:\s*0/);
+  assert.match(legacyValueRule, /font-size:\s*clamp/);
+  assert.match(legacyValueRule, /overflow-wrap:\s*anywhere/);
+  assert.match(modeGridRule, /auto-fit/);
+  assert.match(modeGridRule, /minmax\(132px, 1fr\)/);
+  assert.match(actionRule, /white-space:\s*normal/);
+  assert.match(healthGridRule, /minmax\(124px, 1fr\)/);
+  assert.match(healthCardRule, /min-width:\s*0/);
+  assert.match(channelHeadRule, /auto minmax\(0, 1fr\) auto/);
+  assert.match(channelNameRule, /text-overflow:\s*ellipsis/);
+  assert.match(channelNameRule, /white-space:\s*nowrap/);
+  assert.match(channelValueRule, /font-size:\s*clamp\(1\.65rem/);
+  assert.match(channelValueRule, /overflow-wrap:\s*anywhere/);
+  assert.match(CSS, /\.od-kpi-card \{\s*position:\s*relative;[\s\S]*?min-width:\s*0/);
+  assert.match(kpiValueRule, /overflow-wrap:\s*anywhere/);
+  assert.match(CSS, /@media \(max-width: 1440px\)[\s\S]*?\.od-kpi-grid[\s\S]*?repeat\(3, minmax\(0, 1fr\)\)/);
 });

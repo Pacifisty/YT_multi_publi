@@ -8,6 +8,9 @@ export interface AuthUser {
   googleSubject: string | null;
   isActive: boolean;
   planSelectionCompleted: boolean;
+  accountDeletionRequestedAt?: Date | null;
+  accountDeactivationScheduledAt?: Date | null;
+  accountDeletionScheduledAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -19,6 +22,25 @@ export interface CreateAuthUserDto {
   googleSubject?: string | null;
   isActive?: boolean;
   planSelectionCompleted?: boolean;
+  accountDeletionRequestedAt?: Date | null;
+  accountDeactivationScheduledAt?: Date | null;
+  accountDeletionScheduledAt?: Date | null;
+}
+
+export interface AccountDeletionFinalizationResult {
+  userId: string;
+  email: string;
+  anonymizedEmail: string;
+  authUsersAnonymized: number;
+  accountPlansDeleted: number;
+  connectedAccountsDeleted: number;
+  channelsDeleted: number;
+  campaignsDeleted: number;
+  campaignTargetsDeleted: number;
+  publishJobsDeleted: number;
+  mediaAssetsDeleted: number;
+  playlistsDeleted: number;
+  auditEventsDeleted: number;
 }
 
 export interface AuthUserRepository {
@@ -28,6 +50,8 @@ export interface AuthUserRepository {
   findByGoogleSubject(googleSubject: string): Promise<AuthUser | null>;
   update(id: string, data: Partial<AuthUser>): Promise<AuthUser | null>;
   list(): Promise<AuthUser[]>;
+  listDueForAccountDeletion(now: Date): Promise<AuthUser[]>;
+  finalizeAccountDeletion(user: AuthUser, now: Date): Promise<AccountDeletionFinalizationResult>;
 }
 
 function normalizeEmail(email: string): string {
@@ -36,6 +60,10 @@ function normalizeEmail(email: string): string {
 
 function normalizeGoogleSubject(googleSubject: string): string {
   return googleSubject.trim();
+}
+
+export function createAnonymizedEmail(userId: string): string {
+  return `deleted-${userId}@deleted.local`;
 }
 
 export class InMemoryAuthUserRepository implements AuthUserRepository {
@@ -57,6 +85,9 @@ export class InMemoryAuthUserRepository implements AuthUserRepository {
       googleSubject: dto.googleSubject?.trim() || null,
       isActive: dto.isActive ?? true,
       planSelectionCompleted: dto.planSelectionCompleted ?? false,
+      accountDeletionRequestedAt: dto.accountDeletionRequestedAt ?? null,
+      accountDeactivationScheduledAt: dto.accountDeactivationScheduledAt ?? null,
+      accountDeletionScheduledAt: dto.accountDeletionScheduledAt ?? null,
       createdAt: now,
       updatedAt: now,
     };
@@ -109,5 +140,48 @@ export class InMemoryAuthUserRepository implements AuthUserRepository {
 
   async list(): Promise<AuthUser[]> {
     return Array.from(this.records.values()).map((user) => ({ ...user }));
+  }
+
+  async listDueForAccountDeletion(now: Date): Promise<AuthUser[]> {
+    return Array.from(this.records.values())
+      .filter((user) =>
+        Boolean(
+          user.accountDeletionScheduledAt
+          && user.accountDeletionScheduledAt.getTime() <= now.getTime()
+          && !user.email.startsWith('deleted-'),
+        ))
+      .map((user) => ({ ...user }));
+  }
+
+  async finalizeAccountDeletion(user: AuthUser, now: Date): Promise<AccountDeletionFinalizationResult> {
+    const existing = this.records.get(user.id) ?? user;
+    const anonymizedEmail = createAnonymizedEmail(existing.id);
+    const anonymized: AuthUser = {
+      ...existing,
+      email: anonymizedEmail,
+      fullName: null,
+      passwordHash: null,
+      googleSubject: null,
+      isActive: false,
+      planSelectionCompleted: false,
+      updatedAt: now,
+    };
+    this.records.set(existing.id, anonymized);
+
+    return {
+      userId: existing.id,
+      email: existing.email,
+      anonymizedEmail,
+      authUsersAnonymized: 1,
+      accountPlansDeleted: 0,
+      connectedAccountsDeleted: 0,
+      channelsDeleted: 0,
+      campaignsDeleted: 0,
+      campaignTargetsDeleted: 0,
+      publishJobsDeleted: 0,
+      mediaAssetsDeleted: 0,
+      playlistsDeleted: 0,
+      auditEventsDeleted: 0,
+    };
   }
 }

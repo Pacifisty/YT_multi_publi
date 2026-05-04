@@ -10,7 +10,7 @@ function setup() {
   const authModule = createAuthModule({
     env: {
       ADMIN_EMAIL: 'admin@test.com',
-      ADMIN_PASSWORD_HASH: '$2b$10$invalidhashfortesting',
+      ADMIN_PASSWORD_HASH: 'plain:correct-horse-battery-staple',
     },
   });
   const campaignsModule = createCampaignsModule();
@@ -92,6 +92,25 @@ describe('App Route Consolidation', () => {
       const response = await router.handle(request);
       expect(response.status).toBe(200);
       expect(response.body.user.email).toBe('admin@test.com');
+    });
+
+    it('POST /auth/account-deletion/request schedules account removal', async () => {
+      const { router } = setup();
+      const session = authedSession() as any;
+      const request: ApiRequest = {
+        method: 'POST',
+        path: '/auth/account-deletion/request',
+        session,
+        body: { currentPassword: 'correct-horse-battery-staple' },
+      };
+
+      const response = await router.handle(request);
+
+      expect(response.status).toBe(200);
+      expect(response.body.accountDeletion.status).toBe('pending_deactivation');
+      expect(response.body.accountDeletion.deactivationAt).toBeTruthy();
+      expect(response.body.accountDeletion.deletionAt).toBeTruthy();
+      expect(session.adminUser.accountDeletionAt).toBe(response.body.accountDeletion.deletionAt);
     });
   });
 

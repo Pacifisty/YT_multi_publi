@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Platform Multi Publisher | Publique vídeos no YouTube, TikTok e Instagram</title>
+  <meta name="description" content="Planeje, automatize e acompanhe publicações em vídeo no YouTube, TikTok e Instagram em um único painel, com campanhas, biblioteca de mídia e relatórios." />
+  <link rel="canonical" href="https://www.plataformmultipublisher.com/" />
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Platform Multi Publisher",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "url": "https://www.plataformmultipublisher.com/",
+      "description": "Ferramenta para campanhas de vídeo com publicações no YouTube, TikTok e Instagram."
+    }
+  </script>
+  <style>
+    :root {
+      --ink: #0a0a0a;
+      --paper: #f7f3e8;
+      --line: rgba(10,10,10,.18);
+      --muted: #635d52;
+      --accent: #ff4f99;
+      --blue: #2878ff;
+      --green: #2bbd74;
+      --yellow: #f4c23d;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 76% 18%, rgba(40,120,255,.14), transparent 20rem),
+        radial-gradient(circle at 14% 26%, rgba(255,79,153,.14), transparent 18rem),
+        var(--paper);
+      font-family: "IBM Plex Mono", "JetBrains Mono", Consolas, monospace;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background:
+        linear-gradient(90deg, var(--line) 1px, transparent 1px),
+        linear-gradient(0deg, var(--line) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: radial-gradient(circle at 52% 28%, black, transparent 80%);
+    }
+
+    a { color: inherit; }
+    .page { width: min(1460px, 100%); margin: 0 auto; padding: 18px; }
+
+    .nav {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 18px;
+      align-items: center;
+      padding: 14px 0;
+      border-bottom: 2px solid var(--ink);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--ink);
+      text-decoration: none;
+      font-weight: 950;
+      letter-spacing: -.04em;
+    }
+
+    .brand-mark {
+      width: 50px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      color: var(--paper);
+      background: var(--ink);
+      font-weight: 950;
+    }
+
+    .nav-links, .actions, .chips {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .nav-links a {
+      padding: 9px 10px;
+      color: var(--muted);
+      text-decoration: none;
+      font-weight: 800;
+    }
+
+    .button {
+      min-height: 50px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 18px;
+      border: 2px solid var(--ink);
+      color: var(--ink);
+      background: transparent;
+      text-decoration: none;
+      font-weight: 950;
+      text-transform: uppercase;
+      box-shadow: 6px 6px 0 rgba(10,10,10,.15);
+    }
+
+    .button.primary { color: var(--paper); background: var(--ink); box-shadow: 6px 6px 0 var(--accent); }
+
+    .hero {
+      min-height: calc(100vh - 88px);
+      display: grid;
+      grid-template-columns: minmax(0, .96fr) minmax(460px, 1.04fr);
+      gap: clamp(34px, 5vw, 82px);
+      align-items: center;
+      padding: clamp(44px, 7vw, 108px) 0;
+    }
+
+    .eyebrow {
+      margin: 0 0 20px;
+      color: var(--accent);
+      font-weight: 950;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 12ch;
+      margin: 0;
+      font-size: clamp(3rem, 7.2vw, 7.8rem);
+      line-height: .9;
+      letter-spacing: -.09em;
+      text-transform: uppercase;
+    }
+
+    h1 span { display: block; }
+
+    .hero-text {
+      max-width: 720px;
+      margin: 24px 0 0;
+      color: var(--muted);
+      font-size: clamp(1rem, 1.7vw, 1.22rem);
+      line-height: 1.7;
+      font-weight: 650;
+    }
+
+    .actions, .chips { margin-top: 24px; }
+    .chips span {
+      padding: 8px 10px;
+      border: 2px solid var(--ink);
+      background: #fff;
+      font-size: .78rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .signal {
+      position: relative;
+      min-height: 620px;
+      border: 3px solid var(--ink);
+      background: rgba(255,255,255,.48);
+      overflow: hidden;
+      box-shadow: 16px 18px 0 rgba(10,10,10,.14);
+    }
+
+    .scribble {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse at 54% 44%, transparent 0 17%, var(--ink) 17.2% 17.8%, transparent 18%),
+        radial-gradient(ellipse at 50% 46%, transparent 0 29%, var(--accent) 29.2% 29.9%, transparent 30%),
+        radial-gradient(ellipse at 48% 48%, transparent 0 41%, var(--blue) 41.2% 41.8%, transparent 42%);
+      opacity: .9;
+      animation: sketchMove 6s ease-in-out infinite;
+    }
+
+    .node {
+      position: absolute;
+      width: 110px;
+      height: 110px;
+      display: grid;
+      place-items: center;
+      border: 3px solid var(--ink);
+      background: var(--paper);
+      border-radius: 50%;
+      font-weight: 950;
+      box-shadow: 8px 10px 0 rgba(10,10,10,.14);
+      animation: nodeFloat 4.2s ease-in-out infinite;
+    }
+    .n1 { left: 10%; top: 18%; color: var(--blue); }
+    .n2 { right: 9%; top: 24%; color: var(--accent); animation-delay: -.8s; }
+    .n3 { left: 17%; bottom: 18%; color: var(--green); animation-delay: -1.2s; }
+    .n4 { right: 16%; bottom: 15%; color: var(--yellow); animation-delay: -1.8s; }
+
+    .mini-ui {
+      position: absolute;
+      left: 50%;
+      top: 52%;
+      width: min(520px, 86%);
+      transform: translate(-50%, -50%);
+      display: grid;
+      gap: 10px;
+      padding: 18px;
+      border: 3px solid var(--ink);
+      background: rgba(247,243,232,.92);
+      box-shadow: 12px 14px 0 rgba(10,10,10,.18);
+    }
+
+    .mini-ui div {
+      display: grid;
+      grid-template-columns: 92px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      border: 2px solid var(--ink);
+      background: #fff;
+      font-weight: 850;
+    }
+    .mini-ui b { color: var(--accent); }
+    .mini-ui span { color: var(--muted); }
+
+    .section {
+      padding: clamp(58px, 8vw, 112px) 0;
+      border-top: 2px solid var(--ink);
+    }
+    .section h2, .cta h2 {
+      max-width: 900px;
+      margin: 0 0 26px;
+      font-size: clamp(2.2rem, 4.7vw, 5rem);
+      line-height: .94;
+      letter-spacing: -.07em;
+      text-transform: uppercase;
+    }
+
+    .grid { display: grid; gap: 14px; }
+    .steps { grid-template-columns: repeat(4, 1fr); }
+    .features { grid-template-columns: repeat(3, 1fr); }
+
+    .card {
+      min-height: 214px;
+      padding: 20px;
+      border: 2px solid var(--ink);
+      background: rgba(255,255,255,.62);
+      box-shadow: 7px 8px 0 rgba(10,10,10,.1);
+    }
+    .card strong {
+      display: block;
+      margin-bottom: 18px;
+      color: var(--accent);
+      font-size: .82rem;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+    .card h3 { margin: 0 0 10px; font-size: 1.12rem; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.62; font-weight: 650; }
+
+    .cta {
+      margin: 42px 0 80px;
+      padding: clamp(30px, 5vw, 68px);
+      border: 3px solid var(--ink);
+      background: var(--yellow);
+      box-shadow: 14px 16px 0 rgba(10,10,10,.14);
+    }
+
+    .legal-note { max-width: 860px; margin: 18px 0 0; color: var(--muted); line-height: 1.5; font-weight: 650; }
+
+    @media (max-width: 1040px) {
+      .nav, .hero, .steps, .features { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      h1 {
+        max-width: 100%;
+        font-size: clamp(2rem, 9.6vw, 2.65rem);
+        line-height: .96;
+        letter-spacing: -.035em;
+        overflow-wrap: anywhere;
+      }
+      .hero-text, .eyebrow { max-width: 320px; overflow-wrap: anywhere; }
+      .hero-text { max-width: 320px; }
+      .actions .button { flex: 1 1 100%; }
+      .signal { min-height: 560px; }
+      .node { width: 76px; height: 76px; }
+      .mini-ui div { grid-template-columns: 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; scroll-behavior: auto !important; }
+    }
+
+    @keyframes sketchMove { 50% { transform: rotate(2deg) scale(1.04); filter: saturate(1.2); } }
+    @keyframes nodeFloat { 50% { transform: translateY(-10px) rotate(2deg); } }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <nav class="nav" aria-label="Navegação principal">
+      <a class="brand" href="/"><span class="brand-mark">PMP</span> Platform Multi Publisher</a>
+      <div class="nav-links">
+        <a href="#como-funciona">Como funciona</a>
+        <a href="#recursos">Recursos</a>
+        <a href="#planos">Planos</a>
+      </div>
+      <a class="button primary" href="/login?mode=register">Começar agora</a>
+    </nav>
+
+    <main>
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Ferramenta criativa, operação clara</p>
+          <h1><span>Publique vídeos</span> <span>no YouTube</span> <span>TikTok</span> <span>e Instagram</span> <span>em um só painel</span></h1>
+          <p class="hero-text">Organize campanhas, conecte suas contas, acompanhe falhas e mantenha sua rotina de conteúdo sem retrabalho.</p>
+          <div class="actions">
+            <a class="button primary" href="/login?mode=register">Começar agora</a>
+            <a class="button" href="#como-funciona">Ver como funciona</a>
+          </div>
+          <div class="chips"><span>YouTube</span><span>TikTok</span><span>Instagram</span><span>Campanhas</span><span>Relatórios</span></div>
+        </div>
+
+        <div class="signal" role="img" aria-label="Mapa de sinais conectando campanha, plataformas e relatório">
+          <div class="scribble" aria-hidden="true"></div>
+          <div class="node n1">YT</div>
+          <div class="node n2">TT</div>
+          <div class="node n3">IG</div>
+          <div class="node n4">REP</div>
+          <div class="mini-ui">
+            <div><b>Conta</b><span>autorizada</span><em>OK</em></div>
+            <div><b>Campanha</b><span>mídia e legenda</span><em>OK</em></div>
+            <div><b>Publicação</b><span>fila e status</span><em>LIVE</em></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="como-funciona" class="section">
+        <h2>Um sistema visual para mostrar trabalho real.</h2>
+        <div class="grid steps">
+          <article class="card"><strong>01</strong><h3>Conectar</h3><p>As contas entram como nós autorizados no mapa de publicação.</p></article>
+          <article class="card"><strong>02</strong><h3>Criar</h3><p>A campanha liga vídeo, thumbnail, legenda, agenda e destinos.</p></article>
+          <article class="card"><strong>03</strong><h3>Publicar</h3><p>Cada envio passa por fila, tentativa, retorno e confirmação.</p></article>
+          <article class="card"><strong>04</strong><h3>Acompanhar</h3><p>Status e falhas viram sinais legíveis para próxima ação.</p></article>
+        </div>
+      </section>
+
+      <section id="recursos" class="section">
+        <h2>A landing parece produto, não folheto genérico.</h2>
+        <div class="grid features">
+          <article class="card"><strong>Biblioteca</strong><h3>Arquivos prontos</h3><p>Vídeos, thumbnails e descrições ficam reunidos no workspace.</p></article>
+          <article class="card"><strong>Fila</strong><h3>Jobs rastreados</h3><p>Veja o que está pronto, enviando, publicado ou com erro.</p></article>
+          <article class="card"><strong>Relatórios</strong><h3>Aprendizado semanal</h3><p>Transforme campanhas em rotina acompanhada e revisável.</p></article>
+        </div>
+      </section>
+
+      <section id="planos" class="cta">
+        <h2>Conecte os canais e publique com menos repetição.</h2>
+        <div class="actions">
+          <a class="button primary" href="/login?mode=register">Começar agora</a>
+          <a class="button" href="/onboarding/plan">Ver planos</a>
+        </div>
+        <p class="legal-note">Platform Multi Publisher não é afiliado, patrocinado ou operado oficialmente por YouTube, TikTok, Instagram, Google ou Meta.</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

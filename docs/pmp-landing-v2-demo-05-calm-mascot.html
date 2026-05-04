@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Platform Multi Publisher | Publique vídeos no YouTube, TikTok e Instagram</title>
+  <meta name="description" content="Planeje, automatize e acompanhe publicações em vídeo no YouTube, TikTok e Instagram em um único painel, com campanhas, biblioteca de mídia e relatórios." />
+  <link rel="canonical" href="https://www.plataformmultipublisher.com/" />
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Platform Multi Publisher",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "url": "https://www.plataformmultipublisher.com/",
+      "description": "Workspace para conectar contas, criar campanhas, publicar vídeos e acompanhar status."
+    }
+  </script>
+  <style>
+    :root {
+      --ink: #103d21;
+      --paper: #f4f6d5;
+      --tile: #e7ecc0;
+      --green: #168b34;
+      --green-2: #6abf74;
+      --line: rgba(16,61,33,.18);
+      --muted: #55705b;
+      --yellow: #f4db73;
+      --coral: #ff8b73;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(90deg, rgba(255,255,255,.46) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(255,255,255,.46) 1px, transparent 1px),
+        var(--paper);
+      background-size: 80px 80px;
+      font-family: "Avenir Next", "Nunito", "Trebuchet MS", sans-serif;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background: radial-gradient(circle at 78% 18%, rgba(106,191,116,.22), transparent 20rem);
+      pointer-events: none;
+    }
+
+    a { color: inherit; }
+    .page { width: min(1460px, 100%); margin: 0 auto; padding: 18px; }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 14px 16px;
+      border: 2px solid var(--line);
+      border-radius: 24px;
+      background: rgba(244,246,213,.82);
+      backdrop-filter: blur(12px);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--ink);
+      text-decoration: none;
+      font-weight: 950;
+      letter-spacing: -.03em;
+    }
+
+    .brand-mark {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      border: 3px solid var(--green);
+      border-radius: 50%;
+      background: var(--paper);
+      color: var(--green);
+      font-weight: 950;
+      box-shadow: 0 7px 0 rgba(22,139,52,.18);
+    }
+
+    .nav-links, .actions, .chips {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .nav-links a {
+      padding: 10px 12px;
+      color: var(--muted);
+      text-decoration: none;
+      font-weight: 850;
+      border-radius: 999px;
+    }
+
+    .nav-links a:hover { background: rgba(22,139,52,.08); color: var(--ink); }
+
+    .button {
+      min-height: 52px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 22px;
+      border: 3px solid var(--green);
+      border-radius: 999px;
+      color: var(--paper);
+      background: var(--green);
+      text-decoration: none;
+      font-weight: 950;
+      box-shadow: 0 8px 0 rgba(22,139,52,.2);
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+
+    .button:hover { transform: translateY(3px); box-shadow: 0 5px 0 rgba(22,139,52,.2); }
+    .button.secondary { color: var(--green); background: transparent; }
+
+    .hero {
+      min-height: calc(100vh - 92px);
+      display: grid;
+      grid-template-columns: minmax(0, .98fr) minmax(430px, 1.02fr);
+      gap: clamp(34px, 5vw, 82px);
+      align-items: center;
+      padding: clamp(44px, 7vw, 108px) 0;
+    }
+
+    .eyebrow {
+      margin: 0 0 18px;
+      color: var(--green);
+      font-size: .82rem;
+      font-weight: 950;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 12ch;
+      margin: 0;
+      font-size: clamp(3.1rem, 7.2vw, 7.7rem);
+      line-height: .88;
+      letter-spacing: -.075em;
+      text-transform: lowercase;
+    }
+
+    h1 span { display: block; }
+
+    .hero-text {
+      max-width: 700px;
+      margin: 24px 0 0;
+      color: var(--muted);
+      font-size: clamp(1.04rem, 1.8vw, 1.28rem);
+      line-height: 1.66;
+      font-weight: 700;
+    }
+
+    .actions, .chips { margin-top: 24px; }
+    .chips span {
+      padding: 8px 11px;
+      border: 2px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,.42);
+      color: var(--muted);
+      font-size: .82rem;
+      font-weight: 850;
+    }
+
+    .soft-stage {
+      position: relative;
+      min-height: 620px;
+      display: grid;
+      place-items: center;
+      border: 2px solid rgba(22,139,52,.22);
+      border-radius: 36px;
+      background:
+        radial-gradient(circle at 50% 42%, rgba(255,255,255,.54), transparent 10rem),
+        var(--tile);
+      overflow: hidden;
+      box-shadow: 0 30px 80px rgba(16,61,33,.12);
+    }
+
+    .helper {
+      position: absolute;
+      top: 52px;
+      width: 172px;
+      height: 172px;
+      border: 7px solid var(--green);
+      border-radius: 48% 48% 44% 44%;
+      background: var(--paper);
+      box-shadow: 0 14px 0 rgba(22,139,52,.18);
+      animation: helperNod 3.6s ease-in-out infinite;
+    }
+
+    .helper::before {
+      content: "";
+      position: absolute;
+      left: 28px;
+      right: 28px;
+      top: -48px;
+      height: 62px;
+      border: 7px solid var(--green);
+      border-radius: 28px 28px 12px 12px;
+      background: var(--paper);
+    }
+
+    .helper::after {
+      content: "";
+      position: absolute;
+      left: 48px;
+      top: 66px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 56px 0 0 var(--green), 28px 42px 0 -4px var(--green);
+    }
+
+    .workflow-card {
+      position: relative;
+      z-index: 1;
+      width: min(560px, 88%);
+      margin-top: 170px;
+      display: grid;
+      gap: 12px;
+      padding: 20px;
+      border: 3px solid var(--green);
+      border-radius: 28px;
+      background: rgba(244,246,213,.92);
+      box-shadow: 0 14px 0 rgba(22,139,52,.14);
+    }
+
+    .workflow-card div {
+      display: grid;
+      grid-template-columns: 56px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 13px;
+      border: 2px solid rgba(22,139,52,.22);
+      border-radius: 18px;
+      background: rgba(255,255,255,.5);
+      font-weight: 850;
+    }
+
+    .workflow-card b {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      color: var(--paper);
+      background: var(--green);
+    }
+    .workflow-card span { color: var(--muted); }
+    .workflow-card em { color: var(--green); font-style: normal; }
+
+    .section {
+      padding: clamp(58px, 8vw, 112px) 0;
+      border-top: 2px solid var(--line);
+    }
+    .section h2, .cta h2 {
+      max-width: 900px;
+      margin: 0 0 26px;
+      font-size: clamp(2.2rem, 4.7vw, 5rem);
+      line-height: .94;
+      letter-spacing: -.06em;
+      text-transform: lowercase;
+    }
+
+    .grid { display: grid; gap: 16px; }
+    .steps { grid-template-columns: repeat(4, 1fr); }
+    .features { grid-template-columns: repeat(3, 1fr); }
+
+    .card {
+      min-height: 214px;
+      padding: 22px;
+      border: 2px solid var(--line);
+      border-radius: 26px;
+      background: rgba(255,255,255,.44);
+    }
+    .card strong {
+      display: inline-grid;
+      place-items: center;
+      min-width: 48px;
+      height: 42px;
+      margin-bottom: 18px;
+      border-radius: 999px;
+      color: var(--paper);
+      background: var(--green);
+      font-size: .84rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .card h3 { margin: 0 0 10px; font-size: 1.18rem; }
+    .card p { margin: 0; color: var(--muted); line-height: 1.62; font-weight: 700; }
+
+    .cta {
+      margin: 42px 0 80px;
+      padding: clamp(30px, 5vw, 68px);
+      border: 2px solid rgba(22,139,52,.22);
+      border-radius: 34px;
+      background: rgba(255,255,255,.46);
+    }
+
+    .legal-note { max-width: 860px; margin: 18px 0 0; color: var(--muted); line-height: 1.5; font-weight: 700; }
+
+    @media (max-width: 1040px) {
+      .hero, .steps, .features { grid-template-columns: 1fr; }
+      .nav { flex-wrap: wrap; }
+    }
+    @media (max-width: 640px) {
+      h1 {
+        max-width: 100%;
+        font-size: clamp(2rem, 9.6vw, 2.65rem);
+        line-height: .96;
+        letter-spacing: -.035em;
+        overflow-wrap: anywhere;
+      }
+      .hero-text, .eyebrow { max-width: 320px; overflow-wrap: anywhere; }
+      .hero-text { max-width: 320px; }
+      .actions .button { flex: 1 1 100%; }
+      .workflow-card div { grid-template-columns: 1fr; }
+      .soft-stage { min-height: 560px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; scroll-behavior: auto !important; }
+    }
+    @keyframes helperNod {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      50% { transform: translateY(-8px) rotate(2deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <nav class="nav" aria-label="Navegação principal">
+      <a class="brand" href="/"><span class="brand-mark">PMP</span> Platform Multi Publisher</a>
+      <div class="nav-links">
+        <a href="#como-funciona">Como funciona</a>
+        <a href="#recursos">Recursos</a>
+        <a href="#planos">Planos</a>
+      </div>
+      <a class="button" href="/login?mode=register">Começar agora</a>
+    </nav>
+
+    <main>
+      <section class="hero">
+        <div>
+          <p class="eyebrow">publicação sem ansiedade operacional</p>
+          <h1><span>Publique vídeos</span> <span>no YouTube</span> <span>TikTok</span> <span>e Instagram</span> <span>em um só painel</span></h1>
+          <p class="hero-text">Organize campanhas, conecte suas contas, acompanhe falhas e mantenha sua rotina de conteúdo sem retrabalho.</p>
+          <div class="actions">
+            <a class="button" href="/login?mode=register">Começar agora</a>
+            <a class="button secondary" href="#como-funciona">Ver como funciona</a>
+          </div>
+          <div class="chips"><span>YouTube</span><span>TikTok</span><span>Instagram</span><span>Campanhas</span><span>Relatórios</span></div>
+        </div>
+
+        <div class="soft-stage" role="img" aria-label="Mascote amigável orientando o fluxo de publicação">
+          <div class="helper" aria-hidden="true"></div>
+          <div class="workflow-card">
+            <div><b>1</b><span>Conectar contas</span><em>seguro</em></div>
+            <div><b>2</b><span>Criar campanha</span><em>organizado</em></div>
+            <div><b>3</b><span>Publicar vídeos</span><em>sem repetir</em></div>
+            <div><b>4</b><span>Acompanhar status</span><em>visível</em></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="como-funciona" class="section">
+        <h2>um fluxo simples para explicar automação complexa.</h2>
+        <div class="grid steps">
+          <article class="card"><strong>01</strong><h3>Conectar</h3><p>Contas autorizadas ficam disponíveis antes da primeira campanha.</p></article>
+          <article class="card"><strong>02</strong><h3>Criar</h3><p>Campanhas unem mídia, copy, destino, agenda e revisão.</p></article>
+          <article class="card"><strong>03</strong><h3>Publicar</h3><p>O usuário reduz retrabalho entre plataformas e mantém contexto.</p></article>
+          <article class="card"><strong>04</strong><h3>Acompanhar</h3><p>Status e falhas aparecem com próxima ação recomendada.</p></article>
+        </div>
+      </section>
+
+      <section id="recursos" class="section">
+        <h2>claro o bastante para SEO, humano o bastante para converter.</h2>
+        <div class="grid features">
+          <article class="card"><strong>LIB</strong><h3>Biblioteca de mídia</h3><p>Vídeos, thumbnails e textos prontos para reutilizar em campanhas.</p></article>
+          <article class="card"><strong>JOB</strong><h3>Fila de publicação</h3><p>Veja envios prontos, em andamento, publicados ou com falha.</p></article>
+          <article class="card"><strong>REP</strong><h3>Relatórios</h3><p>Acompanhe rotina, pendências e próximas decisões de conteúdo.</p></article>
+        </div>
+      </section>
+
+      <section id="planos" class="cta">
+        <h2>comece conectando seus canais.</h2>
+        <div class="actions">
+          <a class="button" href="/login?mode=register">Começar agora</a>
+          <a class="button secondary" href="/onboarding/plan">Ver planos</a>
+        </div>
+        <p class="legal-note">Platform Multi Publisher não é afiliado, patrocinado ou operado oficialmente por YouTube, TikTok, Instagram, Google ou Meta.</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

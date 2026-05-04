@@ -18,6 +18,25 @@ function extractFunctionBody(source, startNeedle, endNeedle) {
   return source.slice(start, end);
 }
 
+function extractFunctionSource(source, functionName) {
+  const functionStart = source.indexOf(`function ${functionName}(`);
+  assert.notStrictEqual(functionStart, -1, `missing function ${functionName}`);
+  const signatureEnd = source.indexOf(')', functionStart);
+  assert.notStrictEqual(signatureEnd, -1, `missing signature for ${functionName}`);
+  const openBrace = source.indexOf('{', signatureEnd);
+  assert.notStrictEqual(openBrace, -1, `missing body for ${functionName}`);
+  let depth = 0;
+  for (let index = openBrace; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '{') depth += 1;
+    if (char === '}') depth -= 1;
+    if (depth === 0) {
+      return source.slice(functionStart, index + 1);
+    }
+  }
+  throw new Error(`unclosed function ${functionName}`);
+}
+
 test('public legal routes are served by the frontend shell and listed in the sitemap', () => {
   assert.match(UI_SHELL, /PUBLIC_INDEXABLE_PATHS = \['\/', '\/privacy', '\/terms', '\/data-deletion'\]/);
   assert.match(UI_SHELL, /normalizedPath === '\/privacy'/);
@@ -61,7 +80,8 @@ test('privacy policy covers TikTok, YouTube, Instagram, data deletion, and revie
     'Brazil',
     'Cloudflare',
     'Mercado Pago',
-    '90 days after a deletion request',
+    'account deletion requests keep the account active for 24 hours',
+    'within 30 days',
     'at least 18 years old',
   ].forEach((needle) => assert.ok(LEGAL_DOCS.includes(needle) || UI_SHELL.includes(needle), `missing filled legal value: ${needle}`));
 
@@ -95,6 +115,46 @@ test('legal links are visible from public website and styled', () => {
   assert.match(APP_JS, /href="\/data-deletion" data-link \$\{activePage === 'data-deletion' \? 'aria-current="page"' : ''\}>Exclusão de dados/);
   assert.match(CSS, /\.legal-document/);
   assert.match(CSS, /\.public-footer-links/);
+});
+
+test('SPA legal navigation reloads when legal documents were not bootstrapped', () => {
+  const result = Function(`
+    const LEGAL_DOCUMENT_PATHS = Object.freeze({
+      privacy: '/privacy',
+      terms: '/terms',
+      'data-deletion': '/data-deletion',
+    });
+    const calls = [];
+    const sessionStorage = {
+      store: {},
+      getItem(key) { return this.store[key] ?? null; },
+      setItem(key, value) { this.store[key] = String(value); },
+      removeItem(key) { delete this.store[key]; },
+    };
+    const window = {
+      __PMP_LEGAL_DOCUMENTS__: {},
+      location: {
+        assign(path) { calls.push(path); },
+      },
+    };
+    const root = { innerHTML: '' };
+    function renderLegalPublicNav() { return '<nav></nav>'; }
+    function renderPublicFooter() { return '<footer></footer>'; }
+    function escapeAttribute(value) { return String(value ?? ''); }
+    function escapeHtml(value) { return String(value ?? ''); }
+    ${extractFunctionSource(APP_JS, 'getSharedLegalDocuments')}
+    ${extractFunctionSource(APP_JS, 'getLegalDocument')}
+    ${extractFunctionSource(APP_JS, 'getLegalReloadStorageKey')}
+    ${extractFunctionSource(APP_JS, 'clearLegalReloadAttempt')}
+    ${extractFunctionSource(APP_JS, 'reloadMissingLegalDocument')}
+    ${extractFunctionSource(APP_JS, 'renderLegalDocumentPage')}
+    renderLegalDocumentPage('privacy');
+    return { calls, rootHtml: root.innerHTML, stored: sessionStorage.store };
+  `)();
+
+  assert.deepEqual(result.calls, ['/privacy']);
+  assert.equal(result.rootHtml, '');
+  assert.equal(result.stored['pmp-legal-document-reload:/privacy'], '1');
 });
 
 test('legal pages keep reviewer hierarchy ahead of conversion actions', () => {

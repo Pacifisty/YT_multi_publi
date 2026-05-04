@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Platform Multi Publisher | Publique videos no YouTube, TikTok e Instagram</title>
+  <meta name="description" content="Planeje, automatize e acompanhe publicacoes em video no YouTube, TikTok e Instagram em um unico painel, com campanhas, biblioteca de midia e relatorios." />
+  <link rel="canonical" href="https://www.plataformmultipublisher.com/" />
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Platform Multi Publisher",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "url": "https://www.plataformmultipublisher.com/",
+      "description": "Painel para campanhas de video, contas conectadas, biblioteca de midia, publicacao e relatorios."
+    }
+  </script>
+  <style>
+    :root {
+      --ink: #21180f;
+      --paper: #fff2cc;
+      --pink: #ff9fd0;
+      --pink-2: #ff4ba4;
+      --green: #67c58d;
+      --blue: #70c4f3;
+      --yellow: #ffd449;
+      --line: rgba(255,242,204,.28);
+      --shadow: rgba(0,0,0,.38);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      color: var(--paper);
+      background:
+        radial-gradient(circle at 52% 32%, rgba(255,159,208,.18), transparent 18rem),
+        linear-gradient(135deg, #1b130c, #2a1d12 52%, #171009);
+      font-family: "Arial Black", Impact, "Aptos", sans-serif;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      opacity: .42;
+      background:
+        radial-gradient(circle, var(--pink) 0 3px, transparent 3.8px) 28px 24px / 22px 22px,
+        linear-gradient(90deg, transparent 0 96%, rgba(255,242,204,.08) 96% 100%) 0 0 / 88px 88px;
+      mask-image: radial-gradient(circle at center, black, transparent 74%);
+      animation: bulbRows 2.2s steps(2) infinite;
+    }
+
+    .page {
+      width: min(1500px, 100%);
+      margin: 0 auto;
+      padding: 18px;
+    }
+
+    .nav {
+      display: grid;
+      grid-template-columns: minmax(230px, 1fr) auto minmax(190px, .38fr);
+      align-items: center;
+      gap: 16px;
+      padding: 14px;
+      border: 3px solid var(--line);
+      border-radius: 26px;
+      background: rgba(0,0,0,.16);
+      box-shadow: inset 0 0 0 2px rgba(255,242,204,.08);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--paper);
+      text-decoration: none;
+      text-transform: uppercase;
+      letter-spacing: -.03em;
+    }
+
+    .brand-mark {
+      width: 52px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border: 3px solid var(--paper);
+      border-radius: 15px;
+      color: var(--pink);
+      box-shadow: 5px 5px 0 rgba(0,0,0,.36);
+    }
+
+    .nav-links {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .nav a {
+      color: var(--paper);
+      text-decoration: none;
+      text-transform: uppercase;
+      font-size: .83rem;
+    }
+
+    .nav-links a {
+      padding: 10px 12px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+    }
+
+    .nav-links a:hover {
+      border-color: var(--line);
+      background: rgba(255,242,204,.07);
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 52px;
+      padding: 0 20px;
+      border: 3px solid var(--paper);
+      border-radius: 999px;
+      color: var(--ink);
+      background: var(--paper);
+      box-shadow: 7px 8px 0 rgba(0,0,0,.35);
+      text-decoration: none;
+      text-transform: uppercase;
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+
+    .button:hover {
+      transform: translateY(4px);
+      box-shadow: 3px 4px 0 rgba(0,0,0,.35);
+    }
+
+    .button.secondary {
+      color: var(--paper);
+      background: transparent;
+    }
+
+    .hero {
+      min-height: calc(100vh - 108px);
+      display: grid;
+      grid-template-columns: minmax(0, .96fr) minmax(430px, 1.04fr);
+      align-items: center;
+      gap: clamp(28px, 5vw, 78px);
+      padding: clamp(42px, 7vw, 104px) 0;
+    }
+
+    .copy {
+      display: grid;
+      gap: 20px;
+      max-width: 790px;
+    }
+
+    .eyebrow {
+      width: max-content;
+      max-width: 100%;
+      margin: 0;
+      padding: 10px 14px;
+      border: 3px solid var(--paper);
+      border-radius: 999px;
+      color: var(--ink);
+      background: var(--pink);
+      box-shadow: 6px 6px 0 rgba(0,0,0,.34);
+      text-transform: uppercase;
+      font-size: .82rem;
+      letter-spacing: .04em;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 10.8ch;
+      color: var(--pink);
+      font-size: clamp(3.5rem, 8vw, 8.7rem);
+      line-height: .78;
+      letter-spacing: -.1em;
+      -webkit-text-stroke: 3px var(--paper);
+      text-shadow: 8px 8px 0 var(--ink), 14px 14px 0 rgba(255,242,204,.18);
+      animation: slideDisplay 5.4s cubic-bezier(.2,.8,.2,1) infinite;
+    }
+
+    .copy > p:not(.eyebrow) {
+      max-width: 720px;
+      margin: 0;
+      color: rgba(255,242,204,.78);
+      font: 750 clamp(1.02rem, 1.8vw, 1.26rem)/1.6 "Aptos", "Trebuchet MS", sans-serif;
+    }
+
+    .actions,
+    .signal-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .signal-tags span {
+      padding: 9px 12px;
+      border: 2px solid var(--line);
+      border-radius: 12px;
+      color: rgba(255,242,204,.82);
+      background: rgba(255,242,204,.04);
+      text-transform: uppercase;
+      font-size: .78rem;
+    }
+
+    .switchboard {
+      display: grid;
+      grid-template-columns: .76fr 1.24fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .keypad,
+    .display {
+      border: 3px solid var(--line);
+      border-radius: 28px;
+      background: rgba(0,0,0,.18);
+      box-shadow: inset 0 0 0 2px rgba(255,242,204,.08), 0 30px 60px var(--shadow);
+    }
+
+    .keypad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 11px;
+      padding: 16px;
+      transform: rotate(-2deg);
+    }
+
+    .key {
+      min-height: 72px;
+      display: grid;
+      place-items: center;
+      border: 3px solid var(--paper);
+      border-radius: 16px;
+      color: var(--paper);
+      font-size: clamp(1.6rem, 3vw, 3rem);
+      box-shadow: 0 8px 0 rgba(0,0,0,.34);
+      animation: keyPress 5.2s ease-in-out infinite;
+    }
+
+    .key:nth-child(2) { animation-delay: .15s; }
+    .key:nth-child(5) { color: var(--pink); border-color: var(--pink); animation-delay: .32s; }
+    .key:nth-child(8) { color: var(--green); border-color: var(--green); animation-delay: .48s; }
+
+    .display {
+      position: relative;
+      overflow: hidden;
+      padding: 22px;
+    }
+
+    .display::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        repeating-linear-gradient(0deg, transparent 0 21px, rgba(255,242,204,.08) 21px 22px),
+        radial-gradient(circle at 80% 16%, rgba(112,196,243,.18), transparent 16rem);
+      pointer-events: none;
+    }
+
+    .display-grid {
+      position: relative;
+      display: grid;
+      gap: 12px;
+      z-index: 1;
+    }
+
+    .metric {
+      display: grid;
+      grid-template-columns: 74px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 13px;
+      border: 2px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255,242,204,.05);
+      font-family: "Aptos", "Trebuchet MS", sans-serif;
+      font-weight: 850;
+    }
+
+    .metric b {
+      color: var(--pink);
+      font: 950 1.18rem/1 "Arial Black", Impact, sans-serif;
+    }
+
+    .metric span {
+      color: rgba(255,242,204,.78);
+    }
+
+    .lamp {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 18px var(--green);
+      animation: statusBlink 1.4s steps(2) infinite;
+    }
+
+    .lamp.warn {
+      background: var(--yellow);
+      box-shadow: 0 0 18px var(--yellow);
+    }
+
+    .mascot {
+      position: absolute;
+      right: 24px;
+      bottom: 24px;
+      width: 104px;
+      height: 104px;
+      border: 5px solid var(--green);
+      border-radius: 50% 50% 45% 45%;
+      background: var(--paper);
+      box-shadow: 0 10px 0 var(--green), 0 24px 36px var(--shadow);
+      animation: mascotNod 3.4s ease-in-out infinite;
+    }
+
+    .mascot::before {
+      content: "";
+      position: absolute;
+      left: 16px;
+      right: 16px;
+      top: -28px;
+      height: 44px;
+      border: 5px solid var(--green);
+      border-radius: 20px 20px 8px 8px;
+      background: var(--paper);
+    }
+
+    .mascot::after {
+      content: "";
+      position: absolute;
+      left: 27px;
+      top: 38px;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 38px 0 0 var(--green), 18px 30px 0 -3px var(--green);
+    }
+
+    .section {
+      padding: clamp(56px, 8vw, 108px) 0;
+    }
+
+    .section h2,
+    .cta h2 {
+      max-width: 900px;
+      margin: 12px 0 28px;
+      font-size: clamp(2.4rem, 5vw, 5.6rem);
+      line-height: .86;
+      letter-spacing: -.07em;
+      color: var(--paper);
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .steps { grid-template-columns: repeat(4, 1fr); }
+    .features { grid-template-columns: repeat(3, 1fr); }
+
+    .card {
+      min-height: 216px;
+      padding: 22px;
+      border: 3px solid var(--line);
+      border-radius: 26px;
+      background: rgba(0,0,0,.16);
+      box-shadow: inset 0 0 0 2px rgba(255,242,204,.06);
+    }
+
+    .card strong {
+      display: inline-grid;
+      place-items: center;
+      min-width: 52px;
+      min-height: 44px;
+      margin-bottom: 16px;
+      border: 3px solid var(--paper);
+      border-radius: 14px;
+      color: var(--pink);
+    }
+
+    .card h3 {
+      margin: 0 0 10px;
+      font-size: 1.22rem;
+      line-height: 1.1;
+    }
+
+    .card p {
+      margin: 0;
+      color: rgba(255,242,204,.76);
+      font: 750 1rem/1.6 "Aptos", "Trebuchet MS", sans-serif;
+    }
+
+    .cta {
+      margin: 40px 0 74px;
+      padding: clamp(30px, 6vw, 70px);
+      border: 3px solid var(--line);
+      border-radius: 34px;
+      background:
+        radial-gradient(circle at 82% 20%, rgba(255,159,208,.14), transparent 20rem),
+        rgba(0,0,0,.18);
+    }
+
+    .legal-note {
+      margin-top: 18px;
+      color: rgba(255,242,204,.72);
+      font: 750 .86rem/1.5 "Aptos", sans-serif;
+    }
+
+    @media (max-width: 1040px) {
+      .nav,
+      .hero,
+      .switchboard,
+      .steps,
+      .features {
+        grid-template-columns: 1fr;
+      }
+      .nav-links { justify-content: flex-start; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; scroll-behavior: auto !important; }
+    }
+
+    @keyframes bulbRows { 50% { opacity: .25; transform: translateX(11px); } }
+    @keyframes slideDisplay { 0%,100% { transform: translateX(0) skewX(-4deg); } 50% { transform: translateX(-8px) skewX(1deg); } }
+    @keyframes keyPress { 0%,100% { transform: translateY(0); background: transparent; } 18% { transform: translateY(5px); background: rgba(255,159,208,.16); } }
+    @keyframes statusBlink { 50% { filter: brightness(1.7); } }
+    @keyframes mascotNod { 0%,100% { transform: rotate(0deg) translateY(0); } 50% { transform: rotate(3deg) translateY(-6px); } }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <nav class="nav" aria-label="Navegacao principal">
+      <a class="brand" href="/"><span class="brand-mark">PMP</span> Platform Multi Publisher</a>
+      <div class="nav-links">
+        <a href="#como-funciona">Como funciona</a>
+        <a href="#recursos">Recursos</a>
+        <a href="#planos">Planos</a>
+        <a href="/login">Entrar</a>
+      </div>
+      <a class="button" href="/login?mode=register">Comecar agora</a>
+    </nav>
+
+    <main>
+      <section class="hero">
+        <div class="copy">
+          <p class="eyebrow">Painel de comando para publicacao</p>
+          <h1>Publique videos no YouTube, TikTok e Instagram em um so painel</h1>
+          <p>Organize campanhas, conecte suas contas, acompanhe falhas e mantenha sua rotina de conteudo sem retrabalho.</p>
+          <div class="actions">
+            <a class="button" href="/login?mode=register">Comecar agora</a>
+            <a class="button secondary" href="#como-funciona">Ver como funciona</a>
+          </div>
+          <div class="signal-tags"><span>YouTube</span><span>TikTok</span><span>Instagram</span><span>Campanhas</span><span>Relatorios</span></div>
+        </div>
+
+        <div class="switchboard" role="img" aria-label="Switchboard animado com contas conectadas, campanhas e fila">
+          <div class="keypad" aria-hidden="true">
+            <span class="key">1</span><span class="key">2</span><span class="key">3</span>
+            <span class="key">4</span><span class="key">P</span><span class="key">6</span>
+            <span class="key">7</span><span class="key">M</span><span class="key">P</span>
+          </div>
+          <div class="display">
+            <div class="display-grid">
+              <div class="metric"><b>YT</b><span>Conta conectada</span><i class="lamp"></i></div>
+              <div class="metric"><b>TT</b><span>Campanha em fila</span><i class="lamp"></i></div>
+              <div class="metric"><b>IG</b><span>Reels para revisar</span><i class="lamp warn"></i></div>
+              <div class="metric"><b>REP</b><span>Resumo semanal pronto</span><i class="lamp"></i></div>
+            </div>
+            <div class="mascot" aria-hidden="true"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="como-funciona" class="section">
+        <p class="eyebrow">Roteiro da conversao</p>
+        <h2>O visitante entende o produto em quatro sinais.</h2>
+        <div class="grid steps">
+          <article class="card"><strong>01</strong><h3>Conectar</h3><p>O usuario autoriza contas de YouTube, TikTok e Instagram para publicar com controle.</p></article>
+          <article class="card"><strong>02</strong><h3>Criar campanha</h3><p>Campanhas agrupam video, legenda, plataformas, agenda e regras de publicacao.</p></article>
+          <article class="card"><strong>03</strong><h3>Publicar</h3><p>O painel reduz repeticao manual entre canais e deixa a operacao mais previsivel.</p></article>
+          <article class="card"><strong>04</strong><h3>Acompanhar</h3><p>Status, falhas, relatorios e proximas acoes ficam visiveis no workspace.</p></article>
+        </div>
+      </section>
+
+      <section id="recursos" class="section">
+        <p class="eyebrow">Conteudo rastreavel</p>
+        <h2>SEO com mensagem de produto, nao so decoracao.</h2>
+        <div class="grid features">
+          <article class="card"><strong>LIB</strong><h3>Biblioteca de midia</h3><p>Centralize videos, thumbnails e textos para reutilizar em campanhas futuras.</p></article>
+          <article class="card"><strong>JOB</strong><h3>Fila de publicacao</h3><p>Veja pronto, enviando, publicado, pendente, erro e reautenticacao.</p></article>
+          <article class="card"><strong>REP</strong><h3>Relatorios</h3><p>Resuma operacao, falhas, campanhas e proximos passos para management.</p></article>
+        </div>
+      </section>
+
+      <section id="planos" class="cta">
+        <p class="eyebrow">Primeira acao clara</p>
+        <h2>Centralize sua rotina de videos em um workspace.</h2>
+        <div class="actions">
+          <a class="button" href="/login?mode=register">Comecar agora</a>
+          <a class="button secondary" href="/pricing">Ver planos</a>
+        </div>
+        <p class="legal-note">Platform Multi Publisher nao e afiliado, patrocinado ou operado oficialmente por YouTube, TikTok, Instagram, Google ou Meta.</p>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

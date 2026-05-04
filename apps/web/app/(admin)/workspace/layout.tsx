@@ -2,7 +2,7 @@ import { getAuthenticatedAdmin, UnauthorizedError, type AuthFetch } from '../../
 
 export interface WorkspaceTab {
   id: 'accounts' | 'media' | 'campanhas' | 'dashboard' | 'growth';
-  label: 'Accounts' | 'Media' | 'Campanhas' | 'Dashboard' | 'Growth';
+  label: 'Contas' | 'Media' | 'Campanhas' | 'Dashboard' | 'Growth';
   selected: boolean;
 }
 
@@ -31,7 +31,7 @@ export async function buildWorkspaceLayout(options: { fetcher?: AuthFetch } = {}
       tabs: [
         {
           id: 'accounts',
-          label: 'Accounts',
+          label: 'Contas',
           selected: true,
         },
         {

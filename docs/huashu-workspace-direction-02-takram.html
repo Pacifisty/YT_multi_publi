@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PMP Workspace Direction 02 - Takram Calm Operations</title>
+  <style>
+    :root {
+      --paper: #ebe7dc;
+      --wash: #f7f3e9;
+      --ink: #25302d;
+      --muted: #69736f;
+      --line: rgba(37, 48, 45, 0.18);
+      --sage: #6c8a73;
+      --clay: #b9815d;
+      --mist: rgba(255, 255, 255, 0.62);
+      --sans: "Inter", "Aptos", Arial, sans-serif;
+      --serif: "Libre Baskerville", Georgia, serif;
+      --mono: "JetBrains Mono", Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 8% 12%, rgba(108, 138, 115, 0.22), transparent 30%),
+        radial-gradient(circle at 90% 10%, rgba(185, 129, 93, 0.18), transparent 34%),
+        linear-gradient(135deg, var(--paper), #ded8ca);
+      color: var(--ink);
+      font-family: var(--sans);
+    }
+
+    .stage {
+      width: min(1440px, 100%);
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      min-height: 74px;
+      padding: 12px 16px;
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: rgba(247, 243, 233, 0.74);
+      box-shadow: 0 24px 80px rgba(37, 48, 45, 0.12);
+      backdrop-filter: blur(18px);
+    }
+
+    .brand {
+      width: 62px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(108, 138, 115, 0.4);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.44);
+      font-family: var(--serif);
+      font-weight: 700;
+      color: var(--sage);
+    }
+
+    .nav {
+      display: flex;
+      flex: 1;
+      gap: 8px;
+      overflow: auto;
+    }
+
+    .nav span {
+      display: inline-flex;
+      align-items: center;
+      min-height: 42px;
+      padding: 0 14px;
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .nav span[data-active="true"] {
+      background: #f9f6ee;
+      color: var(--ink);
+      box-shadow: inset 0 0 0 1px rgba(108, 138, 115, 0.28);
+    }
+
+    .meta {
+      font-family: var(--mono);
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 0.95fr) minmax(360px, 1.05fr);
+      gap: 24px;
+      margin-top: 24px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 32px;
+      background: rgba(247, 243, 233, 0.72);
+      box-shadow: 0 24px 70px rgba(37, 48, 45, 0.1);
+      backdrop-filter: blur(16px);
+    }
+
+    .intro {
+      padding: 38px;
+      min-height: 430px;
+    }
+
+    .kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.13em;
+      color: var(--sage);
+    }
+
+    .kicker::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 99px;
+      background: var(--sage);
+    }
+
+    h1 {
+      margin: 22px 0 18px;
+      max-width: 650px;
+      font-family: var(--serif);
+      font-size: clamp(44px, 6vw, 86px);
+      line-height: 0.98;
+      letter-spacing: -0.055em;
+      font-weight: 700;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 16px;
+    }
+
+    .orbit {
+      position: relative;
+      min-height: 430px;
+      padding: 28px;
+      overflow: hidden;
+    }
+
+    .orbit svg {
+      width: 100%;
+      height: 100%;
+      min-height: 370px;
+    }
+
+    .node {
+      fill: #fdfaf2;
+      stroke: rgba(108, 138, 115, 0.45);
+      stroke-width: 1.4;
+    }
+
+    .node-label {
+      font: 700 12px Inter, sans-serif;
+      fill: #25302d;
+      letter-spacing: 0.02em;
+    }
+
+    .path {
+      fill: none;
+      stroke: rgba(108, 138, 115, 0.35);
+      stroke-width: 1.1;
+      stroke-dasharray: 6 8;
+    }
+
+    .pages {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(142px, 1fr));
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .page {
+      min-height: 176px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      background: rgba(255, 255, 255, 0.48);
+      display: grid;
+      align-content: space-between;
+    }
+
+    .mark {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border-radius: 18px;
+      background: rgba(108, 138, 115, 0.12);
+      color: var(--sage);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+    }
+
+    .page strong {
+      display: block;
+      margin-top: 18px;
+      font-size: 18px;
+      letter-spacing: -0.025em;
+    }
+
+    .page small {
+      display: block;
+      margin-top: 8px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .radar-row {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 18px;
+      margin-top: 24px;
+    }
+
+    .radar {
+      width: 220px;
+      height: 220px;
+      margin: 18px auto;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle, transparent 0 24%, rgba(37,48,45,0.08) 25% 26%, transparent 27% 49%, rgba(37,48,45,0.08) 50% 51%, transparent 52%),
+        conic-gradient(from -18deg, rgba(108,138,115,0.5), rgba(185,129,93,0.48), rgba(108,138,115,0.5));
+      mask: radial-gradient(circle, black 0 70%, transparent 71%);
+    }
+
+    .scores {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      padding: 18px;
+    }
+
+    .score {
+      padding: 18px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.4);
+    }
+
+    .score span {
+      display: block;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .score strong {
+      display: block;
+      margin-top: 12px;
+      font-family: var(--serif);
+      font-size: 38px;
+      letter-spacing: -0.06em;
+    }
+
+    @media (max-width: 980px) {
+      .topbar,
+      .hero,
+      .radar-row { grid-template-columns: 1fr; display: grid; }
+      .pages,
+      .scores { grid-template-columns: repeat(2, 1fr); }
+      .meta { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <header class="topbar">
+      <div class="brand">PMP</div>
+      <nav class="nav" aria-label="Workspace">
+        <span>Dashboard</span>
+        <span>Growth</span>
+        <span>Campanhas</span>
+        <span>Contas</span>
+        <span data-active="true">Videos</span>
+        <span>Planos</span>
+        <span>Configuracoes</span>
+      </nav>
+      <div class="meta">Direction 02 / Takram</div>
+    </header>
+
+    <section class="hero">
+      <article class="panel intro">
+        <span class="kicker">Eastern philosophy school / Takram</span>
+        <h1>Quiet control for daily publishing work.</h1>
+        <p>The workspace becomes calmer, less promotional and more diagnostic. Panels feel like soft instruments: they explain account health, publishing flow and content readiness without shouting.</p>
+      </article>
+      <article class="panel orbit" aria-label="Workspace system diagram">
+        <svg viewBox="0 0 560 380" role="img" aria-label="Takram style workspace diagram">
+          <path class="path" d="M92 188 C150 72 260 62 328 128 C394 194 460 194 492 106" />
+          <path class="path" d="M92 188 C172 320 322 320 418 250 C470 212 496 250 510 306" />
+          <circle class="node" cx="92" cy="188" r="48" />
+          <text class="node-label" x="92" y="193" text-anchor="middle">DASH</text>
+          <circle class="node" cx="238" cy="98" r="42" />
+          <text class="node-label" x="238" y="103" text-anchor="middle">GROWTH</text>
+          <circle class="node" cx="360" cy="172" r="52" />
+          <text class="node-label" x="360" y="177" text-anchor="middle">CAMP</text>
+          <circle class="node" cx="492" cy="106" r="40" />
+          <text class="node-label" x="492" y="111" text-anchor="middle">AUTH</text>
+          <circle class="node" cx="238" cy="286" r="40" />
+          <text class="node-label" x="238" y="291" text-anchor="middle">VIDEO</text>
+          <circle class="node" cx="418" cy="250" r="38" />
+          <text class="node-label" x="418" y="255" text-anchor="middle">PLAN</text>
+          <circle class="node" cx="510" cy="306" r="42" />
+          <text class="node-label" x="510" y="311" text-anchor="middle">CFG</text>
+        </svg>
+      </article>
+    </section>
+
+    <section class="pages">
+      <article class="page"><span class="mark">D</span><strong>Dashboard</strong><small>One calm daily diagnosis above the fold.</small></article>
+      <article class="page"><span class="mark">G</span><strong>Growth</strong><small>Signals grouped by next best action.</small></article>
+      <article class="page"><span class="mark">C</span><strong>Campanhas</strong><small>Queue state shown as a soft operational map.</small></article>
+      <article class="page"><span class="mark">A</span><strong>Contas</strong><small>Authentication and channel sync become visible health nodes.</small></article>
+      <article class="page"><span class="mark">V</span><strong>Videos</strong><small>Media vault gets tactile transparency and quieter labels.</small></article>
+      <article class="page"><span class="mark">P</span><strong>Planos</strong><small>Plan limits read like service capacity, not sales banners.</small></article>
+      <article class="page"><span class="mark">S</span><strong>Configuracoes</strong><small>Settings are organized by identity, safety and workspace behavior.</small></article>
+    </section>
+
+    <section class="radar-row">
+      <article class="panel"><div class="radar" role="img" aria-label="Radar score visualization"></div></article>
+      <article class="panel scores">
+        <div class="score"><span>Philosophy</span><strong>8.7</strong></div>
+        <div class="score"><span>Hierarchy</span><strong>8.1</strong></div>
+        <div class="score"><span>Craft</span><strong>8.5</strong></div>
+        <div class="score"><span>Function</span><strong>8.2</strong></div>
+        <div class="score"><span>Innovation</span><strong>7.8</strong></div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

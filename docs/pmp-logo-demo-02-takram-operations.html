@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PMP Logo Demo 02 - Takram Calm Operations</title>
+  <style>
+    :root {
+      --paper: #eee9de;
+      --paper-2: #e3ded2;
+      --ink: #202523;
+      --muted: #6d736d;
+      --sage: #6e8f7a;
+      --clay: #b48566;
+      --line: rgba(32, 37, 35, .16);
+      --blue: #416f8f;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        linear-gradient(90deg, rgba(32,37,35,.045) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(32,37,35,.045) 1px, transparent 1px),
+        radial-gradient(circle at 20% 10%, rgba(110,143,122,.18), transparent 22rem),
+        linear-gradient(135deg, var(--paper), var(--paper-2));
+      background-size: 44px 44px, 44px 44px, auto, auto;
+      color: var(--ink);
+      font-family: "Aptos", "Segoe UI", sans-serif;
+    }
+
+    .board {
+      width: min(1080px, 94vw);
+      min-height: min(680px, 92vh);
+      display: grid;
+      grid-template-columns: 1fr .92fr;
+      gap: 48px;
+      align-items: center;
+      padding: clamp(28px, 5vw, 70px);
+    }
+
+    .identity {
+      display: grid;
+      gap: 28px;
+    }
+
+    .kicker {
+      width: max-content;
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    .wordmark {
+      display: grid;
+      gap: 12px;
+    }
+
+    .wordmark h1 {
+      margin: 0;
+      max-width: 660px;
+      font-size: clamp(58px, 9vw, 126px);
+      line-height: .88;
+      letter-spacing: -.075em;
+      font-weight: 860;
+    }
+
+    .wordmark p {
+      margin: 0;
+      max-width: 480px;
+      color: var(--muted);
+      font-size: clamp(16px, 2vw, 22px);
+      line-height: 1.45;
+    }
+
+    .monogram-panel {
+      display: grid;
+      gap: 18px;
+      justify-items: center;
+      padding: 38px;
+      border: 1px solid var(--line);
+      border-radius: 34px;
+      background: rgba(255,255,255,.24);
+      box-shadow: 0 30px 80px rgba(32,37,35,.12);
+    }
+
+    .mark {
+      width: min(390px, 70vw);
+      aspect-ratio: 1;
+      position: relative;
+      display: grid;
+      place-items: center;
+    }
+
+    .card {
+      position: absolute;
+      width: 44%;
+      height: 60%;
+      border: 2px solid var(--ink);
+      border-radius: 28px;
+      background: var(--paper);
+      box-shadow: 0 18px 36px rgba(32,37,35,.14);
+      transform-origin: center;
+      animation: settle 3.6s cubic-bezier(.2,.8,.2,1) infinite;
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 18px;
+      border-radius: 18px;
+      background:
+        linear-gradient(90deg, transparent 46%, var(--ink) 46% 54%, transparent 54%),
+        radial-gradient(circle at 50% 38%, var(--ink) 0 7px, transparent 8px);
+      opacity: .92;
+    }
+
+    .card.p {
+      left: 4%;
+      top: 17%;
+      --x: -16px;
+      --r: -4deg;
+      background: #f1ead8;
+    }
+
+    .card.m {
+      left: 28%;
+      top: 20%;
+      --x: 0;
+      --r: 0deg;
+      background: #e7ebdf;
+      animation-delay: .14s;
+    }
+
+    .card.p2 {
+      right: 4%;
+      top: 17%;
+      --x: 16px;
+      --r: 4deg;
+      background: #e9dfd1;
+      animation-delay: .28s;
+    }
+
+    .node {
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      background: var(--sage);
+      box-shadow: 0 0 0 8px rgba(110,143,122,.18);
+      animation: ping 2.4s ease-in-out infinite;
+    }
+
+    .node.one { left: 18%; bottom: 18%; }
+    .node.two { left: 50%; bottom: 12%; animation-delay: .22s; }
+    .node.three { right: 18%; bottom: 18%; animation-delay: .44s; }
+
+    .route {
+      position: absolute;
+      left: 18%;
+      right: 18%;
+      bottom: 20%;
+      height: 2px;
+      background: linear-gradient(90deg, var(--sage), var(--blue), var(--clay));
+      transform-origin: left;
+      animation: route 2.4s ease-in-out infinite;
+    }
+
+    .caption {
+      display: grid;
+      gap: 6px;
+      text-align: center;
+    }
+
+    .caption strong {
+      font-size: 28px;
+      letter-spacing: -.04em;
+    }
+
+    .caption span {
+      color: var(--muted);
+      font-size: 13px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .applications {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .applications span {
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+      background: rgba(255,255,255,.22);
+    }
+
+    @keyframes settle {
+      0%, 100% { transform: translateX(var(--x)) rotate(var(--r)) translateY(0); }
+      50% { transform: translateX(calc(var(--x) * .5)) rotate(0deg) translateY(-8px); }
+    }
+
+    @keyframes route {
+      0% { transform: scaleX(.12); opacity: .35; }
+      55% { transform: scaleX(1); opacity: 1; }
+      100% { transform: scaleX(.12); opacity: .35; }
+    }
+
+    @keyframes ping {
+      0%, 100% { transform: scale(.86); opacity: .62; }
+      50% { transform: scale(1.08); opacity: 1; }
+    }
+
+    @media (max-width: 840px) {
+      .board { grid-template-columns: 1fr; gap: 28px; }
+      .monogram-panel { padding: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="board" aria-label="PMP calm operations animated logo demo">
+    <section class="identity">
+      <div class="kicker">Direction 02 / calm operations</div>
+      <div class="wordmark">
+        <h1>Platform Multi Publisher</h1>
+        <p>A quiet operational logo: three publishing identities, one controlled route, zero visual noise.</p>
+      </div>
+      <div class="applications" aria-label="Logo usage notes">
+        <span>Workspace header</span>
+        <span>App icon</span>
+        <span>Loading state</span>
+        <span>Motion-safe</span>
+      </div>
+    </section>
+
+    <section class="monogram-panel">
+      <div class="mark" aria-hidden="true">
+        <div class="card p"></div>
+        <div class="card m"></div>
+        <div class="card p2"></div>
+        <div class="route"></div>
+        <div class="node one"></div>
+        <div class="node two"></div>
+        <div class="node three"></div>
+      </div>
+      <div class="caption">
+        <strong>PMP</strong>
+        <span>publish once / route cleanly</span>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

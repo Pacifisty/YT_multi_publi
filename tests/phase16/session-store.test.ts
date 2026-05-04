@@ -88,6 +88,24 @@ describe('SessionStore — token creation and verification', () => {
     expect(session!.adminUser!.fullName).toBe('Admin Test');
     expect(session!.adminUser!.needsPlanSelection).toBe(true);
   });
+
+  test('token preserves account deletion schedule fields', () => {
+    const store = new SessionStore({ secret: SECRET });
+
+    const token = store.createToken({
+      email: 'admin@test.com',
+      accountDeletionConfirmationMethod: 'password',
+      accountDeletionRequestedAt: '2026-05-04T12:00:00.000Z',
+      accountDeactivationAt: '2026-05-05T12:00:00.000Z',
+      accountDeletionAt: '2026-06-03T12:00:00.000Z',
+    });
+    const session = store.verifyToken(token);
+
+    expect(session!.adminUser!.accountDeletionConfirmationMethod).toBe('password');
+    expect(session!.adminUser!.accountDeletionRequestedAt).toBe('2026-05-04T12:00:00.000Z');
+    expect(session!.adminUser!.accountDeactivationAt).toBe('2026-05-05T12:00:00.000Z');
+    expect(session!.adminUser!.accountDeletionAt).toBe('2026-06-03T12:00:00.000Z');
+  });
 });
 
 describe('SessionStore — createSessionResolver', () => {

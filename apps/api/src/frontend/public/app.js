@@ -1576,6 +1576,8 @@ const api = {
   startAuthGoogleOauth: () => apiRequest('GET', '/auth/google/start'),
   authGoogleCallback: (code, stateParam) => apiRequest('GET', buildUrl('/auth/google/callback', { code, state: stateParam })),
   logout: () => apiRequest('POST', '/auth/logout'),
+  sendAccountDeletionConfirmation: () => apiRequest('POST', '/auth/account-deletion/challenge'),
+  requestAccountDeletion: (confirmation = {}) => apiRequest('POST', '/auth/account-deletion/request', confirmation),
   accountPlanSummary: () => apiRequest('GET', '/api/account/plan'),
   listPlans: () => apiRequest('GET', '/api/account/plans'),
   selectAccountPlan: (plan) => apiRequest('POST', '/api/account/plan/select', { plan }),
@@ -1951,6 +1953,223 @@ function renderPlanBackgroundCards(planId = getCurrentAccountPlanId()) {
   }).join('');
 }
 
+function renderSettingsMark(label = 'PMP', tone = 'info', className = '') {
+  const safeLabel = String(label ?? 'PMP').trim().slice(0, 4).toUpperCase() || 'PMP';
+  const classes = ['settings-mark', className].filter(Boolean).join(' ');
+  return `
+    <span class="${escapeAttribute(classes)}" data-tone="${escapeAttribute(tone)}" aria-hidden="true">
+      ${escapeHtml(safeLabel)}
+    </span>
+  `;
+}
+
+function getAccountDeletionSchedule() {
+  return state.me?.accountDeletion ?? null;
+}
+
+function getAccountDeletionConfirmationMethod() {
+  return state.me?.accountDeletionConfirmationMethod === 'email_code' ? 'email_code' : 'password';
+}
+
+function getAccountDeletionConfirmationCopy(method = getAccountDeletionConfirmationMethod()) {
+  if (method === 'email_code') {
+    return {
+      short: 'Codigo no e-mail',
+      panel: 'Esta conta confirma a exclusao por codigo enviado ao e-mail da conta.',
+      detail: 'Enviaremos um codigo de 6 digitos para o e-mail da conta. O codigo expira em 10 minutos.',
+    };
+  }
+
+  return {
+    short: 'Senha atual',
+    panel: 'Esta conta confirma a exclusao com a senha atual.',
+    detail: 'Digite sua senha atual para provar que voce controla esta sessao antes de agendar a exclusao.',
+  };
+}
+
+function renderAccountDeletionPanel(options = {}) {
+  const schedule = getAccountDeletionSchedule();
+  const confirmationCopy = getAccountDeletionConfirmationCopy();
+  const compactClass = options.compact ? ' settings-deletion-card-compact' : '';
+  const scheduled = Boolean(schedule);
+  const statusLabel = schedule?.status === 'deactivated_pending_deletion'
+    ? 'Conta em desativacao'
+    : scheduled
+      ? 'Solicitacao registrada'
+      : 'Nao solicitado';
+  const timelineItems = scheduled
+    ? [
+        { label: 'Solicitado', value: formatDate(schedule.requestedAt) },
+        { label: 'Desativacao', value: formatDate(schedule.deactivationAt) },
+        { label: 'Exclusao definitiva', value: formatDate(schedule.deletionAt) },
+      ]
+    : [
+        { label: 'Confirmacao', value: confirmationCopy.short },
+        { label: 'Depois de 24h', value: 'Conta fica desativada' },
+        { label: 'Ate 30 dias', value: 'Dados removidos dos sistemas' },
+      ];
+
+  return `
+    <article class="settings-deletion-card${compactClass}">
+      <div class="settings-deletion-head">
+        ${renderSettingsMark('RISCO', 'danger', 'settings-deletion-mark')}
+        <div>
+          <span class="settings-hub-kicker">Zona de risco</span>
+          <h3>Exclusao da conta</h3>
+          <p class="muted">A conta nao e deletada na hora: ela permanece ativa por 24 horas, depois fica desativada, e a exclusao completa das informacoes ocorre em ate 30 dias. ${escapeHtml(confirmationCopy.panel)}</p>
+        </div>
+        <span class="pill ${scheduled ? 'warning' : 'info'}">${escapeHtml(statusLabel)}</span>
+      </div>
+      <div class="settings-deletion-timeline" aria-label="Cronograma de exclusao">
+        ${timelineItems.map((item) => `
+          <div>
+            <span>${escapeHtml(item.label)}</span>
+            <strong>${escapeHtml(item.value)}</strong>
+          </div>
+        `).join('')}
+      </div>
+      ${scheduled
+        ? '<div class="notice warning">Solicitacao registrada. Se precisar interromper o processo, entre em contato antes da janela de exclusao definitiva.</div>'
+        : `
+          <div class="settings-deletion-actions">
+            <button class="button button-danger" type="button" data-action="request-account-deletion">Solicitar exclusao da conta</button>
+            <a class="button button-secondary" href="mailto:PlataformMultiPublisher@gmail.com">Falar com suporte</a>
+          </div>
+        `}
+    </article>
+  `;
+}
+
+function bindAccountDeletionRequest() {
+  document.querySelectorAll('[data-action="request-account-deletion"]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      let errorMessage = '';
+
+      while (true) {
+        const confirmation = await showAccountDeletionConfirmationModal({ errorMessage });
+        if (!confirmation) return;
+
+        setButtonBusy(button, true, 'Registrando...');
+        const result = await api.requestAccountDeletion(confirmation);
+        setButtonBusy(button, false);
+
+        if (!result.ok) {
+          if (result.status === 401) {
+            errorMessage = result.error || 'Confirmacao invalida. Revise os dados e tente novamente.';
+            continue;
+          }
+          setUiNotice('error', 'Nao foi possivel solicitar exclusao', result.error || 'Tente novamente em alguns instantes.');
+          return;
+        }
+
+        state.me = {
+          ...(state.me ?? {}),
+          accountDeletion: result.body?.accountDeletion ?? state.me?.accountDeletion ?? null,
+        };
+        setUiNotice('warning', 'Exclusao agendada', 'A conta segue ativa por 24 horas e depois sera desativada. A exclusao completa ocorre em ate 30 dias.');
+        void renderRoute();
+        return;
+      }
+    });
+  });
+}
+
+async function showAccountDeletionConfirmationModal({ errorMessage = '' } = {}) {
+  const method = getAccountDeletionConfirmationMethod();
+  return method === 'email_code'
+    ? showAccountDeletionEmailCodeModal({ errorMessage })
+    : showAccountDeletionPasswordModal({ errorMessage });
+}
+
+async function showAccountDeletionPasswordModal({ errorMessage = '' } = {}) {
+  const confirmationCopy = getAccountDeletionConfirmationCopy('password');
+  const result = await showModal({
+    title: 'Confirmar exclusao da conta',
+    message: `${confirmationCopy.detail} A conta fica ativa por 24 horas, depois e desativada, e os dados aplicaveis sao removidos em ate 30 dias.`,
+    fields: [
+      {
+        name: 'currentPassword',
+        label: 'Senha atual',
+        type: 'password',
+        required: true,
+        placeholder: 'Digite sua senha atual',
+        autocomplete: 'current-password',
+      },
+    ],
+    bodyHtml: renderAccountDeletionModalBody(errorMessage),
+    confirmLabel: 'Confirmar exclusao',
+    cancelLabel: 'Cancelar',
+    tone: 'danger',
+    cardClassName: 'account-deletion-modal-card',
+  });
+  const currentPassword = typeof result?.currentPassword === 'string' ? result.currentPassword : '';
+  return currentPassword.trim() ? { currentPassword } : null;
+}
+
+async function showAccountDeletionEmailCodeModal({ errorMessage = '' } = {}) {
+  const confirmationCopy = getAccountDeletionConfirmationCopy('email_code');
+  const shouldSendCode = await showModal({
+    title: 'Enviar codigo de exclusao',
+    message: confirmationCopy.detail,
+    bodyHtml: renderAccountDeletionModalBody(errorMessage || 'Depois de enviar, mantenha esta tela aberta e use o codigo recebido para confirmar.'),
+    confirmLabel: 'Enviar codigo',
+    cancelLabel: 'Cancelar',
+    tone: 'danger',
+    cardClassName: 'account-deletion-modal-card',
+  });
+  if (!shouldSendCode) return null;
+
+  const challenge = await api.sendAccountDeletionConfirmation();
+  if (!challenge.ok) {
+    if (challenge.status === 401) {
+      unauthorizedRedirect();
+      return null;
+    }
+    setUiNotice('error', 'Nao foi possivel enviar o codigo', challenge.error || 'Tente novamente em alguns instantes.');
+    return null;
+  }
+
+  const expiresAt = challenge.body?.expiresAt ? formatDate(challenge.body.expiresAt) : 'em 10 minutos';
+  const result = await showModal({
+    title: 'Digite o codigo recebido',
+    message: `Enviamos um codigo de 6 digitos para ${state.me?.email || 'o e-mail da conta'}. Ele expira ${expiresAt}.`,
+    fields: [
+      {
+        name: 'confirmationCode',
+        label: 'Codigo de 6 digitos',
+        type: 'text',
+        required: true,
+        placeholder: '000000',
+        autocomplete: 'one-time-code',
+        inputMode: 'numeric',
+        maxLength: 6,
+        pattern: '\\d{6}',
+      },
+    ],
+    bodyHtml: renderAccountDeletionModalBody('Se o codigo falhar, enviaremos um novo codigo para proteger a conta.'),
+    confirmLabel: 'Confirmar exclusao',
+    cancelLabel: 'Cancelar',
+    tone: 'danger',
+    cardClassName: 'account-deletion-modal-card',
+  });
+  const confirmationCode = typeof result?.confirmationCode === 'string' ? result.confirmationCode.trim() : '';
+  return confirmationCode ? { confirmationCode } : null;
+}
+
+function renderAccountDeletionModalBody(message = '') {
+  const errorHtml = message
+    ? `<div class="account-deletion-modal-alert">${escapeHtml(message)}</div>`
+    : '';
+  return `
+    <div class="account-deletion-modal-brief">
+      <span>24h ativa</span>
+      <span>Depois desativada</span>
+      <span>30 dias para remover dados</span>
+    </div>
+    ${errorHtml}
+  `;
+}
+
 function settingsPickerHtml(prefix) {
   const selectedTheme = getSelectedBackgroundTheme();
   const selectedFont = FONT_THEME_OPTIONS.find((option) => option.id === state.fontTheme) ?? FONT_THEME_OPTIONS[0];
@@ -1964,7 +2183,7 @@ function settingsPickerHtml(prefix) {
   return `
     <details class="settings-picker compact-settings">
       <summary class="theme-toggle-btn" aria-label="Abrir configurações">
-        <span class="header-control-icon">${renderNeonMediaIcon('processing', 'chip', { state: 'processing' })}</span>
+        <span class="header-control-icon">${renderSettingsMark('CFG', 'info', 'settings-picker-mark')}</span>
         <span class="theme-toggle-copy">
           <span class="theme-toggle-label">Configurações</span>
           <span class="background-picker-current">${escapeHtml(selectedTheme.label)}</span>
@@ -1981,14 +2200,14 @@ function settingsPickerHtml(prefix) {
         </div>
         <div class="settings-panel-actions">
           <a class="settings-panel-action" data-link href="/workspace/configuracoes">
-            ${renderNeonMediaIcon('storage', 'chip', { state: 'info' })}
+            ${renderSettingsMark('CFG', 'info', 'settings-panel-mark')}
             <span>
               <strong>Abrir configurações</strong>
               <small>Perfil, idioma e plataforma</small>
             </span>
           </a>
           <a class="settings-panel-action" data-link href="/workspace/perfil">
-            ${renderNeonMediaIcon('available', 'chip', { state: 'success' })}
+            ${renderSettingsMark('EU', 'success', 'settings-panel-mark')}
             <span>
               <strong>Meu perfil</strong>
               <small>Conta e preferências</small>
@@ -2194,11 +2413,12 @@ function showModal({
     overlay.className = 'app-modal-backdrop';
     const showCancelButton = typeof cancelLabel === 'string' && cancelLabel.trim().length > 0;
     const showConfirmButton = typeof confirmLabel === 'string' && confirmLabel.trim().length > 0;
+    const confirmButtonClass = tone === 'danger' || tone === 'error' ? 'button button-danger' : 'button button-primary';
     const actionsHtml = showCancelButton || showConfirmButton
       ? `
         <div class="inline-actions modal-actions">
           ${showCancelButton ? `<button class="button button-secondary" type="button" data-role="modal-cancel">${escapeHtml(cancelLabel)}</button>` : ''}
-          ${showConfirmButton ? `<button class="button button-primary" type="submit" data-role="modal-confirm">${escapeHtml(confirmLabel)}</button>` : ''}
+          ${showConfirmButton ? `<button class="${confirmButtonClass}" type="submit" data-role="modal-confirm">${escapeHtml(confirmLabel)}</button>` : ''}
         </div>
       `
       : '';
@@ -2234,6 +2454,10 @@ function showModal({
             value="${escapeAttribute(value)}"
             ${field.required ? 'required' : ''}
             placeholder="${escapeAttribute(field.placeholder ?? '')}"
+            ${field.autocomplete ? `autocomplete="${escapeAttribute(field.autocomplete)}"` : ''}
+            ${field.inputMode ? `inputmode="${escapeAttribute(field.inputMode)}"` : ''}
+            ${field.maxLength ? `maxlength="${escapeAttribute(field.maxLength)}"` : ''}
+            ${field.pattern ? `pattern="${escapeAttribute(field.pattern)}"` : ''}
           />
         </label>
       `;
@@ -2336,6 +2560,27 @@ function activeTab(pathname) {
   return 'dashboard';
 }
 
+function keepWorkspaceActiveNavVisible() {
+  const nav = document.querySelector('.header-nav');
+  const activeLink = nav?.querySelector('.nav-link.active');
+  if (!nav || !activeLink || !nav.clientWidth || typeof nav.scrollLeft !== 'number') return;
+
+  const safeInset = 12;
+  const activeLeft = activeLink.offsetLeft;
+  const activeRight = activeLeft + activeLink.offsetWidth;
+  const visibleLeft = nav.scrollLeft;
+  const visibleRight = visibleLeft + nav.clientWidth;
+
+  if (activeRight + safeInset > visibleRight) {
+    nav.scrollLeft = Math.max(0, activeRight - nav.clientWidth + safeInset);
+    return;
+  }
+
+  if (activeLeft - safeInset < visibleLeft) {
+    nav.scrollLeft = Math.max(0, activeLeft - safeInset);
+  }
+}
+
 function renderWorkspaceShell(options) {
   if (state.account) {
     ensurePlanCompatibleBackground();
@@ -2345,16 +2590,17 @@ function renderWorkspaceShell(options) {
     { id: 'dashboard', label: 'Dashboard', href: '/workspace/dashboard' },
     { id: 'growth', label: 'Growth', href: '/workspace/growth' },
     { id: 'campanhas', label: 'Campanhas', href: '/workspace/campanhas' },
-    { id: 'accounts', label: 'Accounts', href: '/workspace/accounts' },
+    { id: 'accounts', label: 'Contas', href: '/workspace/accounts' },
     { id: 'videos', label: 'Videos', href: '/workspace/videos' },
     { id: 'planos', label: 'Planos', href: '/workspace/planos' },
     { id: 'settings', label: 'Configurações', href: '/workspace/configuracoes' },
   ];
   const pathname = window.location.pathname;
   const currentTab = activeTab(pathname);
-  const navHtml = tabs.map((tab) => (
-    `<a class="nav-link ${tab.id === currentTab ? 'active' : ''}" data-link href="${tab.href}">${tab.label}</a>`
-  )).join('');
+  const navHtml = tabs.map((tab) => {
+    const isActive = tab.id === currentTab;
+    return `<a class="nav-link ${isActive ? 'active' : ''}" data-link data-workspace-tab="${tab.id}" href="${tab.href}"${isActive ? ' aria-current="page"' : ''}>${tab.label}</a>`;
+  }).join('');
   const settingsPicker = settingsPickerHtml('workspace');
   const combinedNoticeHtml = `${renderUiNotice()}${options.noticeHtml ?? ''}`;
 
@@ -2533,6 +2779,11 @@ function renderWorkspaceShell(options) {
       ${mainContentHtml}
     </div>
   `;
+
+  keepWorkspaceActiveNavVisible();
+  if (typeof window.requestAnimationFrame === 'function') {
+    window.requestAnimationFrame(() => keepWorkspaceActiveNavVisible());
+  }
 
   const logoutBtn = document.getElementById('logout-btn');
   if (logoutBtn) {
@@ -3785,7 +4036,7 @@ function renderWorkspacePlanCard(option, account) {
   `;
 }
 
-async function renderSettingsPage() {
+async function legacyRemovedSettingsPage() {
   await ensureAccountPlan();
   const growthAccountsResult = await api.accounts().catch(() => null);
   if (growthAccountsResult?.ok && Array.isArray(growthAccountsResult.body?.accounts)) {
@@ -3817,7 +4068,7 @@ async function renderSettingsPage() {
           class="settings-hub-visual"
           style="--background-preview:${escapeAttribute(selectedTheme.pageBackground)}; --preset-accent:${escapeAttribute(selectedTheme.primary)};"
         >
-          ${renderNeonMediaIcon('storage', 'hero', { state: 'processing' })}
+          ${renderSettingsMark('PMP', 'processing', 'settings-hero-mark')}
           <strong>${escapeHtml(selectedTheme.label)}</strong>
           <small>${escapeHtml(planConfig.label)} · ${escapeHtml(selectedFont.label)}</small>
         </div>
@@ -3825,7 +4076,7 @@ async function renderSettingsPage() {
 
       <section class="settings-hub-grid">
         <a class="settings-hub-card settings-hub-link-card" data-link href="/workspace/perfil">
-          <span class="settings-hub-card-icon">${renderNeonMediaIcon('available', 'stat', { state: 'success' })}</span>
+          <span class="settings-hub-card-icon">${renderSettingsMark('EU', 'success', 'settings-card-mark')}</span>
           <span class="settings-hub-card-copy">
             <strong>Painel do perfil</strong>
             <small>Dados da conta, plano ativo, tokens e preferências persistidas.</small>
@@ -3833,7 +4084,7 @@ async function renderSettingsPage() {
         </a>
 
         <a class="settings-hub-card settings-hub-link-card settings-hub-link-card-accounts" data-link href="/workspace/accounts">
-          <span class="settings-hub-card-icon">${renderNeonMediaIcon('playlist', 'stat', { state: 'info' })}</span>
+          <span class="settings-hub-card-icon">${renderSettingsMark('ACC', 'info', 'settings-card-mark')}</span>
           <span class="settings-hub-card-copy">
             <strong>Contas conectadas</strong>
             <small>Conectar plataformas, revisar canais e resolver reconexoes.</small>
@@ -3841,7 +4092,7 @@ async function renderSettingsPage() {
         </a>
 
         <article class="settings-hub-card">
-          <span class="settings-hub-card-icon">${renderNeonMediaIcon('playlist', 'stat', { state: 'info' })}</span>
+          <span class="settings-hub-card-icon">${renderSettingsMark('IDI', 'info', 'settings-card-mark')}</span>
           <div class="settings-hub-card-copy">
             <strong>Idioma da plataforma</strong>
             <small>Alterna todos os textos visíveis, labels, titles e aria-labels entre pt-BR e en.</small>
@@ -3853,7 +4104,7 @@ async function renderSettingsPage() {
 
         <article class="settings-hub-card settings-hub-card-wide">
           <div class="settings-hub-card-head">
-            <span class="settings-hub-card-icon">${renderNeonMediaIcon('thumbnail', 'stat', { state: 'processing' })}</span>
+            <span class="settings-hub-card-icon">${renderSettingsMark('BG', 'processing', 'settings-card-mark')}</span>
             <span class="settings-hub-card-copy">
               <strong>Backgrounds do seu plano</strong>
               <small>Cada plano adiciona 4 sets; upgrades mantem os backgrounds dos planos anteriores.</small>
@@ -3865,7 +4116,7 @@ async function renderSettingsPage() {
         </article>
 
         <article class="settings-hub-card">
-          <span class="settings-hub-card-icon">${renderNeonMediaIcon('star', 'stat', { state: 'success' })}</span>
+          <span class="settings-hub-card-icon">${renderSettingsMark('TXT', 'success', 'settings-card-mark')}</span>
           <div class="settings-hub-card-copy">
             <strong>Cor do texto</strong>
             <small>Ajusta o tom principal dos textos de interface sem mudar o layout.</small>
@@ -3876,7 +4127,7 @@ async function renderSettingsPage() {
         </article>
 
         <article class="settings-hub-card">
-          <span class="settings-hub-card-icon">${renderNeonMediaIcon('folder', 'stat', { state: 'warning' })}</span>
+          <span class="settings-hub-card-icon">${renderSettingsMark('TOK', 'warning', 'settings-card-mark')}</span>
           <div class="settings-hub-card-copy">
             <strong>Plano e faturamento</strong>
             <small>Gerencie upgrade, downgrade e compra de tokens avulsos.</small>
@@ -3893,7 +4144,7 @@ async function renderSettingsPage() {
   bindGrowthInteractions();
 }
 
-async function renderProfilePage() {
+async function legacyRemovedProfilePage() {
   await ensureAccountPlan();
   const account = state.account;
   const selectedTheme = getSelectedBackgroundTheme();
@@ -3910,7 +4161,7 @@ async function renderProfilePage() {
       <section class="settings-profile-layout">
         <article class="card settings-profile-card">
           <div class="settings-profile-avatar" aria-hidden="true">
-            ${renderNeonMediaIcon('available', 'hero', { state: 'success' })}
+            ${renderSettingsMark('EU', 'success', 'settings-profile-avatar-mark')}
           </div>
           <div class="settings-profile-copy">
             <span class="settings-hub-kicker">Perfil</span>
@@ -3935,7 +4186,7 @@ async function renderProfilePage() {
 
         <article class="card settings-profile-panel">
           <div class="settings-hub-card-head">
-            <span class="settings-hub-card-icon">${renderNeonMediaIcon('playlist', 'stat', { state: 'info' })}</span>
+            <span class="settings-hub-card-icon">${renderSettingsMark('IDI', 'info', 'settings-card-mark')}</span>
             <span class="settings-hub-card-copy">
               <strong>Idioma</strong>
               <small>Escolha o idioma da interface da plataforma.</small>
@@ -3948,7 +4199,7 @@ async function renderProfilePage() {
 
         <article class="card settings-profile-panel">
           <div class="settings-hub-card-head">
-            <span class="settings-hub-card-icon">${renderNeonMediaIcon('thumbnail', 'stat', { state: 'processing' })}</span>
+            <span class="settings-hub-card-icon">${renderSettingsMark('VIS', 'processing', 'settings-card-mark')}</span>
             <span class="settings-hub-card-copy">
               <strong>Aparência atual</strong>
               <small>${escapeHtml(selectedTheme.label)} · ${escapeHtml(selectedFont.label)}</small>
@@ -3963,7 +4214,7 @@ async function renderProfilePage() {
 
         <article class="card settings-profile-panel">
           <div class="settings-hub-card-head">
-            <span class="settings-hub-card-icon">${renderNeonMediaIcon('storage', 'stat', { state: 'success' })}</span>
+            <span class="settings-hub-card-icon">${renderSettingsMark('RES', 'success', 'settings-card-mark')}</span>
             <span class="settings-hub-card-copy">
               <strong>Preferências da plataforma</strong>
               <small>Configurações visuais salvas neste navegador.</small>
@@ -3978,6 +4229,241 @@ async function renderProfilePage() {
       </section>
     `,
   });
+}
+
+async function renderSettingsPage() {
+  await ensureAccountPlan();
+  const growthAccountsResult = await api.accounts().catch(() => null);
+  if (growthAccountsResult?.ok && Array.isArray(growthAccountsResult.body?.accounts)) {
+    state.growthConnectedAccounts = growthAccountsResult.body.accounts;
+  }
+
+  const account = state.account;
+  const planId = getCurrentAccountPlanId();
+  const planConfig = getPlanVisualConfig(planId);
+  const selectedTheme = getSelectedBackgroundTheme();
+  const selectedFont = FONT_THEME_OPTIONS.find((option) => option.id === state.fontTheme) ?? FONT_THEME_OPTIONS[0];
+  const tokenCount = account?.tokens ?? 0;
+  const connectedAccountsCount = state.growthConnectedAccounts.filter((item) => item.status === 'connected').length;
+
+  renderWorkspaceShell({
+    title: 'Configuracoes',
+    subtitle: 'Centro operacional para conta, aparencia, Growth e seguranca.',
+    contentHtml: `
+      <section class="settings-hub-hero card">
+        <div class="settings-hub-hero-copy">
+          <span class="settings-hub-kicker">Centro de operacao</span>
+          <h2>Configuracoes do PMP</h2>
+          <p class="muted">Tudo que altera a operacao da plataforma fica aqui: identidade, contas conectadas, plano, visual, Growth e seguranca da conta.</p>
+          <div class="settings-hub-meta-row">
+            <span class="pill ${escapeHtml(planConfig.tone)}">Plano ${escapeHtml(account?.planLabel ?? planConfig.label)}</span>
+            <span class="pill info">${formatNumber(tokenCount)} tokens</span>
+            <span class="pill info">${formatNumber(connectedAccountsCount)} contas conectadas</span>
+            <span class="pill info">${escapeHtml(state.locale)}</span>
+          </div>
+        </div>
+        <div
+          class="settings-hub-visual"
+          style="--background-preview:${escapeAttribute(selectedTheme.pageBackground)}; --preset-accent:${escapeAttribute(selectedTheme.primary)};"
+        >
+          ${renderSettingsMark('PMP', 'processing', 'settings-hero-mark')}
+          <strong>${escapeHtml(selectedTheme.label)}</strong>
+          <small>${escapeHtml(planConfig.label)} / ${escapeHtml(selectedFont.label)}</small>
+        </div>
+      </section>
+
+      <section class="settings-hub-section">
+        <div class="settings-hub-section-head">
+          <span class="settings-hub-kicker">Essenciais</span>
+          <h3>O que o usuario realmente precisa gerenciar</h3>
+        </div>
+        <div class="settings-hub-grid settings-essentials-grid">
+          <a class="settings-hub-card settings-hub-link-card settings-hub-card-priority" data-link href="/workspace/perfil">
+            <span class="settings-hub-card-icon">${renderSettingsMark('EU', 'success', 'settings-card-mark')}</span>
+            <span class="settings-hub-card-copy">
+              <strong>Perfil e identidade</strong>
+              <small>Nome, e-mail, plano ativo e resumo das preferencias.</small>
+            </span>
+          </a>
+
+          <a class="settings-hub-card settings-hub-link-card settings-hub-card-priority" data-link href="/workspace/accounts">
+            <span class="settings-hub-card-icon">${renderSettingsMark('ACC', 'info', 'settings-card-mark')}</span>
+            <span class="settings-hub-card-copy">
+              <strong>Contas conectadas</strong>
+              <small>${formatNumber(connectedAccountsCount)} conectada${connectedAccountsCount === 1 ? '' : 's'}; revise canais, OAuth e reconexoes.</small>
+            </span>
+          </a>
+
+          <a class="settings-hub-card settings-hub-link-card settings-hub-card-priority" data-link href="/workspace/planos">
+            <span class="settings-hub-card-icon">${renderSettingsMark('TOK', 'warning', 'settings-card-mark')}</span>
+            <span class="settings-hub-card-copy">
+              <strong>Plano e tokens</strong>
+              <small>${formatNumber(tokenCount)} tokens disponiveis. Gerencie upgrades e pacotes avulsos.</small>
+            </span>
+          </a>
+        </div>
+      </section>
+
+      <section class="settings-hub-section settings-preferences-section">
+        <div class="settings-hub-section-head">
+          <span class="settings-hub-kicker">Preferencias</span>
+          <h3>Ajustes visuais e idioma</h3>
+          <p class="muted">Controles de interface ficam juntos para evitar duplicacao entre Perfil e Configuracoes.</p>
+        </div>
+        <div class="settings-preference-grid">
+          <article class="settings-hub-card">
+            <div class="settings-hub-card-head">
+              <span class="settings-hub-card-icon">${renderSettingsMark('IDI', 'info', 'settings-card-mark')}</span>
+              <span class="settings-hub-card-copy">
+                <strong>Idioma da plataforma</strong>
+                <small>Textos visiveis, labels e aria-labels.</small>
+              </span>
+            </div>
+            <div class="font-theme-grid font-theme-grid-compact language-grid language-grid-wide">
+              ${renderLanguageOptionButtons()}
+            </div>
+          </article>
+
+          <article class="settings-hub-card">
+            <div class="settings-hub-card-head">
+              <span class="settings-hub-card-icon">${renderSettingsMark('TXT', 'success', 'settings-card-mark')}</span>
+              <span class="settings-hub-card-copy">
+                <strong>Cor do texto</strong>
+                <small>Ajusta legibilidade sem mudar a estrutura do workspace.</small>
+              </span>
+            </div>
+            <div class="font-theme-grid font-theme-grid-compact">
+              ${renderFontThemeButtons()}
+            </div>
+          </article>
+
+          <article class="settings-hub-card settings-hub-card-wide">
+            <div class="settings-hub-card-head">
+              <span class="settings-hub-card-icon">${renderSettingsMark('BG', 'processing', 'settings-card-mark')}</span>
+              <span class="settings-hub-card-copy">
+                <strong>Backgrounds do seu plano</strong>
+                <small>Cada plano adiciona sets visuais; upgrades preservam os anteriores.</small>
+              </span>
+            </div>
+            <div class="background-grid background-grid-plan">
+              ${renderPlanBackgroundCards(planId)}
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="growth-module growth-settings-merged settings-growth-compact" aria-label="Funcoes Growth migradas para Configuracoes PMP">
+        ${renderGrowthSettingsPanel({ merged: true, compact: true })}
+      </section>
+
+      ${renderAccountDeletionPanel()}
+    `,
+  });
+  bindGrowthInteractions();
+  bindAccountDeletionRequest();
+}
+
+async function renderProfilePage() {
+  await ensureAccountPlan();
+  const accountsResult = await api.accounts().catch(() => null);
+  if (accountsResult?.ok && Array.isArray(accountsResult.body?.accounts)) {
+    state.growthConnectedAccounts = accountsResult.body.accounts;
+  }
+
+  const account = state.account;
+  const selectedTheme = getSelectedBackgroundTheme();
+  const selectedFont = FONT_THEME_OPTIONS.find((option) => option.id === state.fontTheme) ?? FONT_THEME_OPTIONS[0];
+  const planConfig = getPlanVisualConfig();
+  const displayName = state.me?.fullName || state.me?.name || 'Operador';
+  const email = state.me?.email || '-';
+  const initials = displayName
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 3)
+    .toUpperCase() || 'EU';
+  const connectedAccountsCount = state.growthConnectedAccounts.filter((item) => item.status === 'connected').length;
+
+  renderWorkspaceShell({
+    title: 'Perfil',
+    subtitle: 'Identidade, plano e seguranca da sua conta PMP.',
+    actionsHtml: '<a class="button button-secondary" data-link href="/workspace/configuracoes">Abrir configuracoes</a>',
+    contentHtml: `
+      <section class="settings-profile-layout">
+        <article class="card settings-profile-card">
+          <div class="settings-profile-avatar" aria-hidden="true">
+            ${renderSettingsMark(initials, 'success', 'settings-profile-avatar-mark')}
+          </div>
+          <div class="settings-profile-copy">
+            <span class="settings-hub-kicker">Identidade</span>
+            <h2>${escapeHtml(displayName)}</h2>
+            <p class="muted">${escapeHtml(email)}</p>
+          </div>
+          <div class="settings-profile-stats">
+            <div>
+              <span>Plano</span>
+              <strong>${escapeHtml(account?.planLabel ?? planConfig.label)}</strong>
+            </div>
+            <div>
+              <span>Tokens</span>
+              <strong>${formatNumber(account?.tokens ?? 0)}</strong>
+            </div>
+            <div>
+              <span>Contas</span>
+              <strong>${formatNumber(connectedAccountsCount)}</strong>
+            </div>
+          </div>
+        </article>
+
+        <article class="card settings-profile-panel">
+          <div class="settings-hub-card-head">
+            <span class="settings-hub-card-icon">${renderSettingsMark('CTA', 'info', 'settings-card-mark')}</span>
+            <span class="settings-hub-card-copy">
+              <strong>Conta e operacao</strong>
+              <small>Atalhos reais para gerenciar o que afeta publicacao.</small>
+            </span>
+          </div>
+          <div class="settings-action-list">
+            <a data-link href="/workspace/accounts"><strong>Contas conectadas</strong><span>OAuth, canais e reconexoes</span></a>
+            <a data-link href="/workspace/planos"><strong>Plano e tokens</strong><span>Saldo, upgrades e pacotes</span></a>
+            <a data-link href="/workspace/configuracoes"><strong>Preferencias</strong><span>Idioma, visual e Growth</span></a>
+          </div>
+        </article>
+
+        <article class="card settings-profile-panel">
+          <div class="settings-hub-card-head">
+            <span class="settings-hub-card-icon">${renderSettingsMark('VIS', 'processing', 'settings-card-mark')}</span>
+            <span class="settings-hub-card-copy">
+              <strong>Aparencia atual</strong>
+              <small>${escapeHtml(selectedTheme.label)} / ${escapeHtml(selectedFont.label)}</small>
+            </span>
+          </div>
+          <div class="settings-current-visual" style="--background-preview:${escapeAttribute(selectedTheme.pageBackground)}; --preset-accent:${escapeAttribute(selectedTheme.primary)};">
+            <span></span>
+            <strong>${escapeHtml(selectedTheme.label)}</strong>
+          </div>
+        </article>
+
+        <article class="card settings-profile-panel">
+          <div class="settings-hub-card-head">
+            <span class="settings-hub-card-icon">${renderSettingsMark('RES', 'success', 'settings-card-mark')}</span>
+            <span class="settings-hub-card-copy">
+              <strong>Resumo salvo</strong>
+              <small>Perfil mostra o estado; edicao fica centralizada em Configuracoes.</small>
+            </span>
+          </div>
+          <ul class="settings-profile-list">
+            <li><span>Idioma</span><strong>${escapeHtml(state.locale)}</strong></li>
+            <li><span>Background</span><strong>${escapeHtml(selectedTheme.label)}</strong></li>
+            <li><span>Cor do texto</span><strong>${escapeHtml(selectedFont.label)}</strong></li>
+          </ul>
+        </article>
+      </section>
+
+      ${renderAccountDeletionPanel({ compact: true })}
+    `,
+  });
+  bindAccountDeletionRequest();
 }
 
 async function renderPlanosPage(options = {}) {
@@ -4336,6 +4822,11 @@ function attachGlobalNavigation() {
 }
 
 const LEGAL_LAST_UPDATED = 'May 2, 2026';
+const LEGAL_DOCUMENT_PATHS = Object.freeze({
+  privacy: '/privacy',
+  terms: '/terms',
+  'data-deletion': '/data-deletion',
+});
 
 function getLegalPagePresentation(activePage, title, subtitle) {
   const base = {
@@ -4425,6 +4916,38 @@ function getSharedLegalDocuments() {
 function getLegalDocument(activePage) {
   const document = getSharedLegalDocuments()[activePage];
   return document && Array.isArray(document.sections) ? document : null;
+}
+
+function getLegalReloadStorageKey(path) {
+  return `pmp-legal-document-reload:${path}`;
+}
+
+function clearLegalReloadAttempt(activePage) {
+  const path = LEGAL_DOCUMENT_PATHS[activePage];
+  if (!path) return;
+  try {
+    sessionStorage.removeItem(getLegalReloadStorageKey(path));
+  } catch {
+    // Session storage can be unavailable in hardened browsers.
+  }
+}
+
+function reloadMissingLegalDocument(activePage) {
+  const path = LEGAL_DOCUMENT_PATHS[activePage];
+  if (!path) return false;
+  const key = getLegalReloadStorageKey(path);
+
+  try {
+    if (sessionStorage.getItem(key) === '1') {
+      return false;
+    }
+    sessionStorage.setItem(key, '1');
+  } catch {
+    // If storage is blocked, still prefer one full navigation over a broken SPA fallback.
+  }
+
+  window.location.assign(path);
+  return true;
 }
 
 function renderLegalDocumentBodyHtml(documentData) {
@@ -4590,6 +5113,9 @@ function renderLegalShell(activePage, title, subtitle, bodyHtml, lastUpdated = L
 function renderLegalDocumentPage(activePage) {
   const documentData = getLegalDocument(activePage);
   if (!documentData) {
+    if (reloadMissingLegalDocument(activePage)) {
+      return;
+    }
     root.innerHTML = `
       <div class="public-landing legal-page legal-saas-page public-saas-page">
         <div class="public-shell">
@@ -4610,6 +5136,7 @@ function renderLegalDocumentPage(activePage) {
     return;
   }
 
+  clearLegalReloadAttempt(activePage);
   renderLegalShell(
     activePage,
     documentData.title,
@@ -4954,6 +5481,267 @@ async function renderPublicLandingPage() {
             <a href="/privacy" data-link>Politica de Privacidade</a>
             <a href="/terms" data-link>Termos de Servico</a>
             <a href="/data-deletion" data-link>Exclusao de Dados do Usuario</a>
+            <a href="/login" data-link>Entrar</a>
+          </nav>
+        </footer>
+      </div>
+    </div>
+  `;
+
+  injectLogoStyles();
+  bindPublicLandingInteractions();
+  bindPublicContactForm();
+}
+
+async function renderPublicLandingPagePsychedelic() {
+  const publicPlanOptions = await loadPublicPlanOptions();
+  const planCardsHtml = publicPlanOptions.map((plan) => renderPublicPlanCard(plan)).join('');
+
+  const stepsHtml = [
+    ['01', 'Conecte suas contas', 'Autorize YouTube, TikTok e Instagram por OAuth e mantenha controle sobre reconexão e revogação.'],
+    ['02', 'Crie campanhas', 'Escolha vídeo, legenda, destino, agenda, privacidade e regra operacional antes de publicar.'],
+    ['03', 'Publique sem repetir', 'Reaproveite mídias e copies em canais diferentes sem recriar todo o trabalho manualmente.'],
+    ['04', 'Acompanhe falhas', 'Veja jobs prontos, enviados, publicados, pendentes ou com erro em uma leitura única.'],
+  ].map(([step, title, text]) => `
+    <article class="psy-step-card">
+      <strong>${escapeHtml(step)}</strong>
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(text)}</p>
+    </article>
+  `).join('');
+
+  const featureCardsHtml = [
+    ['CAM', 'Campanhas multiplataforma', 'Agrupe vídeos, destinos, agenda e regras por campanha para não repetir trabalho.'],
+    ['LIB', 'Biblioteca de mídia', 'Centralize vídeos, thumbnails, descrições e arquivos prontos para reutilizar.'],
+    ['OAU', 'Contas via OAuth', 'Conecte contas autorizadas e mantenha controle sobre revogação e reconexão.'],
+    ['JOB', 'Fila de publicação', 'Acompanhe pronto, enviando, publicado, pendente, erro e reautenticação.'],
+    ['LOG', 'Status e logs', 'Transforme falhas de API em mensagens operacionais para agir rápido.'],
+    ['REP', 'Relatórios', 'Resuma campanhas, falhas, sinais operacionais e próximas ações para management.'],
+  ].map(([mark, title, text]) => `
+    <article class="psy-feature-card">
+      <strong>${escapeHtml(mark)}</strong>
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(text)}</p>
+    </article>
+  `).join('');
+
+  const platformCardsHtml = [
+    ['YT', 'YouTube', 'upload e status', 'Vídeos, Shorts, canais, status e histórico operacional por campanha.'],
+    ['TT', 'TikTok', 'vídeo curto', 'Vídeos curtos, fila de revisão, tratamento de erros e destinos autorizados.'],
+    ['IG', 'Instagram', 'reels e feed', 'Reels, legendas, conta profissional e acompanhamento consolidado.'],
+  ].map(([mark, title, meta, text]) => `
+    <article class="psy-platform-card">
+      <span class="psy-platform-mark" aria-hidden="true">${escapeHtml(mark)}</span>
+      <span class="psy-card-meta">${escapeHtml(meta)}</span>
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(text)}</p>
+    </article>
+  `).join('');
+
+  const audienceCardsHtml = [
+    ['Criadores de conteúdo', 'Suba uma peça, adapte destinos e acompanhe status sem planilhas soltas.'],
+    ['Agências', 'Padronize operação por cliente e reduza retrabalho entre social media e edição.'],
+    ['Times de marketing', 'Controle campanhas recorrentes, pendências e relatórios em uma rotina previsível.'],
+  ].map(([title, text]) => `
+    <article class="psy-audience-card">
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(text)}</p>
+    </article>
+  `).join('');
+
+  const faqHtml = [
+    ['Como funciona a integração com YouTube?', 'O usuário conecta a conta autorizada e escolhe quando usar o canal em campanhas. A publicação depende das permissões, regras e disponibilidade da API do Google/YouTube.'],
+    ['Como funciona a integração com TikTok?', 'A plataforma usa fluxo autorizado para preparar vídeos selecionados pelo usuário e acompanhar status quando o escopo estiver aprovado.'],
+    ['Como funciona a integração com Instagram?', 'O fluxo foi pensado para contas profissionais compatíveis com publicação de Reels/feed via Meta, com revisão de legenda, mídia e destino.'],
+    ['Meus dados ficam seguros?', 'A landing resume os controles principais: OAuth, tokens protegidos, acesso por conta e links públicos de privacidade, termos e exclusão de dados.'],
+    ['O que acontece se uma publicação falhar?', 'O job fica marcado para revisão, com status e mensagem operacional. A falha pode ocorrer por limite, permissão, token expirado, regra da plataforma ou rejeição do conteúdo.'],
+  ].map(([question, answer]) => `
+    <article class="psy-faq-card">
+      <h3>${escapeHtml(question)}</h3>
+      <p>${escapeHtml(answer)}</p>
+    </article>
+  `).join('');
+
+  root.innerHTML = `
+    <div class="public-landing public-product-page public-psychedelic-page">
+      <div class="psy-page-grain" aria-hidden="true"></div>
+      <div class="public-shell psy-shell">
+        <nav class="psy-nav" aria-label="Navegação principal">
+          <a class="psy-brand" href="/" data-link aria-label="Platform Multi Publisher">
+            <span class="psy-brand-mark" aria-hidden="true">PMP</span>
+            <span>Platform Multi Publisher</span>
+          </a>
+          <div class="psy-nav-links">
+            <a href="#como-funciona">Como funciona</a>
+            <a href="#recursos">Recursos</a>
+            <a href="#planos">Planos</a>
+            <a href="#faq">FAQ</a>
+          </div>
+          <div class="psy-nav-actions">
+            <a class="psy-link" href="/login" data-link>Entrar</a>
+            <a class="psy-button psy-button-primary" href="/login?mode=register" data-link>Começar agora</a>
+          </div>
+        </nav>
+        <div class="psy-type-rail" aria-hidden="true">
+          <span>YT</span><span>TT</span><span>IG</span><span>CAM</span><span>LIB</span><span>JOB</span><span>REP</span><span>SEO</span><span>CTA</span>
+        </div>
+
+        <main class="psy-main">
+          <section class="psy-hero">
+            <div class="psy-hero-copy">
+              <p class="psy-eyebrow">Landing SEO + conversão</p>
+              <h1>Publique vídeos no YouTube, TikTok e Instagram em um só painel</h1>
+              <p class="psy-hero-text">Organize campanhas, conecte suas contas, acompanhe falhas e mantenha sua rotina de conteúdo sem retrabalho.</p>
+              <div class="psy-actions">
+                <a class="psy-button psy-button-primary" href="/login?mode=register" data-link>Começar agora</a>
+                <a class="psy-button" href="#como-funciona">Ver como funciona</a>
+              </div>
+              <div class="psy-chip-row" aria-label="Resumo do produto">
+                <span>YouTube</span>
+                <span>TikTok</span>
+                <span>Instagram</span>
+                <span>Campanhas</span>
+                <span>Biblioteca de mídia</span>
+                <span>Relatórios</span>
+              </div>
+            </div>
+
+            <div class="psy-poster-frame" id="demonstracao" role="img" aria-label="Preview do produto mostrando contas conectadas, campanhas, biblioteca de mídia, fila e relatórios">
+              <div class="psy-poster-arc" aria-hidden="true">Publicar em três canais</div>
+              <i class="psy-cloud psy-cloud-one" aria-hidden="true"></i>
+              <i class="psy-cloud psy-cloud-two" aria-hidden="true"></i>
+              <div class="psy-mascot" aria-hidden="true"><span></span></div>
+              <div class="psy-sun-mark" aria-hidden="true">PMP</div>
+              <div class="psy-dashboard-card">
+                <div class="psy-dashboard-head">
+                  <span>Workspace de publicação</span>
+                  <div class="psy-platform-pills"><b>YT</b><b>TT</b><b>IG</b></div>
+                </div>
+                <div class="psy-workflow">
+                  <div><strong class="psy-dot-number">01</strong><span>Conectar contas</span></div>
+                  <div><strong class="psy-dot-number">02</strong><span>Criar campanha</span></div>
+                  <div><strong class="psy-dot-number">03</strong><span>Publicar vídeos</span></div>
+                  <div><strong class="psy-dot-number">04</strong><span>Acompanhar status</span></div>
+                </div>
+                <div class="psy-status-list">
+                  <span><b>Vídeos prontos</b><em>128</em></span>
+                  <span><b>Campanhas ativas</b><em>16</em></span>
+                  <span><b>Falhas para revisar</b><em>6</em></span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="psy-proof-strip" aria-label="Resumo do produto">
+            <article><strong class="psy-dot-number">1</strong><span>workspace para campanhas, mídia e destinos</span></article>
+            <article><strong class="psy-dot-number">3</strong><span>plataformas: YouTube, TikTok e Instagram</span></article>
+            <article><strong>OAuth</strong><span>contas conectadas pelo usuário</span></article>
+            <article><strong>Logs</strong><span>falhas visíveis para agir rápido</span></article>
+          </section>
+
+          <section id="como-funciona" class="psy-section">
+            <div class="psy-section-head">
+              <p class="psy-eyebrow">Fluxo em 4 passos</p>
+              <h2>Da conta conectada ao relatório semanal.</h2>
+            </div>
+            <div class="psy-step-grid">${stepsHtml}</div>
+          </section>
+
+          <section id="recursos" class="psy-section">
+            <div class="psy-section-head">
+              <p class="psy-eyebrow">Recursos principais</p>
+              <h2>Uma operação de vídeo mais clara.</h2>
+            </div>
+            <div class="psy-feature-grid">${featureCardsHtml}</div>
+          </section>
+
+          <section class="psy-section">
+            <div class="psy-section-head">
+              <p class="psy-eyebrow">Para quem é</p>
+              <h2>Feito para quem precisa publicar com previsibilidade.</h2>
+            </div>
+            <div class="psy-audience-grid">${audienceCardsHtml}</div>
+          </section>
+
+          <section id="integracoes" class="psy-section">
+            <div class="psy-section-head">
+              <p class="psy-eyebrow">Integrações</p>
+              <h2>YouTube, TikTok e Instagram em uma rotina única.</h2>
+              <p>As marcas identificam plataformas suportadas e não indicam afiliação, patrocínio ou operação oficial por elas.</p>
+            </div>
+            <div class="psy-platform-grid">${platformCardsHtml}</div>
+          </section>
+
+          <section id="seguranca" class="psy-section">
+            <div class="psy-security-card">
+              <div>
+                <p class="psy-eyebrow">Segurança e conformidade</p>
+                <h2>Controle de acesso claro antes de publicar.</h2>
+                <p>As contas são conectadas por autorização do usuário. Tokens devem ser protegidos, o usuário controla as contas conectadas e pode revogar acesso no workspace ou na própria plataforma.</p>
+                <p class="psy-disclaimer">Platform Multi Publisher não é afiliado, patrocinado ou operado oficialmente por YouTube, TikTok, Instagram, Google ou Meta.</p>
+              </div>
+              <div class="psy-security-links">
+                <a href="/privacy" data-link>Política de Privacidade</a>
+                <a href="/terms" data-link>Termos de Serviço</a>
+                <a href="/data-deletion" data-link>Exclusão de Dados do Usuário</a>
+              </div>
+            </div>
+          </section>
+
+          <section id="planos" class="psy-section">
+            <div class="psy-section-head">
+              <p class="psy-eyebrow">Preços</p>
+              <h2>Planos reais do workspace, com limites claros.</h2>
+              <p>Valores, plataformas e tokens seguem a mesma configuração da página Planos. Publicações podem depender de regras e disponibilidade das APIs de terceiros.</p>
+            </div>
+            <div class="public-pricing-grid">${planCardsHtml}</div>
+          </section>
+
+          <section id="faq" class="psy-section">
+            <div class="psy-section-head">
+              <p class="psy-eyebrow">FAQ</p>
+              <h2>Dúvidas comuns antes de conectar suas contas.</h2>
+            </div>
+            <div class="psy-faq-grid">${faqHtml}</div>
+          </section>
+
+          <section id="contato" class="psy-section">
+            <div class="psy-contact-card">
+              <div>
+                <p class="psy-eyebrow">Contato</p>
+                <h2>Quer validar a operação antes de cadastrar?</h2>
+                <p>Envie nome, email, empresa e mensagem. O formulário abre uma mensagem para o email de contato oficial.</p>
+              </div>
+              <form class="public-contact-form psy-contact-form" data-public-contact-form novalidate>
+                <label>Nome<input name="name" autocomplete="name" required /></label>
+                <label>Email<input name="email" type="email" autocomplete="email" required /></label>
+                <label>Empresa<input name="company" autocomplete="organization" /></label>
+                <label class="public-contact-message">Mensagem<textarea name="message" rows="4" required></textarea></label>
+                <p class="public-form-feedback" data-contact-feedback aria-live="polite"></p>
+                <button class="psy-button psy-button-primary" type="submit">Enviar mensagem</button>
+              </form>
+            </div>
+          </section>
+
+          <section class="psy-final-cta">
+            <p class="psy-eyebrow">Comece pela organização</p>
+            <h2>Pronto para centralizar sua operação de vídeos?</h2>
+            <div class="psy-actions">
+              <a class="psy-button psy-button-primary" href="/login?mode=register" data-link>Começar agora</a>
+              <a class="psy-button" href="#contato">Solicitar acesso</a>
+            </div>
+          </section>
+        </main>
+
+        <footer class="psy-footer" aria-label="Rodapé institucional">
+          <div>
+            <strong>Platform Multi Publisher</strong>
+            <span>Publicação profissional sem prometer resultados dependentes de terceiros.</span>
+          </div>
+          <nav aria-label="Links institucionais">
+            <a href="/privacy" data-link>Política de Privacidade</a>
+            <a href="/terms" data-link>Termos de Serviço</a>
+            <a href="/data-deletion" data-link>Exclusão de Dados do Usuário</a>
             <a href="/login" data-link>Entrar</a>
           </nav>
         </footer>
@@ -5532,9 +6320,10 @@ function getAccountPlatformKey(provider) {
 
 function accountPlatformLogoHtml(provider, className = 'account-platform-logo') {
   const platformKey = getAccountPlatformKey(provider);
+  const safePlatform = CAMPAIGN_FLOW_PLATFORMS.includes(platformKey) ? platformKey : 'youtube';
   return `
     <span class="${escapeAttribute(`${className} ${platformKey}`)}" title="${escapeAttribute(getProviderLabel(platformKey))}">
-      ${renderPlatformGlyph(platformKey, 'small')}
+      ${renderCampaignPlatformMark(safePlatform, 'account-platform-mark')}
     </span>
   `;
 }
@@ -6003,7 +6792,6 @@ function renderGrowthIdeaCard(idea) {
       <div class="growth-action-row">
         <button class="button button-secondary" type="button" data-growth-save-idea>Separar nesta sessao</button>
         <button class="button button-primary" type="button" data-growth-script-from-idea="${escapeAttribute(idea.title)}">Gerar roteiro</button>
-        <button class="button button-secondary" type="button" data-growth-campaign-from-idea="${escapeAttribute(idea.title)}">Criar campanha</button>
       </div>
     </article>
   `;
@@ -6022,6 +6810,21 @@ function renderGrowthScriptList(items) {
   const list = Array.isArray(items) ? items.filter(Boolean) : [];
   if (!list.length) return '<p>Nenhum sinal disponivel ainda.</p>';
   return `<ul>${list.map((item) => `<li>${escapeHtml(String(item))}</li>`).join('')}</ul>`;
+}
+
+function renderGrowthScriptCampaignAction(details = {}) {
+  if (!details.campaignReady) return '';
+  const topic = String(details.topic ?? '').trim();
+  if (!topic) return '';
+  return `
+    <section class="growth-script-next-action">
+      <div>
+        <strong>Proximo passo operacional</strong>
+        <p>Use este roteiro como base para abrir uma campanha real no PMP.</p>
+      </div>
+      <a class="button button-primary" data-link href="${escapeAttribute(buildUrl('/workspace/campanhas/nova', { idea: topic }))}">Criar campanha com roteiro</a>
+    </section>
+  `;
 }
 
 function renderGrowthScriptTimeline(timeline) {
@@ -6071,6 +6874,7 @@ function renderGrowthScriptResearchResult(result = {}) {
       <div><strong>Hashtags</strong><p>${Array.isArray(script.hashtags) ? script.hashtags.map((tag) => escapeHtml(String(tag))).join(' ') : ''}</p></div>
       <div><strong>Adaptacao por plataforma</strong>${renderGrowthScriptList(script.platformAdaptation)}</div>
     </section>
+    ${renderGrowthScriptCampaignAction(result)}
   `;
 }
 
@@ -6116,6 +6920,7 @@ function renderGrowthScriptResult(details = {}) {
       <div><strong>Legenda</strong><p>Menos chute. Mais estrategia. Use um sinal de audiencia para ajustar seu proximo post.</p></div>
       <div><strong>Hashtags</strong><p>#conteudodigital #socialmedia #crescimentoorganico #videoscurtos #estrategiadeconteudo</p></div>
     </section>
+    ${renderGrowthScriptCampaignAction({ ...details, topic })}
   `;
 }
 
@@ -7230,13 +8035,6 @@ function bindGrowthInteractions() {
         return;
       }
 
-      const campaignButton = event.target.closest('[data-growth-campaign-from-idea]');
-      if (campaignButton && rootEl.contains(campaignButton)) {
-        const idea = campaignButton.getAttribute('data-growth-campaign-from-idea') || campaignButton.closest('[data-growth-idea-card]')?.querySelector('h3')?.textContent?.trim() || '';
-        navigate(buildUrl('/workspace/campanhas/nova', { idea }));
-        return;
-      }
-
       const scriptButton = event.target.closest('[data-growth-script-from-idea]');
       if (scriptButton && rootEl.contains(scriptButton)) {
         const idea = scriptButton.getAttribute('data-growth-script-from-idea') || '';
@@ -7287,7 +8085,7 @@ function bindGrowthInteractions() {
         if (!response.ok) {
           throw new Error(response.error || response.body?.error || 'Nao foi possivel gerar o brief.');
         }
-        scriptResult.innerHTML = renderGrowthScriptResult(response.body);
+        scriptResult.innerHTML = renderGrowthScriptResult({ ...details, ...response.body, campaignReady: true });
         if (submitButton) {
           submitButton.disabled = false;
           submitButton.textContent = originalLabel;
@@ -7296,6 +8094,7 @@ function bindGrowthInteractions() {
       } catch (error) {
         scriptResult.innerHTML = renderGrowthScriptResult({
           ...details,
+          campaignReady: true,
           error: error?.message || 'Backend indisponivel; usando roteiro local sem brief do workspace.',
         });
         if (submitButton) {
@@ -7827,13 +8626,14 @@ function renderEditorialPulseInsights({ stats, campaigns, targetTotal, published
   `;
 }
 
-function renderEditorialPulseIcon(icon) {
-  const paths = {
-    create: '<path d="M12 5v14"/><path d="M5 12h14"/><path d="M5 5h14v14H5z"/>',
-    campaigns: '<path d="M5 7h14"/><path d="M5 12h14"/><path d="M5 17h9"/><path d="M3 7h.01"/><path d="M3 12h.01"/><path d="M3 17h.01"/>',
-    accounts: '<path d="M16 11a4 4 0 1 0-8 0"/><path d="M4 20a8 8 0 0 1 16 0"/><path d="M18 8a3 3 0 0 1 3 3"/><path d="M20 20a6 6 0 0 0-2.5-4.9"/>',
+function renderDashboardActionMark(kind = 'create') {
+  const map = {
+    create: { label: 'NEW', tone: 'info' },
+    campaigns: { label: 'FILA', tone: 'processing' },
+    accounts: { label: 'AUTH', tone: 'success' },
   };
-  return `<svg class="od-hero-action-svg" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[icon] ?? paths.create}</svg>`;
+  const meta = map[kind] ?? map.create;
+  return renderCampaignMark(meta.label, meta.tone, 'od-hero-action-mark');
 }
 
 function getDashboardChannelLabel(channel) {
@@ -7843,29 +8643,24 @@ function getDashboardChannelLabel(channel) {
 function renderRankBadge(index) {
   const rank = index + 1;
   const tier = index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : 'standard';
-  const iconPath = index === 0
-    ? '<path d="M7 9 4 7l2 9h12l2-9-3 2-5-5-5 5Z"/><path d="M7 20h10"/>'
-    : index < 3
-      ? '<circle cx="12" cy="9" r="4"/><path d="m9 13-2 7 5-3 5 3-2-7"/>'
-      : '<path d="M7 7h10"/><path d="M8.5 12h7"/><path d="M10.5 17h3"/>';
   return `
     <span class="od-rank-badge" data-rank-tier="${tier}" aria-label="Rank ${rank}">
-      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${iconPath}</svg>
+      ${renderCampaignMark(rank === 1 ? 'TOP' : `#${rank}`, rank === 1 ? 'success' : rank <= 3 ? 'warning' : 'info', 'od-rank-mark')}
       <span class="od-rank-number">${String(rank).padStart(2, '0')}</span>
     </span>
   `;
 }
 
-const CHANNEL_KPI_ICONS = {
-  youtube: renderPlatformLogo3d('youtube', 42, 'od-channel-platform-logo'),
-  tiktok: renderPlatformLogo3d('tiktok', 42, 'od-channel-platform-logo'),
-  instagram: renderPlatformLogo3d('instagram', 42, 'od-channel-platform-logo'),
-};
+function renderChannelKpiIcon(provider) {
+  return ['youtube', 'tiktok', 'instagram'].includes(provider)
+    ? renderCampaignPlatformMark(provider, 'od-channel-platform-mark')
+    : '';
+}
 
 function renderDeltaArrow(direction) {
   return direction === 'down'
-    ? '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m5 12 7 7 7-7"/></svg>'
-    : '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>';
+    ? renderCampaignMark('DN', 'danger', 'od-delta-mark')
+    : renderCampaignMark('UP', 'success', 'od-delta-mark');
 }
 
 function buildChannelKpiSlots(channelsByProvider) {
@@ -7915,7 +8710,7 @@ function buildChannelKpiSlots(channelsByProvider) {
 
 function renderChannelKpiCard(provider, slot) {
   const platformLabel = dashboardPlatformLabel(provider);
-  const icon = CHANNEL_KPI_ICONS[provider] ?? '';
+  const icon = renderChannelKpiIcon(provider);
   const hasData = slot && (slot.individual.length > 0 || slot.aggregate);
   if (!hasData) {
     return `
@@ -8655,40 +9450,81 @@ async function renderPlatformDashboardPage() {
             : 'creator';
   const pulseAdsByProfile = {
     tutorial: [
-      'Your tutorial content is outperforming with consistent completion.',
-      'Turn every lesson into cross-platform reach in one launch flow.',
-      'Publish smarter: queue, schedule, and optimize every tutorial drop.',
+      'Tutoriais estao criando consistencia. Transforme a proxima aula em campanha.',
+      'Cada explicacao pode virar distribuicao multi-plataforma em um fluxo.',
+      'Publique com fila, agenda e revisao antes de cada tutorial ir ao ar.',
     ],
     podcast: [
-      'Podcast clips are your growth engine. Keep momentum every week.',
-      'From long-form episodes to short highlights, publish in one command.',
-      'Editorial cadence for creators who win by consistency.',
+      'Cortes de podcast sustentam ritmo. Mantenha a cadencia semanal.',
+      'Do episodio longo ao destaque curto, publique sem perder controle.',
+      'Cadencia editorial para criadores que vencem por consistencia.',
     ],
     gaming: [
-      'Gameplay highlights are pulling attention across your channels.',
-      'Stack launches, keep the hype cycle, and ship every drop faster.',
-      'One control room for shorts, recaps, and high-view uploads.',
+      'Melhores momentos de gameplay podem alimentar varios canais.',
+      'Empilhe lancamentos, mantenha o ciclo de hype e publique mais rapido.',
+      'Um controle unico para shorts, recaps e videos com maior sinal.',
     ],
     music: [
-      'Your music releases are building compounding audience demand.',
-      'Drop clips, visuals, and full cuts with synchronized publishing.',
-      'From teaser to premiere, your release flow stays launch-ready.',
+      'Lancamentos musicais precisam de repeticao planejada, nao improviso.',
+      'Publique cortes, visuais e versoes completas com sincronia.',
+      'Do teaser a estreia, o fluxo fica pronto para lancar.',
     ],
     tech: [
-      'Tech-focused videos are driving strong view momentum.',
-      'Ship reviews, explainers, and updates with editorial precision.',
-      'Campaign-level control for creators publishing at high velocity.',
+      'Videos de tecnologia pedem precisao editorial e repeticao inteligente.',
+      'Publique reviews, explicacoes e updates com controle de campanha.',
+      'Controle de alto ritmo para criadores que publicam com frequencia.',
     ],
     creator: [
-      'Your content profile is primed for multi-platform distribution.',
-      'Scale reach with a campaign workflow tuned to your publishing rhythm.',
-      'From idea to live post, every launch stays organized and fast.',
+      'Seu perfil esta pronto para distribuicao multi-plataforma.',
+      'Escalone alcance com um fluxo alinhado ao seu ritmo de publicacao.',
+      'Da ideia ao post publicado, cada lancamento fica organizado.',
     ],
   };
   const pulseAds = pulseAdsByProfile[profileTag];
-  const leadershipHtml = renderLeadershipRows(rankedChannels, 'No ranked videos yet.');
+  const leadershipHtml = renderLeadershipRows(rankedChannels, 'Nenhum video ranqueado ainda.');
   const viewsPerformanceHtml = renderViewsPerformancePanel(rankedChannels);
   const playlistPanelHtml = renderDashboardPlaylistPanel(playlists, assets);
+  const reauthAccounts = accounts.filter((account) => String(account?.status ?? '').toLowerCase() === 'reauth_required').length;
+  const topSignal = rankedChannels[0] ?? null;
+  const dashboardDecisionCards = [
+    {
+      label: 'O que publicar',
+      title: nextCampaign ? 'Acompanhar proxima campanha' : 'Criar proxima campanha',
+      detail: nextCampaign
+        ? `${nextCampaign.title ?? 'Campanha sem titulo'} - ${formatDate(nextCampaign.scheduledAt)}`
+        : assets.length > 0
+          ? 'Use uma midia pronta e escolha destinos ativos.'
+          : 'Envie uma midia antes de criar a proxima campanha.',
+      href: nextCampaign?.id ? `/workspace/campanhas/${encodeURIComponent(nextCampaign.id)}` : '/workspace/campanhas/nova',
+      cta: nextCampaign ? 'Abrir campanha' : 'Criar campanha',
+      tone: 'info',
+      mark: 'POST',
+    },
+    {
+      label: 'O que corrigir',
+      title: failedTargets > 0 ? `${formatNumber(failedTargets)} falhas de publicacao` : reauthAccounts > 0 ? `${formatNumber(reauthAccounts)} conta precisa OAuth` : 'Operacao sem bloqueio critico',
+      detail: failedTargets > 0
+        ? 'Priorize destinos com erro antes de criar novos lancamentos.'
+        : reauthAccounts > 0
+          ? 'Reconecte contas para recuperar campanhas travadas.'
+          : 'Mantenha a fila saudavel revisando destinos e canais.',
+      href: failedTargets > 0 ? '/workspace/campanhas?status=failed' : reauthAccounts > 0 ? '/workspace/accounts?status=reauth_required' : '/workspace/accounts',
+      cta: failedTargets > 0 ? 'Ver falhas' : reauthAccounts > 0 ? 'Reconectar' : 'Ver contas',
+      tone: failedTargets > 0 || reauthAccounts > 0 ? 'danger' : 'success',
+      mark: failedTargets > 0 || reauthAccounts > 0 ? 'FIX' : 'OK',
+    },
+    {
+      label: 'O que esta performando',
+      title: topSignal?.topVideoTitle ? String(topSignal.topVideoTitle).slice(0, 54) : 'Sem ranking consolidado ainda',
+      detail: topSignal
+        ? `${formatNumber(Number(topSignal.topVideoViews ?? 0))} views no melhor sinal.`
+        : 'Publique e conecte canais para gerar leitura de performance.',
+      href: '/workspace/growth/metricas',
+      cta: 'Ver sinais',
+      tone: topSignal ? 'success' : 'warning',
+      mark: topSignal ? 'TOP' : 'SINAL',
+    },
+  ];
 
   const contentHtml = `
     <div id="od-root" class="od-root od-dashboard-pro" data-mode="overview">
@@ -8699,21 +9535,21 @@ async function renderPlatformDashboardPage() {
 
       <div class="od-topbar od-command-topbar">
         <div>
-          <div class="od-brand">Editorial Dashboard</div>
-          <span class="od-muted">Signal-rich overview for operations and publishing.</span>
+          <div class="od-brand">Painel editorial</div>
+          <span class="od-muted">Visao operacional para publicacao e performance.</span>
         </div>
         <div class="od-topbar-right od-muted od-mono">
           <span class="od-live-dot"></span><span data-dashboard-clock>${escapeHtml(liveClock)}</span>
-          <button type="button" class="od-refresh-button od-mono" data-action="dashboard-refresh">Refresh</button>
+          <button type="button" class="od-refresh-button od-mono" data-action="dashboard-refresh">Atualizar</button>
         </div>
       </div>
 
       <section class="od-command-hero od-command-hero-split">
         <div class="od-hero-copy od-panel">
           <div class="od-pulse-header">
-            <span class="od-kpi-label od-mono">Editorial Pulse</span>
-            <span class="od-pulse-clock od-mono" aria-label="Current time">
-              <span>Now</span>
+            <span class="od-kpi-label od-mono">Pulso editorial</span>
+            <span class="od-pulse-clock od-mono" aria-label="Hora atual">
+              <span>Agora</span>
               <strong data-dashboard-clock>${escapeHtml(liveClock)}</strong>
             </span>
           </div>
@@ -8721,31 +9557,51 @@ async function renderPlatformDashboardPage() {
             ${pulseAds.map((line, index) => `<h1 class="od-pulse-line${index === 0 ? ' active' : ''}" data-pulse-line>${escapeHtml(line)}</h1>`).join('')}
           </div>
           <p class="od-muted">
-            Next campaign: ${escapeHtml(nextCampaign ? `${nextCampaign.title ?? 'Untitled'} at ${formatDate(nextCampaign.scheduledAt)}` : 'none scheduled')}
+            Proxima campanha: ${escapeHtml(nextCampaign ? `${nextCampaign.title ?? 'Sem titulo'} em ${formatDate(nextCampaign.scheduledAt)}` : 'nenhuma agendada')}
           </p>
           ${renderEditorialPulseInsights({ stats, campaigns, targetTotal, publishedTargets, failedTargets, activeJobs, successRate, projectedQuota })}
           <div class="od-hero-actions">
             <a class="platform-button-primary od-hero-action-btn" data-link href="/workspace/campanhas/nova">
-              <span class="od-hero-action-icon">${renderEditorialPulseIcon('create')}</span>
-              <span>Create campaign</span>
+              <span class="od-hero-action-icon">${renderDashboardActionMark('create')}</span>
+              <span>Criar campanha</span>
             </a>
             <a class="button button-secondary od-hero-action-btn" data-link href="/workspace/campanhas">
-              <span class="od-hero-action-icon">${renderEditorialPulseIcon('campaigns')}</span>
-              <span>Campaigns</span>
+              <span class="od-hero-action-icon">${renderDashboardActionMark('campaigns')}</span>
+              <span>Ver campanhas</span>
             </a>
             <a class="button button-secondary od-hero-action-btn" data-link href="/workspace/accounts">
-              <span class="od-hero-action-icon">${renderEditorialPulseIcon('accounts')}</span>
-              <span>Accounts</span>
+              <span class="od-hero-action-icon">${renderDashboardActionMark('accounts')}</span>
+              <span>Contas conectadas</span>
             </a>
           </div>
         </div>
         ${playlistPanelHtml}
       </section>
 
-      <section class="od-channel-kpi-row" aria-label="Channel performance">
+      <section class="od-decision-strip" aria-label="Proxima melhor acao">
+        <div class="od-decision-head">
+          <span class="od-kpi-label od-mono">Proxima melhor acao</span>
+          <span class="od-panel-meta od-muted od-mono">Publicar, corrigir, repetir</span>
+        </div>
+        <div class="od-decision-grid">
+          ${dashboardDecisionCards.map((card) => `
+            <article class="od-decision-card" data-tone="${escapeHtml(card.tone)}">
+              ${renderCampaignMark(card.mark, card.tone, 'od-decision-mark')}
+              <div class="od-decision-copy">
+                <span>${escapeHtml(card.label)}</span>
+                <strong>${escapeHtml(card.title)}</strong>
+                <p>${escapeHtml(card.detail)}</p>
+              </div>
+              <a class="button button-secondary button-sm" data-link href="${escapeHtml(card.href)}">${escapeHtml(card.cta)}</a>
+            </article>
+          `).join('')}
+        </div>
+      </section>
+
+      <section class="od-channel-kpi-row" aria-label="Desempenho dos canais">
         <div class="od-channel-kpi-head">
-          <span class="od-kpi-label od-mono">Channel performance</span>
-          <span class="od-panel-meta od-muted od-mono">Today vs. last 24h</span>
+          <span class="od-kpi-label od-mono">Desempenho dos canais</span>
+          <span class="od-panel-meta od-muted od-mono">Hoje vs. ultimas 24h</span>
         </div>
         <div class="od-channel-kpi-grid" data-channel-kpi-grid>
           ${renderChannelKpiCards(channelsByProvider)}
@@ -8753,40 +9609,40 @@ async function renderPlatformDashboardPage() {
       </section>
 
       <section class="od-kpi-grid">
-        <article class="od-kpi-card" data-tone="info"><span class="od-kpi-label od-mono">Campaigns</span><strong>${formatNumber(campaignTotal)}</strong><span class="od-kpi-detail">Total in workspace</span></article>
-        <article class="od-kpi-card" data-tone="success"><span class="od-kpi-label od-mono">Published</span><strong>${formatNumber(publishedTargets)}</strong><span class="od-kpi-detail">Successful targets</span></article>
-        <article class="od-kpi-card" data-tone="warning"><span class="od-kpi-label od-mono">In Queue</span><strong>${formatNumber(activeJobs)}</strong><span class="od-kpi-detail">Queued + processing jobs</span></article>
-        <article class="od-kpi-card" data-tone="danger"><span class="od-kpi-label od-mono">Failures</span><strong>${formatNumber(failedTargets)}</strong><span class="od-kpi-detail">Targets with error</span></article>
-        <article class="od-kpi-card" data-tone="info"><span class="od-kpi-label od-mono">Assets</span><strong>${formatNumber(assets.length)}</strong><span class="od-kpi-detail">Media library size</span></article>
-        <article class="od-kpi-card" data-tone="success"><span class="od-kpi-label od-mono">Quota</span><strong>${formatPercent(projectedQuota)}</strong><span class="od-kpi-detail">${formatPercent(successRate)} success rate</span></article>
+        <article class="od-kpi-card" data-tone="info"><span class="od-kpi-label od-mono">Campanhas</span><strong>${formatNumber(campaignTotal)}</strong><span class="od-kpi-detail">Total no workspace</span></article>
+        <article class="od-kpi-card" data-tone="success"><span class="od-kpi-label od-mono">Publicados</span><strong>${formatNumber(publishedTargets)}</strong><span class="od-kpi-detail">Destinos com sucesso</span></article>
+        <article class="od-kpi-card" data-tone="warning"><span class="od-kpi-label od-mono">Em fila</span><strong>${formatNumber(activeJobs)}</strong><span class="od-kpi-detail">Jobs em fila + processamento</span></article>
+        <article class="od-kpi-card" data-tone="danger"><span class="od-kpi-label od-mono">Falhas</span><strong>${formatNumber(failedTargets)}</strong><span class="od-kpi-detail">Destinos com erro</span></article>
+        <article class="od-kpi-card" data-tone="info"><span class="od-kpi-label od-mono">Midias</span><strong>${formatNumber(assets.length)}</strong><span class="od-kpi-detail">Tamanho da biblioteca</span></article>
+        <article class="od-kpi-card" data-tone="success"><span class="od-kpi-label od-mono">Cota</span><strong>${formatPercent(projectedQuota)}</strong><span class="od-kpi-detail">${formatPercent(successRate)} taxa de sucesso</span></article>
       </section>
 
       <section class="od-dashboard-section" data-dashboard-panel="overview">
         <div class="od-dashboard-main">
           <div class="od-panel">
             <div class="od-panel-head">
-              <span class="od-panel-label od-mono">Operations Summary</span>
+              <span class="od-panel-label od-mono">Resumo operacional</span>
             </div>
             <div class="od-health-metrics">
-              <div><span>Targets</span><strong>${formatNumber(targetTotal)}</strong></div>
-              <div><span>Accounts</span><strong>${formatNumber(accounts.length)}</strong></div>
-              <div><span>Destinations</span><strong>${formatNumber(destinations.length)}</strong></div>
-              <div><span>Clock</span><strong>${escapeHtml(liveClock)}</strong></div>
+              <div><span>Destinos</span><strong>${formatNumber(targetTotal)}</strong></div>
+              <div><span>Contas</span><strong>${formatNumber(accounts.length)}</strong></div>
+              <div><span>Canais</span><strong>${formatNumber(destinations.length)}</strong></div>
+              <div><span>Hora</span><strong>${escapeHtml(liveClock)}</strong></div>
             </div>
           </div>
         </div>
         <div class="od-dashboard-main od-performance-row">
           <div class="od-panel od-leader-panel">
             <div class="od-panel-head">
-              <span class="od-panel-label od-mono">TOP PERFORMERS</span>
-              <span class="od-panel-meta od-muted od-mono">Ranked videos by views</span>
+              <span class="od-panel-label od-mono">MELHORES SINAIS</span>
+              <span class="od-panel-meta od-muted od-mono">Videos por visualizacoes</span>
             </div>
             ${leadershipHtml}
           </div>
           <div class="od-panel od-views-panel">
             <div class="od-panel-head">
-              <span class="od-panel-label od-mono">VIEW PERFORMANCE</span>
-              <span class="od-panel-meta od-muted od-mono">Overall channel views</span>
+              <span class="od-panel-label od-mono">DESEMPENHO DE VIEWS</span>
+              <span class="od-panel-meta od-muted od-mono">Visualizacoes por canal</span>
             </div>
             ${viewsPerformanceHtml}
           </div>
@@ -9019,18 +9875,18 @@ async function renderAccountsOauthCallbackPage() {
 
   if (!code || !stateParam) {
     renderWorkspaceShell({
-      title: 'Accounts',
+      title: 'Contas',
       subtitle: `${providerLabel} OAuth callback`,
-      noticeHtml: '<div class="notice error">Missing OAuth callback parameters (code/state).</div>',
-      contentHtml: '<section class="card"><a class="button button-secondary" data-link href="/workspace/accounts">Back to accounts</a></section>',
+      noticeHtml: '<div class="notice error">Parametros OAuth ausentes (code/state).</div>',
+      contentHtml: '<section class="card"><a class="button button-secondary" data-link href="/workspace/accounts">Voltar para contas</a></section>',
     });
     return;
   }
 
   renderWorkspaceShell({
-    title: 'Accounts',
-    subtitle: `Finishing ${providerLabel} connection...`,
-    contentHtml: `<section class="card">Connecting your ${providerLabel} account...</section>`,
+    title: 'Contas',
+    subtitle: `Finalizando conexao ${providerLabel}...`,
+    contentHtml: `<section class="card">Conectando sua conta ${providerLabel}...</section>`,
   });
 
   const callbackResult = await callbackRequest;
@@ -9065,10 +9921,10 @@ async function renderAccountsPage() {
       return;
     }
     renderWorkspaceShell({
-      title: 'Accounts',
-      subtitle: 'Connected social accounts and publishing channels.',
+      title: 'Contas',
+      subtitle: 'Contas sociais conectadas e canais de publicacao.',
       noticeHtml: `<div class="notice error">${escapeHtml(listResult.error)}</div>`,
-      contentHtml: '<section class="card">Unable to load accounts.</section>',
+      contentHtml: '<section class="card">Nao foi possivel carregar as contas.</section>',
     });
     return;
   }
@@ -9183,19 +10039,19 @@ async function renderAccountsPage() {
       key: 'youtube',
       label: 'YouTube',
       count: accounts.filter((account) => ['google', 'youtube'].includes((account.provider ?? '').toLowerCase())).length,
-      detail: 'Channel sync + publishing',
+      detail: 'Sincronia de canais e publicacao',
     },
     {
       key: 'tiktok',
       label: 'TikTok',
       count: accounts.filter((account) => (account.provider ?? '').toLowerCase() === 'tiktok').length,
-      detail: 'Short-form relay',
+      detail: 'Publicacao short-form',
     },
     {
       key: 'instagram',
       label: 'Instagram',
       count: accounts.filter((account) => (account.provider ?? '').toLowerCase() === 'instagram').length,
-      detail: 'Reels publishing',
+      detail: 'Publicacao em Reels',
     },
   ];
   const providerBreakdownHtml = providerBreakdown.map((provider) => `
@@ -9208,10 +10064,10 @@ async function renderAccountsPage() {
     </article>
   `).join('');
   const metricsCards = [
-    { label: 'Connected', value: connectedCount, hint: 'Accounts ready to publish', tone: 'success' },
-    { label: 'Reauth Required', value: reauthCount, hint: 'Accounts needing reconnection', tone: 'warning' },
-    { label: 'Disconnected', value: disconnectedCount, hint: 'Manually disconnected accounts', tone: 'danger' },
-    { label: 'Active Channels', value: activeChannels, hint: `${formatNumber(totalChannels)} channels total`, tone: 'info' },
+    { label: 'Conectadas', value: connectedCount, hint: 'Contas prontas para publicar', tone: 'success' },
+    { label: 'Reconectar', value: reauthCount, hint: 'Contas que precisam de OAuth', tone: 'warning' },
+    { label: 'Desconectadas', value: disconnectedCount, hint: 'Contas removidas manualmente', tone: 'danger' },
+    { label: 'Canais ativos', value: activeChannels, hint: `${formatNumber(totalChannels)} canais no total`, tone: 'info' },
   ];
 
   const metricsHtml = metricsCards.map((card) => `
@@ -9238,27 +10094,27 @@ async function renderAccountsPage() {
                 ${channelAvatarHtml(previewChannel, visibleChannelName, 'channel-avatar account-channel-avatar')}
                 <div class="account-chip-main">
                   <strong>${escapeHtml(visibleChannelName)}</strong>
-                  <small>${previewChannel ? 'YouTube channel' : escapeHtml(getProviderLabel(platformKey))}</small>
+                <small>${previewChannel ? 'Canal do YouTube' : escapeHtml(getProviderLabel(platformKey))}</small>
                 </div>
                 ${accountPlatformLogoHtml(platformKey)}
               </div>
               <div class="account-chip-bottom">
                 ${statusPill(account.status)}
-                <small>${formatNumber(activeCount)} / ${formatNumber(accountChannels.length)} channels</small>
+                <small>${formatNumber(activeCount)} / ${formatNumber(accountChannels.length)} canais</small>
               </div>
             </a>
             <div class="account-chip-footer-actions inline-actions">
-              <button class="button button-secondary button-sm" data-action="disconnect-account" data-account-id="${escapeHtml(account.id)}" type="button">Disconnect</button>
-              <button class="button button-danger button-sm" data-action="delete-account" data-account-id="${escapeHtml(account.id)}" type="button">Delete</button>
+              <button class="button button-secondary button-sm" data-action="disconnect-account" data-account-id="${escapeHtml(account.id)}" type="button">Desconectar</button>
+              <button class="button button-danger button-sm" data-action="delete-account" data-account-id="${escapeHtml(account.id)}" type="button">Excluir</button>
             </div>
           </div>
         `;
       }).join('');
 
   const channelsRows = !selectedAccountId
-    ? '<tr><td colspan="4" class="muted">Select an account to view channels.</td></tr>'
+    ? '<tr><td colspan="4" class="muted">Selecione uma conta para ver os canais.</td></tr>'
     : channels.length === 0
-      ? '<tr><td colspan="4" class="muted">No channels returned for this account.</td></tr>'
+      ? '<tr><td colspan="4" class="muted">Nenhum canal retornado para esta conta.</td></tr>'
       : channels.map((channel) => {
           const channelName = formatVisibleChannelName(channel);
           return `
@@ -9275,14 +10131,14 @@ async function renderAccountsPage() {
               <td>${statusPill(channel.isActive ? 'active' : 'inactive')}</td>
               <td>
                 <button class="button button-secondary button-sm" data-action="toggle-channel" data-account-id="${escapeHtml(selectedAccountId)}" data-channel-id="${escapeHtml(channel.id)}" data-next-active="${channel.isActive ? 'false' : 'true'}" type="button">
-                  ${channel.isActive ? 'Deactivate' : 'Activate'}
+                  ${channel.isActive ? 'Desativar' : 'Ativar'}
                 </button>
               </td>
             </tr>
           `;
         }).join('');
   const allChannelsRows = allChannels.length === 0
-    ? '<tr><td colspan="4" class="muted">No channels discovered across the connected accounts yet.</td></tr>'
+    ? '<tr><td colspan="4" class="muted">Nenhum canal encontrado nas contas conectadas ainda.</td></tr>'
     : allChannels.map((channel) => {
         const channelName = formatVisibleChannelName(channel);
         return `
@@ -9306,8 +10162,8 @@ async function renderAccountsPage() {
   if (oauth === 'success') {
     notices.push(`
       <div class="notice info">
-        <h4>${escapeHtml(oauthProviderLabel)} account connected</h4>
-        <p>${escapeHtml(syncMessage || 'The OAuth callback completed successfully.')}</p>
+        <h4>Conta ${escapeHtml(oauthProviderLabel)} conectada</h4>
+        <p>${escapeHtml(syncMessage || 'OAuth concluido com sucesso.')}</p>
       </div>
     `);
     if (reauthReturnProvider) {
@@ -9325,24 +10181,24 @@ async function renderAccountsPage() {
   if (oauth === 'error') {
     notices.push(`
       <div class="notice error">
-        <h4>${escapeHtml(oauthProviderLabel)} OAuth failed</h4>
-        <p>${escapeHtml(oauthMessage || 'Unable to finish OAuth callback.')}</p>
+        <h4>OAuth ${escapeHtml(oauthProviderLabel)} falhou</h4>
+        <p>${escapeHtml(oauthMessage || 'Nao foi possivel concluir o OAuth.')}</p>
       </div>
     `);
   }
   if (selectedAccount && selectedAccountSupportsChannels && channels.length === 0) {
     notices.push(`
       <div class="notice warning">
-        <h4>No YouTube channels found yet</h4>
-        <p>This Google sign-in is connected, but no YouTube channels were returned for this account. Try <strong>Sync channels</strong>, or sign in with the Google profile that owns the channel or Brand Account.</p>
+        <h4>Nenhum canal do YouTube encontrado</h4>
+        <p>Esta conta Google esta conectada, mas nenhum canal do YouTube foi retornado. Tente <strong>Sincronizar canais</strong> ou entre com o perfil Google dono do canal ou Brand Account.</p>
       </div>
     `);
   }
   if (selectedAccount && !selectedAccountSupportsChannels) {
     notices.push(`
       <div class="notice info">
-        <h4>${escapeHtml(getProviderLabel(selectedAccount.provider))} connected</h4>
-        <p>This provider is now stored in the workspace. Channel sync is currently only available for YouTube connections.</p>
+        <h4>${escapeHtml(getProviderLabel(selectedAccount.provider))} conectado</h4>
+        <p>Este provedor esta salvo no workspace. Sincronia por canal esta disponivel apenas para conexoes do YouTube.</p>
       </div>
     `);
   }
@@ -9365,43 +10221,43 @@ async function renderAccountsPage() {
 
   const accountsSetupCard = accounts.length === 0
     ? renderEmptyStateCard({
-        title: 'No connected accounts yet',
-        message: 'Connect YouTube, TikTok, or Instagram accounts to centralize your publishing workspace.',
+        title: 'Nenhuma conta conectada ainda',
+        message: 'Conecte YouTube, TikTok ou Instagram para centralizar a publicacao do workspace.',
         tone: 'info',
         actionsHtml: `
-          <button class="button button-primary" type="button" data-action="start-youtube-oauth">Connect YouTube</button>
-          <button class="button button-secondary" type="button" data-action="start-tiktok-oauth">Connect TikTok</button>
-          <button class="button button-secondary" type="button" data-action="start-instagram-oauth">Connect Instagram</button>
+          <button class="button button-primary" type="button" data-action="start-youtube-oauth">Conectar YouTube</button>
+          <button class="button button-secondary" type="button" data-action="start-tiktok-oauth">Conectar TikTok</button>
+          <button class="button button-secondary" type="button" data-action="start-instagram-oauth">Conectar Instagram</button>
         `,
       })
     : filteredAccounts.length === 0
       ? renderEmptyStateCard({
-          title: 'No accounts match the current filters',
-          message: 'Try clearing search or status filters to see the connected accounts again.',
-          actionsHtml: '<a class="button button-secondary" data-link href="/workspace/accounts">Clear filters</a>',
+          title: 'Nenhuma conta nos filtros atuais',
+          message: 'Limpe a busca ou o status para ver as contas conectadas novamente.',
+          actionsHtml: '<a class="button button-secondary" data-link href="/workspace/accounts">Limpar filtros</a>',
         })
       : '';
   const channelsOverviewCard = accounts.length > 0 && allChannels.length === 0
     ? renderEmptyStateCard({
-        title: 'Channels have not been discovered yet',
-        message: 'The sign-in is connected, but no channels were returned yet. Run Sync channels or reconnect using the Google profile that owns the channel or Brand Account.',
+        title: 'Canais ainda nao encontrados',
+        message: 'A conta esta conectada, mas nenhum canal foi retornado. Sincronize canais ou reconecte usando o perfil Google dono do canal ou Brand Account.',
         tone: 'warning',
         actionsHtml: selectedAccountId
-          ? `<button class="button button-secondary" type="button" data-action="sync-channels" data-account-id="${escapeHtml(selectedAccountId)}">Sync channels</button>`
+          ? `<button class="button button-secondary" type="button" data-action="sync-channels" data-account-id="${escapeHtml(selectedAccountId)}">Sincronizar canais</button>`
           : '',
       })
     : '';
   const selectedAccountLabel = selectedAccountDisplayLabel;
 
   renderWorkspaceShell({
-    title: 'Accounts',
-    subtitle: 'Connected YouTube, TikTok, and Instagram publishing accounts.',
+    title: 'Contas',
+    subtitle: 'Contas de publicacao conectadas ao YouTube, TikTok e Instagram.',
     actionsHtml: `
       <div class="inline-actions">
-        <button class="button button-primary" type="button" data-action="start-youtube-oauth">Connect YouTube</button>
-        <button class="button button-secondary" type="button" data-action="start-tiktok-oauth">Connect TikTok</button>
-        <button class="button button-secondary" type="button" data-action="start-instagram-oauth">Connect Instagram</button>
-        <a class="button button-secondary" data-link href="${escapeHtml(buildUrl('/workspace/accounts', { search, status: statusFilter }))}">Refresh</a>
+        <button class="button button-primary" type="button" data-action="start-youtube-oauth">Conectar YouTube</button>
+        <button class="button button-secondary" type="button" data-action="start-tiktok-oauth">Conectar TikTok</button>
+        <button class="button button-secondary" type="button" data-action="start-instagram-oauth">Conectar Instagram</button>
+        <a class="button button-secondary" data-link href="${escapeHtml(buildUrl('/workspace/accounts', { search, status: statusFilter }))}">Atualizar</a>
       </div>
     `,
     noticeHtml: notices.join(''),
@@ -9418,29 +10274,27 @@ async function renderAccountsPage() {
           <div class="accounts-cockpit-title-block">
             <span class="accounts-cockpit-kicker">
               <span class="accounts-cockpit-pulse-dot"></span>
-              ACCOUNTS COMMAND
+              COMANDO DE CONTAS
             </span>
-            <h2 class="accounts-cockpit-title">Every publishing identity, <span class="accounts-cockpit-title-accent">one cockpit.</span></h2>
-            <p class="accounts-cockpit-subtitle">Review health, reconnect providers and route campaigns without leaving the workspace.</p>
+            <h2 class="accounts-cockpit-title">Todas as identidades de publicacao, <span class="accounts-cockpit-title-accent">um cockpit.</span></h2>
+            <p class="accounts-cockpit-subtitle">Revise saude, reconecte provedores e direcione campanhas sem sair do workspace.</p>
           </div>
           <div class="accounts-cockpit-sync">
-            <span class="accounts-cockpit-sync-status"><span class="accounts-cockpit-sync-dot"></span>LIVE SYNC</span>
+            <span class="accounts-cockpit-sync-status"><span class="accounts-cockpit-sync-dot"></span>SINCRONIZADO</span>
             <strong class="accounts-cockpit-sync-time">${escapeHtml(liveClock)}</strong>
-            <span class="accounts-cockpit-sync-label">${formatNumber(activeChannels)} active routes</span>
+            <span class="accounts-cockpit-sync-label">${formatNumber(activeChannels)} rotas ativas</span>
           </div>
         </header>
 
         <div class="accounts-cockpit-grid-cards">
           <article class="accounts-cockpit-card accounts-cockpit-card-platform" data-platform="youtube" tabindex="0" role="button" aria-label="YouTube — ${formatNumber(providerBreakdown[0].count)} accounts">
-            <div class="accounts-cockpit-card-glow"></div>
             <div class="accounts-cockpit-card-icon-wrap">
-              <span class="accounts-cockpit-card-icon">${renderPlatformGlyph('youtube', 'small')}</span>
-              <span class="accounts-cockpit-card-icon-ring"></span>
+              <span class="accounts-cockpit-card-icon">${renderCampaignPlatformMark('youtube', 'accounts-platform-mark')}</span>
             </div>
             <div class="accounts-cockpit-card-info">
               <span class="accounts-cockpit-card-label">YouTube</span>
               <strong class="accounts-cockpit-card-value" data-counter="${providerBreakdown[0].count}">0</strong>
-              <span class="accounts-cockpit-card-detail">Channel sync + publishing</span>
+              <span class="accounts-cockpit-card-detail">Sincronia de canais e publicacao</span>
             </div>
             <div class="accounts-cockpit-card-arrow" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -9451,15 +10305,13 @@ async function renderAccountsPage() {
           </article>
 
           <article class="accounts-cockpit-card accounts-cockpit-card-platform" data-platform="tiktok" tabindex="0" role="button" aria-label="TikTok — ${formatNumber(providerBreakdown[1].count)} accounts">
-            <div class="accounts-cockpit-card-glow"></div>
             <div class="accounts-cockpit-card-icon-wrap">
-              <span class="accounts-cockpit-card-icon">${renderPlatformGlyph('tiktok', 'small')}</span>
-              <span class="accounts-cockpit-card-icon-ring"></span>
+              <span class="accounts-cockpit-card-icon">${renderCampaignPlatformMark('tiktok', 'accounts-platform-mark')}</span>
             </div>
             <div class="accounts-cockpit-card-info">
               <span class="accounts-cockpit-card-label">TikTok</span>
               <strong class="accounts-cockpit-card-value" data-counter="${providerBreakdown[1].count}">0</strong>
-              <span class="accounts-cockpit-card-detail">Short-form relay</span>
+              <span class="accounts-cockpit-card-detail">Publicacao short-form</span>
             </div>
             <div class="accounts-cockpit-card-arrow" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -9470,15 +10322,13 @@ async function renderAccountsPage() {
           </article>
 
           <article class="accounts-cockpit-card accounts-cockpit-card-platform" data-platform="instagram" tabindex="0" role="button" aria-label="Instagram — ${formatNumber(providerBreakdown[2].count)} accounts">
-            <div class="accounts-cockpit-card-glow"></div>
             <div class="accounts-cockpit-card-icon-wrap">
-              <span class="accounts-cockpit-card-icon">${renderPlatformGlyph('instagram', 'small')}</span>
-              <span class="accounts-cockpit-card-icon-ring"></span>
+              <span class="accounts-cockpit-card-icon">${renderCampaignPlatformMark('instagram', 'accounts-platform-mark')}</span>
             </div>
             <div class="accounts-cockpit-card-info">
               <span class="accounts-cockpit-card-label">Instagram</span>
               <strong class="accounts-cockpit-card-value" data-counter="${providerBreakdown[2].count}">0</strong>
-              <span class="accounts-cockpit-card-detail">Reels publishing</span>
+              <span class="accounts-cockpit-card-detail">Publicacao em Reels</span>
             </div>
             <div class="accounts-cockpit-card-arrow" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -9489,38 +10339,38 @@ async function renderAccountsPage() {
           </article>
 
           <article class="accounts-cockpit-stat" data-tone="info">
-            <div class="accounts-cockpit-stat-icon">👤</div>
+            <div class="accounts-cockpit-stat-icon">${renderCampaignMark('FOCO', 'info', 'accounts-cockpit-stat-mark')}</div>
             <div class="accounts-cockpit-stat-info">
-              <span class="accounts-cockpit-stat-label">Selected</span>
+              <span class="accounts-cockpit-stat-label">Foco</span>
               <strong class="accounts-cockpit-stat-value">${escapeHtml(selectedAccountLabel.length > 14 ? selectedAccountLabel.slice(0, 13) + '…' : selectedAccountLabel)}</strong>
-              <span class="accounts-cockpit-stat-detail">Active focus</span>
+              <span class="accounts-cockpit-stat-detail">Conta selecionada</span>
             </div>
           </article>
 
           <article class="accounts-cockpit-stat" data-tone="${reauthCount > 0 ? 'warning' : 'success'}">
-            <div class="accounts-cockpit-stat-icon">${reauthCount > 0 ? '⚠️' : '✅'}</div>
+            <div class="accounts-cockpit-stat-icon">${renderCampaignMark(reauthCount > 0 ? 'AUTH' : 'OK', reauthCount > 0 ? 'warning' : 'success', 'accounts-cockpit-stat-mark')}</div>
             <div class="accounts-cockpit-stat-info">
-              <span class="accounts-cockpit-stat-label">Reauth</span>
+              <span class="accounts-cockpit-stat-label">OAuth</span>
               <strong class="accounts-cockpit-stat-value" data-counter="${reauthCount}">0</strong>
-              <span class="accounts-cockpit-stat-detail">${reauthCount > 0 ? 'Needs attention' : 'All healthy'}</span>
+              <span class="accounts-cockpit-stat-detail">${reauthCount > 0 ? 'Precisa reconectar' : 'Saudavel'}</span>
             </div>
           </article>
 
           <article class="accounts-cockpit-stat" data-tone="info">
-            <div class="accounts-cockpit-stat-icon">🌐</div>
+            <div class="accounts-cockpit-stat-icon">${renderCampaignMark('VIS', 'info', 'accounts-cockpit-stat-mark')}</div>
             <div class="accounts-cockpit-stat-info">
-              <span class="accounts-cockpit-stat-label">Reach</span>
+              <span class="accounts-cockpit-stat-label">Visiveis</span>
               <strong class="accounts-cockpit-stat-value" data-counter="${filteredAccounts.length}">0</strong>
-              <span class="accounts-cockpit-stat-detail">Visible accounts</span>
+              <span class="accounts-cockpit-stat-detail">Contas filtradas</span>
             </div>
           </article>
 
           <article class="accounts-cockpit-stat" data-tone="primary">
-            <div class="accounts-cockpit-stat-icon">📡</div>
+            <div class="accounts-cockpit-stat-icon">${renderCampaignMark('SYNC', 'processing', 'accounts-cockpit-stat-mark')}</div>
             <div class="accounts-cockpit-stat-info">
-              <span class="accounts-cockpit-stat-label">Channels</span>
+              <span class="accounts-cockpit-stat-label">Canais</span>
               <strong class="accounts-cockpit-stat-value" data-counter="${totalChannels}">0</strong>
-              <span class="accounts-cockpit-stat-detail">Discovered</span>
+              <span class="accounts-cockpit-stat-detail">Sincronizados</span>
             </div>
           </article>
         </div>
@@ -9528,7 +10378,7 @@ async function renderAccountsPage() {
         <div class="accounts-cockpit-footer">
           <div class="accounts-cockpit-footer-bar">
             <div class="accounts-cockpit-footer-bar-label">
-              <span>Workspace health</span>
+              <span>Saude do workspace</span>
               <strong>${accounts.length === 0 ? 0 : Math.round(((accounts.length - reauthCount) / accounts.length) * 100)}%</strong>
             </div>
             <div class="accounts-cockpit-footer-bar-track">
@@ -9536,11 +10386,11 @@ async function renderAccountsPage() {
             </div>
           </div>
           <div class="accounts-cockpit-footer-meta">
-            <span>${formatNumber(accounts.length)} accounts</span>
+            <span>${formatNumber(accounts.length)} contas</span>
             <span aria-hidden="true">·</span>
-            <span>${formatNumber(totalChannels)} discovered</span>
+            <span>${formatNumber(totalChannels)} canais</span>
             <span aria-hidden="true">·</span>
-            <span>${formatNumber(activeChannels)} active</span>
+            <span>${formatNumber(activeChannels)} ativos</span>
           </div>
         </div>
       </section>
@@ -9553,39 +10403,39 @@ async function renderAccountsPage() {
       <section class="platform-surface platform-dashboard-panel">
         <div class="platform-dashboard-panel-head">
           <div>
-            <span class="platform-dashboard-kicker">Connected accounts</span>
-            <h3>Identity roster</h3>
+            <span class="platform-dashboard-kicker">Contas conectadas</span>
+            <h3>Lista de identidades</h3>
           </div>
-          <span class="platform-dashboard-panel-meta">${formatNumber(filteredAccounts.length)} visible of ${formatNumber(accounts.length)}</span>
+          <span class="platform-dashboard-panel-meta">${formatNumber(filteredAccounts.length)} visiveis de ${formatNumber(accounts.length)}</span>
         </div>
         <form id="account-filter-form" class="filter-bar">
           <label>
-            Search
-            <input name="search" value="${escapeHtml(search)}" placeholder="Channel or account name..." />
+            Buscar
+            <input name="search" value="${escapeHtml(search)}" placeholder="Canal ou conta..." />
           </label>
           <label>
             Status
             <select name="status">
-              <option value="">All statuses</option>
-              <option value="connected" ${statusFilter === 'connected' ? 'selected' : ''}>Connected</option>
-              <option value="reauth_required" ${statusFilter === 'reauth_required' ? 'selected' : ''}>Reauth required</option>
-              <option value="disconnected" ${statusFilter === 'disconnected' ? 'selected' : ''}>Disconnected</option>
+              <option value="">Todos</option>
+              <option value="connected" ${statusFilter === 'connected' ? 'selected' : ''}>Conectada</option>
+              <option value="reauth_required" ${statusFilter === 'reauth_required' ? 'selected' : ''}>Reconectar</option>
+              <option value="disconnected" ${statusFilter === 'disconnected' ? 'selected' : ''}>Desconectada</option>
             </select>
           </label>
           <div class="inline-actions">
-            <button class="button button-primary" type="submit">Apply</button>
-            <a class="button button-secondary" data-link href="/workspace/accounts">Clear</a>
+            <button class="button button-primary" type="submit">Aplicar</button>
+            <a class="button button-secondary" data-link href="/workspace/accounts">Limpar</a>
           </div>
         </form>
         <div class="account-grid">${accountCardsHtml}</div>
       </section>
       <section class="platform-surface platform-dashboard-panel">
-        <h3>Channels — ${escapeHtml(selectedAccountDisplayLabel)}</h3>
+        <h3>Canais - ${escapeHtml(selectedAccountDisplayLabel)}</h3>
         <div class="platform-dashboard-chip-row">
           ${selectedAccount ? `<span class="platform-dashboard-inline-stat">${escapeHtml(getProviderLabel(selectedAccount.provider))}</span>` : ''}
-          ${selectedAccount ? `<span class="platform-dashboard-inline-stat">${formatNumber(selectedAccountChannelSummary?.active ?? 0)} active / ${formatNumber(selectedAccountChannelSummary?.total ?? 0)} total</span>` : ''}
+          ${selectedAccount ? `<span class="platform-dashboard-inline-stat">${formatNumber(selectedAccountChannelSummary?.active ?? 0)} ativos / ${formatNumber(selectedAccountChannelSummary?.total ?? 0)} total</span>` : ''}
           <button class="button button-secondary" data-action="sync-channels" data-account-id="${escapeHtml(selectedAccountId ?? '')}" type="button" ${selectedAccountId && selectedAccountSupportsChannels ? '' : 'disabled'}>
-            Sync channels
+            Sincronizar canais
           </button>
         </div>
         ${selectedAccount && !selectedAccountSupportsChannels ? `
@@ -9593,10 +10443,10 @@ async function renderAccountsPage() {
             <table>
               <thead>
                 <tr>
-                  <th>Account</th>
-                  <th>Handle</th>
-                  <th>State</th>
-                  <th>Action</th>
+                  <th>Conta</th>
+                  <th>Identificador</th>
+                  <th>Estado</th>
+                  <th>Acao</th>
                 </tr>
               </thead>
               <tbody>
@@ -9609,23 +10459,23 @@ async function renderAccountsPage() {
                   </td>
                   <td>${escapeHtml(selectedAccount.email ?? '-')}</td>
                   <td><span class="status-pill ${selectedAccount.status === 'connected' ? 'connected' : 'warn'}">${escapeHtml(selectedAccount.status ?? '')}</span></td>
-                  <td><span class="muted">Account = channel</span></td>
+                  <td><span class="muted">Conta = destino</span></td>
                 </tr>
               </tbody>
             </table>
           </div>
           <div class="notice info" style="margin-top:12px">
-            <p>For ${escapeHtml(getProviderLabel(selectedAccount.provider))}, the connected account itself is the publishing destination — there is no per-channel concept like YouTube.</p>
+            <p>Para ${escapeHtml(getProviderLabel(selectedAccount.provider))}, a propria conta conectada e o destino de publicacao. Nao existe conceito de canal separado como no YouTube.</p>
           </div>
         ` : `
           <div class="table-scroll platform-page-table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Channel</th>
-                  <th>Handle</th>
-                  <th>State</th>
-                  <th>Action</th>
+                  <th>Canal</th>
+                  <th>Identificador</th>
+                  <th>Estado</th>
+                  <th>Acao</th>
                 </tr>
               </thead>
               <tbody>${channelsRows}</tbody>
@@ -9636,23 +10486,23 @@ async function renderAccountsPage() {
       <section class="platform-surface platform-dashboard-panel">
         <div class="platform-dashboard-panel-head">
           <div>
-            <span class="platform-dashboard-kicker">Channel directory</span>
-            <h3>All linked publishing destinations</h3>
+            <span class="platform-dashboard-kicker">Diretorio de canais</span>
+            <h3>Todos os destinos vinculados</h3>
           </div>
-          <span class="platform-dashboard-panel-meta">${formatNumber(allChannels.length)} discovered channels</span>
+          <span class="platform-dashboard-panel-meta">${formatNumber(allChannels.length)} canais encontrados</span>
         </div>
         <div class="platform-page-summary-grid">
           <article class="platform-page-summary-card">
-            <span>Connected accounts</span>
+            <span>Contas conectadas</span>
             <strong>${formatNumber(accounts.length)}</strong>
           </article>
           <article class="platform-page-summary-card">
-            <span>Total discovered</span>
+            <span>Total encontrado</span>
             <strong>${formatNumber(allChannels.length)}</strong>
           </article>
           <article class="platform-page-summary-card">
-            <span>Focused account</span>
-            <strong>${escapeHtml(selectedAccount ? selectedAccountDisplayLabel : 'None')}</strong>
+            <span>Conta em foco</span>
+            <strong>${escapeHtml(selectedAccount ? selectedAccountDisplayLabel : 'Nenhuma')}</strong>
           </article>
         </div>
         ${channelsOverviewCard}
@@ -9660,10 +10510,10 @@ async function renderAccountsPage() {
           <table>
             <thead>
               <tr>
-                <th>Channel</th>
-                <th>Account</th>
-                <th>Handle</th>
-                <th>State</th>
+                <th>Canal</th>
+                <th>Conta</th>
+                <th>Identificador</th>
+                <th>Estado</th>
               </tr>
             </thead>
             <tbody>${allChannelsRows}</tbody>
@@ -9674,9 +10524,9 @@ async function renderAccountsPage() {
   });
 
   const accountChannelHeading = Array.from(document.querySelectorAll('.platform-surface.platform-dashboard-panel > h3'))
-    .find((heading) => heading.textContent?.trim().startsWith('Channels'));
+    .find((heading) => heading.textContent?.trim().startsWith('Canais'));
   if (accountChannelHeading) {
-    accountChannelHeading.textContent = `Channels - ${selectedAccountDisplayLabel}`;
+    accountChannelHeading.textContent = `Canais - ${selectedAccountDisplayLabel}`;
   }
 
   const accountFilterForm = document.getElementById('account-filter-form');
@@ -10083,6 +10933,82 @@ function renderNeonMediaIcon(kind = 'library', size = 'md', options = {}) {
   `;
 }
 
+const MEDIA_MARK_KIND_ALIASES = {
+  assets: 'library',
+  asset: 'library',
+  thumb: 'thumbnail',
+  image: 'thumbnail',
+  folder: 'folder',
+  directory: 'folder',
+  used: 'published',
+  ready: 'available',
+  plus: 'add',
+};
+
+const MEDIA_MARK_LABELS = {
+  library: 'LIB',
+  playlist: 'LIST',
+  video: 'VID',
+  thumbnail: 'IMG',
+  storage: 'STO',
+  clock: 'DUR',
+  folder: 'DIR',
+  available: 'OK',
+  published: 'PUB',
+  star: 'TOP',
+  add: 'ADD',
+};
+
+const MEDIA_MARK_TITLES = {
+  library: 'Biblioteca de midia',
+  playlist: 'Playlist',
+  video: 'Video',
+  thumbnail: 'Capa vinculada',
+  storage: 'Armazenamento',
+  clock: 'Duracao',
+  folder: 'Pasta local',
+  available: 'Disponivel',
+  published: 'Publicado',
+  star: 'Destaque',
+  add: 'Adicionar',
+};
+
+const MEDIA_MARK_TONES = new Set(['info', 'success', 'warning', 'danger', 'processing', 'disabled']);
+
+function normalizeMediaMarkKind(kind) {
+  const requestedKind = String(kind ?? '').toLowerCase().trim();
+  const aliasedKind = MEDIA_MARK_KIND_ALIASES[requestedKind] ?? NEON_MEDIA_ICON_KIND_ALIASES[requestedKind] ?? requestedKind;
+  return Object.prototype.hasOwnProperty.call(MEDIA_MARK_LABELS, aliasedKind) ? aliasedKind : 'library';
+}
+
+function normalizeMediaMarkTone(kind, tone) {
+  const normalizedTone = String(tone ?? '').toLowerCase().trim();
+  if (MEDIA_MARK_TONES.has(normalizedTone)) return normalizedTone;
+  if (['ready', 'completed', 'available', 'published', 'active', 'connected', 'ok'].includes(normalizedTone)) return 'success';
+  if (['danger', 'error', 'errors', 'failed', 'failure', 'erro', 'erros', 'falha', 'falhas'].includes(normalizedTone)) return 'danger';
+  if (['warn', 'attention', 'pending', 'queued', 'draft', 'aguardando'].includes(normalizedTone)) return 'warning';
+  if (['loading', 'launching', 'syncing', 'enviando', 'running'].includes(normalizedTone)) return 'processing';
+  if (['inactive', 'locked', 'blocked', 'unavailable', 'indisponivel'].includes(normalizedTone)) return 'disabled';
+  if (['available', 'published', 'star'].includes(kind)) return 'success';
+  if (['clock', 'thumbnail'].includes(kind)) return 'warning';
+  return 'info';
+}
+
+function renderMediaMark(kind = 'library', size = 'md', options = {}, className = '') {
+  const safeKind = normalizeMediaMarkKind(kind);
+  const requestedTone = typeof options === 'string' ? options : options?.tone ?? options?.state;
+  const safeTone = normalizeMediaMarkTone(safeKind, requestedTone);
+  const safeSize = String(size ?? 'md').toLowerCase().replace(/[^a-z0-9-]/g, '') || 'md';
+  const extraClasses = String(className ?? '').trim().split(/\s+/).filter(Boolean);
+  const classes = ['media-mark', `media-mark-${safeSize}`, ...extraClasses].join(' ');
+  const title = MEDIA_MARK_TITLES[safeKind] ?? MEDIA_MARK_LABELS[safeKind];
+  return `<span class="${escapeAttribute(classes)}" data-media-kind="${escapeAttribute(safeKind)}" data-tone="${escapeAttribute(safeTone)}" title="${escapeAttribute(title)}" aria-hidden="true"><span>${escapeHtml(MEDIA_MARK_LABELS[safeKind])}</span></span>`;
+}
+
+function renderMediaPipelineMark(kind, label, tone = 'info') {
+  return `${renderMediaMark(kind, 'chip', tone, 'media-pipeline-mark')} ${escapeHtml(label)}`;
+}
+
 function renderVideosViewSwitcher({ activeView, libraryHref, playlistsHref, libraryCount, playlistsCount }) {
   const libraryActive = activeView === 'library';
   const playlistsActive = activeView === 'playlists';
@@ -10092,12 +11018,12 @@ function renderVideosViewSwitcher({ activeView, libraryHref, playlistsHref, libr
   return `
     <nav class="videos-view-switcher" role="tablist" aria-label="Visualizacao de videos">
       <a class="videos-view-tab ${libraryActive ? 'is-active' : ''}" role="tab" aria-selected="${libraryActive ? 'true' : 'false'}" data-link href="${escapeHtml(libraryHref)}">
-        <span class="videos-view-tab-icon" aria-hidden="true">${renderNeonMediaIcon('library', 'tab')}</span>
-        <span class="videos-view-tab-label">Asset library</span>
+        <span class="videos-view-tab-icon" aria-hidden="true">${renderMediaMark('library', 'tab', 'info')}</span>
+        <span class="videos-view-tab-label">Biblioteca</span>
         ${libCountHtml}
       </a>
       <a class="videos-view-tab ${playlistsActive ? 'is-active' : ''}" role="tab" aria-selected="${playlistsActive ? 'true' : 'false'}" data-link href="${escapeHtml(playlistsHref)}">
-        <span class="videos-view-tab-icon" aria-hidden="true">${renderNeonMediaIcon('playlist', 'tab')}</span>
+        <span class="videos-view-tab-icon" aria-hidden="true">${renderMediaMark('playlist', 'tab', 'info')}</span>
         <span class="videos-view-tab-label">Playlists</span>
         ${plCountHtml}
       </a>
@@ -10173,15 +11099,24 @@ async function renderMediaPage(options = {}) {
   const videoAssetsCount = filteredAssets.filter((asset) => asset.asset_type === 'video').length;
   const thumbnailAssetsCount = filteredAssets.filter((asset) => asset.asset_type === 'thumbnail').length;
   const liveClock = formatClockLabel();
+  const allVideoAssetsCount = assets.filter((asset) => asset.asset_type === 'video').length;
+  const allLinkedThumbnailAssets = assets.filter((asset) => asset.thumbnail || asset.linked_video_asset_id).length;
+  const missingThumbnailVideos = Math.max(0, allVideoAssetsCount - allLinkedThumbnailAssets);
+  const typeFilterLabel = typeFilter === 'video' ? 'Videos' : typeFilter === 'thumbnail' ? 'Capas' : 'Todos os tipos';
+  const vaultStatus = assets.length === 0
+    ? { label: 'Cofre vazio', detail: 'Envie seu primeiro video para iniciar campanhas.', tone: 'warning' }
+    : missingThumbnailVideos > 0
+      ? { label: 'Precisa organizar', detail: `${formatNumber(missingThumbnailVideos)} videos sem capa vinculada.`, tone: 'warning' }
+      : { label: 'Cofre pronto', detail: 'Videos e capas preparados para campanha.', tone: 'success' };
 
   const metricsHtml = [
-    { icon: 'library', label: 'Assets', value: formatNumber(filteredAssets.length), hint: `of ${formatNumber(assets.length)} total`, tone: 'info' },
-    { icon: 'storage', label: 'Storage', value: formatBytes(totalSize), hint: `${formatNumber(totalSize)} bytes`, tone: 'info' },
-    { icon: 'clock', label: 'Duration', value: formatDurationSeconds(totalDurationSeconds), hint: 'Combined media duration', tone: 'info' },
-    { icon: 'thumbnail', label: 'Linked Thumbnails', value: formatNumber(linkedThumbnailAssets), hint: 'Video with thumbnail or thumbnail linked to video', tone: 'success' },
+    { icon: 'library', label: 'Midias', value: formatNumber(filteredAssets.length), hint: `${formatNumber(assets.length)} no total`, tone: 'info' },
+    { icon: 'storage', label: 'Armazenamento', value: formatBytes(totalSize), hint: `${formatNumber(totalSize)} bytes`, tone: 'info' },
+    { icon: 'clock', label: 'Duracao', value: formatDurationSeconds(totalDurationSeconds), hint: 'Tempo total da midia', tone: 'info' },
+    { icon: 'thumbnail', label: 'Capas vinculadas', value: formatNumber(linkedThumbnailAssets), hint: 'Videos com capa ou capas vinculadas', tone: 'success' },
   ].map((card) => `
     <article class="platform-dashboard-stat" data-tone="${escapeHtml(card.tone)}">
-      <span class="platform-dashboard-stat-icon">${renderNeonMediaIcon(card.icon, 'chip', card.tone)}</span>
+      <span class="platform-dashboard-stat-icon">${renderMediaMark(card.icon, 'stat-chip', card.tone, 'media-stat-mark')}</span>
       <span class="platform-dashboard-stat-label">${escapeHtml(card.label)}</span>
       <strong>${escapeHtml(card.value)}</strong>
       <span class="platform-dashboard-stat-detail">${escapeHtml(card.hint)}</span>
@@ -10217,8 +11152,8 @@ async function renderMediaPage(options = {}) {
         <td>
           <div class="inline-actions">
             ${renderMediaFileActionLinks(asset)}
-            <button class="button button-secondary button-sm" type="button" data-action="copy-media-id" data-media-id="${escapeHtml(asset.id)}">Copy ID</button>
-            <button class="button button-danger" type="button" data-action="delete-media" data-media-id="${escapeHtml(asset.id)}">Delete</button>
+            <button class="button button-secondary button-sm" type="button" data-action="copy-media-id" data-media-id="${escapeHtml(asset.id)}">Copiar ID</button>
+            <button class="button button-danger" type="button" data-action="delete-media" data-media-id="${escapeHtml(asset.id)}">Excluir</button>
           </div>
         </td>
       </tr>
@@ -10226,15 +11161,15 @@ async function renderMediaPage(options = {}) {
     }).join('');
   const mediaEmptyState = assets.length === 0
     ? renderEmptyStateCard({
-        title: 'Your media library is empty',
-        message: 'Upload at least one video before creating campaigns. You can also attach a thumbnail now and reuse it later.',
+        title: 'Sua biblioteca de midia esta vazia',
+        message: 'Envie pelo menos um video antes de criar campanhas. Voce tambem pode anexar uma capa e reutilizar depois.',
         tone: 'info',
       })
     : filteredAssets.length === 0
       ? renderEmptyStateCard({
-          title: 'No media matches the current filters',
-          message: 'Try clearing the search or type filter to bring the asset list back.',
-          actionsHtml: `<a class="button button-secondary" data-link href="${escapeHtml(libraryHref)}">Clear filters</a>`,
+          title: 'Nenhuma midia encontrada com estes filtros',
+          message: 'Limpe a busca ou altere o tipo para voltar a ver a biblioteca.',
+          actionsHtml: `<a class="button button-secondary" data-link href="${escapeHtml(libraryHref)}">Limpar filtros</a>`,
         })
       : '';
   const mediaCardsHtml = filteredAssets.map((asset) => {
@@ -10247,16 +11182,16 @@ async function renderMediaPage(options = {}) {
       ? renderVideoPreviewCell(asset)
       : asset.asset_type === 'thumbnail'
         ? renderThumbnailPreviewCell(asset)
-        : '<span class="muted">Preview unavailable.</span>';
+        : '<span class="muted">Preview indisponivel.</span>';
     return `
       <article class="platform-media-card">
         <div class="platform-media-card-head">
           <div class="platform-media-card-titleline">
-            <span class="platform-media-card-kind-icon">${renderNeonMediaIcon(assetIconKind, 'chip')}</span>
+            <span class="platform-media-card-kind-icon">${renderMediaMark(assetIconKind, 'chip', asset.asset_type === 'thumbnail' ? 'warning' : 'info', 'platform-media-card-kind-mark')}</span>
             <div>
               <span class="platform-dashboard-kicker">${escapeHtml(asset.asset_type ?? 'asset')}</span>
               <h3>${escapeHtml(asset.original_name)}</h3>
-              <p>${escapeHtml(asset.mime_type ?? 'Unknown format')} · ${escapeHtml(formatDate(asset.created_at))}</p>
+              <p>${escapeHtml(asset.mime_type ?? 'Formato desconhecido')} · ${escapeHtml(formatDate(asset.created_at))}</p>
             </div>
           </div>
           <div class="inline-actions">
@@ -10271,27 +11206,27 @@ async function renderMediaPage(options = {}) {
           </div>
           <div class="platform-media-card-meta">
             <div>
-              <span>Asset ID</span>
+              <span>ID da midia</span>
               <strong><code>${escapeHtml(asset.id)}</code></strong>
             </div>
             <div>
-              <span>Size</span>
+              <span>Tamanho</span>
               <strong>${escapeHtml(formatBytes(asset.size_bytes))}</strong>
             </div>
             <div>
-              <span>Duration</span>
+              <span>Duracao</span>
               <strong>${escapeHtml(formatDurationSeconds(asset.duration_seconds))}</strong>
             </div>
             <div>
-              <span>Storage path</span>
-              <strong>${escapeHtml(asset.storage_path ?? 'Workspace library')}</strong>
+              <span>Caminho</span>
+              <strong>${escapeHtml(asset.storage_path ?? 'Biblioteca do workspace')}</strong>
             </div>
           </div>
         </div>
         <div class="platform-media-card-actions inline-actions">
           ${renderMediaFileActionLinks(asset)}
-          <button class="button button-secondary" type="button" data-action="copy-media-id" data-media-id="${escapeHtml(asset.id)}">Copy ID</button>
-          <button class="button button-danger" type="button" data-action="delete-media" data-media-id="${escapeHtml(asset.id)}">Delete</button>
+          <button class="button button-secondary" type="button" data-action="copy-media-id" data-media-id="${escapeHtml(asset.id)}">Copiar ID</button>
+          <button class="button button-danger" type="button" data-action="delete-media" data-media-id="${escapeHtml(asset.id)}">Excluir</button>
         </div>
       </article>
     `;
@@ -10309,7 +11244,7 @@ async function renderMediaPage(options = {}) {
     subtitle: pageSubtitle,
     actionsHtml: `
       <div class="inline-actions">
-        <a class="button button-secondary" data-link href="${escapeHtml(buildUrl(baseHref, videosCtx ? { view: 'library', search: searchInput, type: typeFilter } : { search: searchInput, type: typeFilter }))}">Refresh</a>
+        <a class="button button-secondary" data-link href="${escapeHtml(buildUrl(baseHref, videosCtx ? { view: 'library', search: searchInput, type: typeFilter } : { search: searchInput, type: typeFilter }))}">Atualizar</a>
       </div>
     `,
     contentHtml: `
@@ -10324,142 +11259,143 @@ async function renderMediaPage(options = {}) {
         <div class="media-hero-content">
           <div class="media-hero-header">
             <div class="platform-dashboard-kicker-row">
-              <span class="platform-dashboard-kicker">Media vault</span>
-              <span class="platform-dashboard-live"><span class="platform-login-live-dot"></span> Synced ${escapeHtml(liveClock)}</span>
+              <span class="platform-dashboard-kicker">Cofre de midia</span>
+              <span class="platform-dashboard-live"><span class="platform-login-live-dot"></span> Sincronizado ${escapeHtml(liveClock)}</span>
             </div>
-            <h2 class="media-hero-title">Keep every video and thumbnail launch-ready.</h2>
-            <p class="media-hero-subtitle">Upload assets once, reuse them across YouTube and TikTok campaigns.</p>
+            <h2 class="media-hero-title">Videos prontos sem peso visual.</h2>
+            <p class="media-hero-subtitle">Um painel translucido que mistura sua biblioteca com o fundo ativo, sem brilho agressivo.</p>
           </div>
-          <div class="media-hero-neon-stage" aria-hidden="true">
-            <div class="media-hero-neon-main">
-              ${renderNeonMediaIcon('library', 'hero')}
-              <div class="media-hero-neon-copy">
-                <span>VAULT STATUS</span>
-                <strong>${formatNumber(filteredAssets.length)} assets prontos</strong>
+          <div class="media-hero-status-stage" data-tone="${escapeHtml(vaultStatus.tone)}">
+            <div class="media-hero-status-main">
+              ${renderMediaMark('library', 'hero', vaultStatus.tone, 'media-hero-mark')}
+              <div class="media-hero-status-copy">
+                <span>DIAGNOSTICO DO COFRE</span>
+                <strong>${escapeHtml(vaultStatus.label)}</strong>
+                <small>${escapeHtml(vaultStatus.detail)}</small>
               </div>
             </div>
             <div class="media-hero-pipeline">
-              <span>Upload</span>
+              <span>Entrada</span>
               <i></i>
               <span>Preview</span>
               <i></i>
-              <span>Campaign</span>
+              <span>Campanha</span>
             </div>
           </div>
           <div class="media-hero-tiles">
             <button type="button" class="media-hero-tile" data-media-filter="all" data-active="${typeFilter === 'all' ? 'true' : 'false'}">
-              <div class="media-hero-tile-icon">${renderNeonMediaIcon('library', 'tile')}</div>
+              <div class="media-hero-tile-icon">${renderMediaMark('library', 'tile', 'info', 'media-hero-tile-mark')}</div>
               <div class="media-hero-tile-info">
-                <span class="media-hero-tile-label">All assets</span>
+                <span class="media-hero-tile-label">Todas</span>
                 <strong class="media-hero-tile-value" data-counter="${filteredAssets.length}">0</strong>
               </div>
             </button>
             <button type="button" class="media-hero-tile" data-media-filter="video" data-active="${typeFilter === 'video' ? 'true' : 'false'}">
-              <div class="media-hero-tile-icon">${renderNeonMediaIcon('video', 'tile')}</div>
+              <div class="media-hero-tile-icon">${renderMediaMark('video', 'tile', 'info', 'media-hero-tile-mark')}</div>
               <div class="media-hero-tile-info">
                 <span class="media-hero-tile-label">Videos</span>
                 <strong class="media-hero-tile-value" data-counter="${videoAssetsCount}">0</strong>
               </div>
             </button>
             <button type="button" class="media-hero-tile" data-media-filter="thumbnail" data-active="${typeFilter === 'thumbnail' ? 'true' : 'false'}">
-              <div class="media-hero-tile-icon">${renderNeonMediaIcon('thumbnail', 'tile')}</div>
+              <div class="media-hero-tile-icon">${renderMediaMark('thumbnail', 'tile', 'warning', 'media-hero-tile-mark')}</div>
               <div class="media-hero-tile-info">
-                <span class="media-hero-tile-label">Thumbnails</span>
+                <span class="media-hero-tile-label">Capas</span>
                 <strong class="media-hero-tile-value" data-counter="${thumbnailAssetsCount}">0</strong>
               </div>
             </button>
             <div class="media-hero-tile media-hero-tile-static">
-              <div class="media-hero-tile-icon">${renderNeonMediaIcon('storage', 'tile')}</div>
+              <div class="media-hero-tile-icon">${renderMediaMark('storage', 'tile', 'info', 'media-hero-tile-mark')}</div>
               <div class="media-hero-tile-info">
-                <span class="media-hero-tile-label">Stored</span>
+                <span class="media-hero-tile-label">Armazenamento</span>
                 <strong class="media-hero-tile-value-static">${formatBytes(totalSize)}</strong>
               </div>
             </div>
             <div class="media-hero-tile media-hero-tile-static">
-              <div class="media-hero-tile-icon">${renderNeonMediaIcon('clock', 'tile')}</div>
+              <div class="media-hero-tile-icon">${renderMediaMark('clock', 'tile', 'warning', 'media-hero-tile-mark')}</div>
               <div class="media-hero-tile-info">
-                <span class="media-hero-tile-label">Playback</span>
+                <span class="media-hero-tile-label">Duracao</span>
                 <strong class="media-hero-tile-value-static">${escapeHtml(formatDurationSeconds(totalDurationSeconds))}</strong>
               </div>
             </div>
           </div>
+          <div class="media-vault-summary-strip">
+            ${metricsHtml}
+          </div>
         </div>
       </section>
 
-      <section class="platform-dashboard-stat-grid">
-        ${metricsHtml}
-      </section>
       ${mediaEmptyState}
       <section class="platform-dashboard-main-grid">
         <section class="platform-surface platform-dashboard-panel">
           <div class="platform-dashboard-panel-head">
             <div>
-              <span class="platform-dashboard-kicker">Upload bay</span>
-              <h3>Upload new media</h3>
+              <span class="platform-dashboard-kicker">Entrada de midia</span>
+              <h3>Enviar nova midia</h3>
             </div>
-            <span class="platform-dashboard-panel-meta">MP4, MOV, JPG or PNG</span>
+            <span class="platform-dashboard-panel-meta">MP4, MOV, JPG ou PNG</span>
           </div>
           <form id="media-upload-form">
             <div class="media-upload-zone">
               <div class="media-upload-zone-header">
-                <span class="media-upload-zone-icon">${renderNeonMediaIcon('folder', 'upload')}</span>
+                <span class="media-upload-zone-icon">${renderMediaMark('folder', 'upload', 'info', 'media-upload-mark')}</span>
                 <div>
-                  <p class="media-upload-zone-title">Add video to library</p>
-                  <p class="media-upload-zone-sub">MP4 or MOV · Thumbnail is optional</p>
+                  <p class="media-upload-zone-title">Adicionar video a biblioteca</p>
+                  <p class="media-upload-zone-sub">MP4 ou MOV - capa opcional</p>
                 </div>
               </div>
               <div class="media-upload-pipeline" aria-hidden="true">
-                <span>${renderNeonMediaIcon('folder', 'chip')} Upload</span>
-                <span>${renderNeonMediaIcon('video', 'chip')} Video</span>
-                <span>${renderNeonMediaIcon('thumbnail', 'chip')} Capa</span>
-                <span>${renderNeonMediaIcon('clock', 'chip')} Campanha</span>
+                <span>${renderMediaPipelineMark('folder', 'Envio')}</span>
+                <span>${renderMediaPipelineMark('video', 'Video')}</span>
+                <span>${renderMediaPipelineMark('thumbnail', 'Capa', 'warning')}</span>
+                <span>${renderMediaPipelineMark('clock', 'Campanha', 'warning')}</span>
               </div>
               <div class="form-grid">
                 <label>
-                  Video file <em style="font-style:normal;font-size:0.78rem;color:var(--danger)">*required</em>
+                  Arquivo de video <em style="font-style:normal;font-size:0.78rem;color:var(--danger)">*obrigatorio</em>
                   <input name="video" type="file" accept="video/mp4,video/quicktime" required />
                 </label>
                 <label>
-                  Thumbnail <em style="font-style:normal;font-size:0.78rem;color:var(--text-subtle)">optional</em>
+                  Capa <em style="font-style:normal;font-size:0.78rem;color:var(--text-subtle)">opcional</em>
                   <input name="thumbnail" type="file" accept="image/jpeg,image/png" />
                 </label>
               </div>
             </div>
             <div class="inline-actions">
-              <button class="button button-primary" type="submit">Upload media</button>
+              <button class="button button-primary" type="submit">Enviar midia</button>
             </div>
           </form>
         </section>
         <section class="platform-surface platform-dashboard-panel">
           <div class="platform-dashboard-panel-head">
             <div>
-              <span class="platform-dashboard-kicker">Library filters</span>
-              <h3>Filter library</h3>
+              <span class="platform-dashboard-kicker">Filtros da biblioteca</span>
+              <h3>Filtrar biblioteca</h3>
             </div>
-            <span class="platform-dashboard-panel-meta">${formatNumber(filteredAssets.length)} visible assets</span>
+            <span class="platform-dashboard-panel-meta">${formatNumber(filteredAssets.length)} midias visiveis</span>
           </div>
           <form id="media-filter-form" class="filter-bar">
             <label>
-              Search
-              <input name="search" value="${escapeHtml(searchInput)}" placeholder="Name, mime, id..." />
+              Buscar
+              <input name="search" value="${escapeHtml(searchInput)}" placeholder="Nome, formato, id..." />
             </label>
             <label>
-              Type
+              Tipo
               <select name="type">
-                <option value="all" ${typeFilter === 'all' ? 'selected' : ''}>All</option>
+                <option value="all" ${typeFilter === 'all' ? 'selected' : ''}>Todas</option>
                 <option value="video" ${typeFilter === 'video' ? 'selected' : ''}>Video</option>
-                <option value="thumbnail" ${typeFilter === 'thumbnail' ? 'selected' : ''}>Thumbnail</option>
+                <option value="thumbnail" ${typeFilter === 'thumbnail' ? 'selected' : ''}>Capa</option>
               </select>
             </label>
             <div class="inline-actions">
-              <button class="button button-primary" type="submit">Apply</button>
-              <a class="button button-secondary" data-link href="${escapeHtml(libraryHref)}">Clear</a>
+              <button class="button button-primary" type="submit">Aplicar</button>
+              <a class="button button-secondary" data-link href="${escapeHtml(libraryHref)}">Limpar</a>
             </div>
           </form>
           <div class="media-filter-signal-row">
-            <span>${renderNeonMediaIcon('library', 'chip')} Biblioteca indexada</span>
-            <span>${renderNeonMediaIcon('storage', 'chip')} Arquivos organizados</span>
-            <span>${renderNeonMediaIcon('thumbnail', 'chip')} Capas vinculadas</span>
+            <span>${renderMediaPipelineMark('library', 'Biblioteca indexada')}</span>
+            <span>${renderMediaPipelineMark('storage', 'Arquivos organizados')}</span>
+            <span>${renderMediaPipelineMark('thumbnail', 'Capas vinculadas', 'warning')}</span>
           </div>
           <div class="platform-page-summary-grid">
             <article class="platform-page-summary-card">
@@ -10467,11 +11403,11 @@ async function renderMediaPage(options = {}) {
               <strong>${formatNumber(videoAssetsCount)}</strong>
             </article>
             <article class="platform-page-summary-card">
-              <span>Thumbs</span>
+              <span>Capas</span>
               <strong>${formatNumber(thumbnailAssetsCount)}</strong>
             </article>
             <article class="platform-page-summary-card">
-              <span>Linked</span>
+              <span>Vinculadas</span>
               <strong>${formatNumber(linkedThumbnailAssets)}</strong>
             </article>
           </div>
@@ -10480,12 +11416,12 @@ async function renderMediaPage(options = {}) {
       <section class="platform-surface platform-dashboard-panel">
         <div class="platform-dashboard-panel-head">
           <div>
-            <span class="platform-dashboard-kicker">Asset library</span>
-            <h3>Media cards (${formatNumber(filteredAssets.length)})</h3>
+            <span class="platform-dashboard-kicker">Biblioteca de midia</span>
+            <h3>Midias (${formatNumber(filteredAssets.length)})</h3>
           </div>
-          <span class="platform-dashboard-panel-meta">${escapeHtml(typeFilter === 'all' ? 'All asset types' : `${typeFilter} only`)}</span>
+          <span class="platform-dashboard-panel-meta">${escapeHtml(typeFilterLabel)}</span>
         </div>
-        ${mediaCardsHtml ? `<div class="platform-media-grid">${mediaCardsHtml}</div>` : '<p class="muted">No media assets found.</p>'}
+        ${mediaCardsHtml ? `<div class="platform-media-grid">${mediaCardsHtml}</div>` : '<p class="muted">Nenhuma midia encontrada.</p>'}
       </section>
     `,
   });
@@ -10494,7 +11430,7 @@ async function renderMediaPage(options = {}) {
 
   const mediaUploadZoneSub = document.querySelector('.media-upload-zone-sub');
   if (mediaUploadZoneSub) {
-    mediaUploadZoneSub.textContent = 'MP4 or MOV - Thumbnail is optional';
+    mediaUploadZoneSub.textContent = 'MP4 ou MOV - capa opcional';
   }
 
   const mediaUploadForm = document.getElementById('media-upload-form');
@@ -10511,25 +11447,25 @@ async function renderMediaPage(options = {}) {
     const videoFile = videoInput.files?.[0];
     const thumbnailFile = thumbnailInput.files?.[0];
     if (!videoFile) {
-      setUiNotice('warning', 'Video required', 'Select a video file before uploading media.');
+      setUiNotice('warning', 'Video obrigatorio', 'Selecione um video antes de enviar a midia.');
       await reRender();
       return;
     }
 
-    setButtonBusy(submitButton, true, 'Uploading...');
+    setButtonBusy(submitButton, true, 'Enviando...');
     try {
       const uploadResult = await uploadMediaFiles(videoFile, thumbnailFile ?? null);
       if (!uploadResult.ok) {
-        setUiNotice('error', 'Upload failed', uploadResult.error);
+        setUiNotice('error', 'Falha no envio', uploadResult.error);
         await reRender();
         return;
       }
 
-      setUiNotice('success', 'Media uploaded', 'The new asset was added to the library.');
+      setUiNotice('success', 'Midia enviada', 'O novo arquivo foi adicionado a biblioteca.');
       await reRender();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Upload failed.';
-      setUiNotice('error', 'Upload failed', message);
+      const message = error instanceof Error ? error.message : 'Falha no envio.';
+      setUiNotice('error', 'Falha no envio', message);
       await reRender();
     } finally {
       setButtonBusy(submitButton, false);
@@ -10604,10 +11540,10 @@ async function renderMediaPage(options = {}) {
       if (!mediaId) return;
       try {
         await navigator.clipboard.writeText(mediaId);
-        setUiNotice('success', 'Media ID copied', 'The asset id was copied to the clipboard.');
+        setUiNotice('success', 'ID copiado', 'O ID da midia foi copiado para a area de transferencia.');
         await reRender();
       } catch {
-        setUiNotice('error', 'Copy failed', 'Unable to copy the media id to the clipboard.');
+        setUiNotice('error', 'Falha ao copiar', 'Nao foi possivel copiar o ID da midia.');
         await reRender();
       }
     });
@@ -10634,9 +11570,9 @@ async function renderMediaPage(options = {}) {
       const mediaId = button.getAttribute('data-media-id');
       if (!mediaId) return;
       const confirmed = await showConfirmDialog({
-        title: 'Delete media asset',
-        message: 'This will remove the selected media asset from the library.',
-        confirmLabel: 'Delete asset',
+        title: 'Excluir midia?',
+        message: 'Isso removera a midia selecionada da biblioteca.',
+        confirmLabel: 'Excluir midia',
         tone: 'warning',
       });
       if (!confirmed) return;
@@ -10644,11 +11580,11 @@ async function renderMediaPage(options = {}) {
       const deleteResult = await api.deleteMedia(mediaId);
       setButtonBusy(button, false);
       if (!deleteResult.ok) {
-        setUiNotice('error', 'Delete failed', deleteResult.error);
+        setUiNotice('error', 'Falha ao excluir', deleteResult.error);
         await reRender();
         return;
       }
-      setUiNotice('success', 'Media deleted', 'The selected asset was removed from the library.');
+      setUiNotice('success', 'Midia excluida', 'A midia selecionada foi removida da biblioteca.');
       await reRender();
     });
   });
@@ -10675,13 +11611,13 @@ function campaignActionButtons(campaign) {
 function getCampaignStatusMeta(status) {
   const normalized = String(status ?? 'draft').toLowerCase();
   const map = {
-    draft: { label: 'Rascunho', detail: 'Ainda editavel', tone: 'draft', icon: 'folder' },
-    ready: { label: 'Pronta', detail: 'Pode lancar', tone: 'ready', icon: 'available' },
-    launching: { label: 'Enviando', detail: 'Na fila agora', tone: 'launching', icon: 'published' },
-    completed: { label: 'Concluida', detail: 'Publicada', tone: 'completed', icon: 'star' },
-    failed: { label: 'Falhou', detail: 'Precisa revisar', tone: 'failed', icon: 'error' },
+    draft: { label: 'Rascunho', detail: 'Ainda editavel', tone: 'draft', mark: 'RA' },
+    ready: { label: 'Pronta', detail: 'Pode lancar', tone: 'ready', mark: 'PR' },
+    launching: { label: 'Enviando', detail: 'Na fila agora', tone: 'launching', mark: 'FL' },
+    completed: { label: 'Concluida', detail: 'Publicada', tone: 'completed', mark: 'OK' },
+    failed: { label: 'Falhou', detail: 'Precisa revisar', tone: 'failed', mark: 'ER' },
   };
-  return map[normalized] ?? { label: normalizeLabel(normalized), detail: 'Status da campanha', tone: 'draft', icon: 'storage' };
+  return map[normalized] ?? { label: normalizeLabel(normalized), detail: 'Status da campanha', tone: 'draft', mark: 'ST' };
 }
 
 function getCampaignPlatformList(campaign) {
@@ -10693,14 +11629,62 @@ function getCampaignPlatformList(campaign) {
   return Array.from(platforms);
 }
 
+function getCampaignSignalTone(tone) {
+  const normalized = String(tone ?? 'info').toLowerCase().trim();
+  if (['success', 'completed', 'published', 'available', 'ready', 'ok'].includes(normalized)) return 'success';
+  if (['danger', 'error', 'failed', 'failure', 'erro', 'falha', 'reauth'].includes(normalized)) return 'danger';
+  if (['warning', 'launching', 'pending', 'queued', 'draft', 'attention'].includes(normalized)) return 'warning';
+  if (['processing', 'running', 'syncing', 'enviando'].includes(normalized)) return 'processing';
+  if (['disabled', 'blocked', 'locked', 'unavailable'].includes(normalized)) return 'disabled';
+  return 'info';
+}
+
+function renderCampaignMark(label = 'ST', tone = 'info', className = 'campaign-mark') {
+  const toneKey = getCampaignSignalTone(tone);
+  const classes = [
+    'campaign-mark',
+    ...String(className ?? '').split(/\s+/).filter((name) => name && name !== 'campaign-mark'),
+  ].join(' ');
+  return `
+    <span class="${escapeAttribute(classes)}" data-tone="${escapeAttribute(toneKey)}" aria-hidden="true">
+      <span>${escapeHtml(String(label ?? 'ST').slice(0, 4).toUpperCase())}</span>
+    </span>
+  `;
+}
+
+function getCampaignPlatformMark(platform) {
+  const platformKey = CAMPAIGN_FLOW_PLATFORMS.includes(String(platform ?? '').toLowerCase())
+    ? String(platform).toLowerCase()
+    : 'unknown';
+  if (platformKey === 'youtube') return 'YT';
+  if (platformKey === 'tiktok') return 'TT';
+  if (platformKey === 'instagram') return 'IG';
+  return 'SP';
+}
+
+function renderCampaignPlatformMark(platform, className = 'campaign-platform-mark') {
+  const platformKey = CAMPAIGN_FLOW_PLATFORMS.includes(String(platform ?? '').toLowerCase())
+    ? String(platform).toLowerCase()
+    : 'unknown';
+  const classes = [
+    'campaign-platform-mark',
+    ...String(className ?? '').split(/\s+/).filter((name) => name && name !== 'campaign-platform-mark'),
+  ].join(' ');
+  return `
+    <span class="${escapeAttribute(classes)}" data-platform="${escapeAttribute(platformKey)}" title="${escapeAttribute(getCampaignFlowPlatformLabel(platformKey))}" aria-label="${escapeAttribute(getCampaignFlowPlatformLabel(platformKey))}">
+      ${escapeHtml(getCampaignPlatformMark(platformKey))}
+    </span>
+  `;
+}
+
 function renderCampaignPlatformStack(campaign) {
   const platforms = getCampaignPlatformList(campaign);
   if (platforms.length === 0) {
-    return `<span class="campaign-platform-stack is-empty">${renderNeonMediaIcon('storage', 'mini')}<span class="campaign-platform-stack-label">Sem plataforma</span></span>`;
+    return `<span class="campaign-platform-stack is-empty">${renderCampaignMark('SP', 'info', 'campaign-platform-empty-mark')}<span class="campaign-platform-stack-label">Sem plataforma</span></span>`;
   }
   return `
     <span class="campaign-platform-stack" aria-label="Plataformas da campanha">
-      ${platforms.map((platform) => renderPlatformLogo3d(platform, 30, 'campaign-platform-logo')).join('')}
+      <span class="campaign-platform-mark-cluster">${platforms.map((platform) => renderCampaignPlatformMark(platform, 'campaign-platform-mark')).join('')}</span>
       <span class="campaign-platform-stack-label">${platforms.map(getCampaignFlowPlatformLabel).join(', ')}</span>
     </span>
   `;
@@ -10709,10 +11693,10 @@ function renderCampaignPlatformStack(campaign) {
 function renderCampaignOutcomeChips(summary) {
   return `
     <div class="campaign-outcome-chips">
-      <span data-state="published"><strong>${formatNumber(summary.published)}</strong> publicados</span>
-      <span data-state="failed"><strong>${formatNumber(summary.failed)}</strong> erros</span>
-      <span data-state="pending"><strong>${formatNumber(summary.pending)}</strong> pendentes</span>
-      ${summary.reauthRequired > 0 ? `<span data-state="reauth"><strong>${formatNumber(summary.reauthRequired)}</strong> reconectar</span>` : ''}
+      <span data-state="published">${renderCampaignMark('OK', 'success', 'campaign-outcome-mark')}<strong>${formatNumber(summary.published)}</strong> publicados</span>
+      <span data-state="failed">${renderCampaignMark('ER', 'danger', 'campaign-outcome-mark')}<strong>${formatNumber(summary.failed)}</strong> erros</span>
+      <span data-state="pending">${renderCampaignMark('PE', 'warning', 'campaign-outcome-mark')}<strong>${formatNumber(summary.pending)}</strong> pendentes</span>
+      ${summary.reauthRequired > 0 ? `<span data-state="reauth">${renderCampaignMark('AU', 'danger', 'campaign-outcome-mark')}<strong>${formatNumber(summary.reauthRequired)}</strong> reconectar</span>` : ''}
     </div>
   `;
 }
@@ -10768,7 +11752,7 @@ function renderCampaignReauthPanel(overview, options = {}) {
         return `
           <article class="campaign-reauth-platform-card" data-platform="${escapeHtml(item.platform)}">
             <div class="campaign-reauth-platform-main">
-              ${renderPlatformLogo3d(item.platform, 38, 'campaign-reauth-platform-logo')}
+              ${renderCampaignPlatformMark(item.platform, 'campaign-reauth-platform-mark campaign-platform-mark')}
               <div>
                 <strong>${escapeHtml(label)}</strong>
                 <span>${formatNumber(item.targets)} destinos em ${formatNumber(item.campaigns)} campanhas</span>
@@ -10783,7 +11767,7 @@ function renderCampaignReauthPanel(overview, options = {}) {
     : `
       <article class="campaign-reauth-platform-card">
         <div class="campaign-reauth-platform-main">
-          ${renderNeonMediaIcon('error', 'mini')}
+          ${renderCampaignMark('ER', 'danger', 'campaign-reauth-mini-mark')}
           <div>
             <strong>Destinos bloqueados</strong>
             <span>${formatNumber(overview.totalTargets)} precisam de reconexao</span>
@@ -10798,7 +11782,7 @@ function renderCampaignReauthPanel(overview, options = {}) {
       <div class="campaign-reauth-target-preview">
         ${firstTargets.map((target) => `
           <span>
-            ${renderPlatformLogo3d(target.platform, 22, 'campaign-reauth-mini-logo')}
+            ${renderCampaignPlatformMark(target.platform, 'campaign-reauth-mini-mark campaign-platform-mark')}
             ${escapeHtml(target.destinationLabel ?? target.destinationId ?? target.targetId)}
           </span>
         `).join('')}
@@ -10810,7 +11794,7 @@ function renderCampaignReauthPanel(overview, options = {}) {
   return `
     <section class="campaign-reauth-panel" data-state="${resumeProvider ? 'resume' : 'pending'}">
       <div class="campaign-reauth-head">
-        <div class="campaign-reauth-icon" aria-hidden="true">${renderNeonMediaIcon('error', 'stat')}</div>
+        <div class="campaign-reauth-icon" aria-hidden="true">${renderCampaignMark('AUTH', 'danger', 'campaign-reauth-status-mark')}</div>
         <div>
           <span class="campaign-reauth-kicker">${resumeProvider ? 'CONTA RECONECTADA' : 'RECUPERACAO DE CONTAS'}</span>
           <h3>${formatNumber(overview.totalTargets)} destinos pedem reauth</h3>
@@ -11058,7 +12042,7 @@ async function renderPlaylistsPage(options = {}) {
     { icon: 'folder', label: 'Disponiveis', value: formatNumber(totalVideos - totalUsed), hint: 'Ainda nao postados', tone: totalVideos - totalUsed > 0 ? 'info' : 'warning' },
   ].map((card) => `
     <article class="platform-dashboard-stat" data-tone="${escapeHtml(card.tone)}">
-      <span class="platform-dashboard-stat-icon">${renderNeonMediaIcon(card.icon, 'chip', card.tone)}</span>
+      <span class="platform-dashboard-stat-icon">${renderMediaMark(card.icon, 'stat-chip', card.tone, 'media-stat-mark')}</span>
       <span class="platform-dashboard-stat-label">${escapeHtml(card.label)}</span>
       <strong>${escapeHtml(card.value)}</strong>
       <span class="platform-dashboard-stat-detail">${escapeHtml(card.hint)}</span>
@@ -11076,7 +12060,7 @@ async function renderPlaylistsPage(options = {}) {
           <article class="platform-media-card">
             <div class="platform-media-card-head">
               <div class="platform-media-card-titleline">
-                <span class="platform-media-card-kind-icon">${renderNeonMediaIcon('playlist', 'chip')}</span>
+                <span class="platform-media-card-kind-icon">${renderMediaMark('playlist', 'chip', 'info', 'platform-media-card-kind-mark')}</span>
                 <div>
                   <span class="platform-dashboard-kicker">playlist</span>
                   <h3>${escapeHtml(pl.name)}</h3>
@@ -11089,9 +12073,9 @@ async function renderPlaylistsPage(options = {}) {
               </div>
             </div>
             <div class="platform-media-card-body">
-              <div class="platform-media-card-preview playlist-neon-preview">
-                ${renderNeonMediaIcon('playlist', 'card')}
-                <div class="playlist-neon-preview-count">
+              <div class="platform-media-card-preview playlist-media-preview">
+                ${renderMediaMark('playlist', 'card', 'info', 'playlist-preview-mark')}
+                <div class="playlist-media-preview-count">
                   <strong>${formatNumber(itemCount)}</strong>
                   <span>videos</span>
                 </div>
@@ -11132,7 +12116,7 @@ async function renderPlaylistsPage(options = {}) {
     subtitle: pageSubtitle,
     actionsHtml: `
       <div class="inline-actions">
-        <a class="button button-secondary" data-link href="${escapeHtml(playlistsHref)}">Refresh</a>
+        <a class="button button-secondary" data-link href="${escapeHtml(playlistsHref)}">Atualizar</a>
       </div>
     `,
     contentHtml: `
@@ -11149,10 +12133,10 @@ async function renderPlaylistsPage(options = {}) {
           <div class="playlist-cockpit-title-block">
             <span class="playlist-cockpit-kicker">
               <span class="playlist-cockpit-pulse-dot"></span>
-              PLAYLIST VAULT
+              COFRE DE PLAYLISTS
             </span>
-            <h2 class="playlist-cockpit-title">Organize, automatize, <span class="playlist-cockpit-title-accent">não repita.</span></h2>
-            <p class="playlist-cockpit-subtitle">Pastas locais viram playlists. Cada vídeo é publicado uma vez e o sistema escolhe o próximo automaticamente.</p>
+            <h2 class="playlist-cockpit-title">Organize, automatize, <span class="playlist-cockpit-title-accent">nao repita.</span></h2>
+            <p class="playlist-cockpit-subtitle">Pastas locais viram playlists. Cada video e publicado uma vez e o sistema escolhe o proximo automaticamente.</p>
           </div>
           <div class="playlist-cockpit-sync">
             <span class="playlist-cockpit-sync-status"><span class="playlist-cockpit-sync-dot"></span>LIVE SYNC</span>
@@ -11186,7 +12170,7 @@ async function renderPlaylistsPage(options = {}) {
           </article>
 
           <article class="playlist-cockpit-stat-big" data-tone="primary">
-            <div class="playlist-cockpit-stat-big-icon">${renderNeonMediaIcon('playlist', 'stat')}</div>
+            <div class="playlist-cockpit-stat-big-icon">${renderMediaMark('playlist', 'stat', 'info', 'playlist-cockpit-stat-mark')}</div>
             <div class="playlist-cockpit-stat-big-info">
               <span class="playlist-cockpit-stat-big-label">Playlists</span>
               <strong class="playlist-cockpit-stat-big-value" data-counter="${playlists.length}">0</strong>
@@ -11195,42 +12179,42 @@ async function renderPlaylistsPage(options = {}) {
           </article>
 
           <article class="playlist-cockpit-stat-big" data-tone="success">
-            <div class="playlist-cockpit-stat-big-icon">${renderNeonMediaIcon('video', 'stat')}</div>
+            <div class="playlist-cockpit-stat-big-icon">${renderMediaMark('video', 'stat', 'success', 'playlist-cockpit-stat-mark')}</div>
             <div class="playlist-cockpit-stat-big-info">
-              <span class="playlist-cockpit-stat-big-label">Vídeos</span>
+              <span class="playlist-cockpit-stat-big-label">Videos</span>
               <strong class="playlist-cockpit-stat-big-value" data-counter="${totalVideos}">0</strong>
-              <span class="playlist-cockpit-stat-big-detail">${avgPerPlaylist} média por playlist</span>
+              <span class="playlist-cockpit-stat-big-detail">${avgPerPlaylist} media por playlist</span>
             </div>
           </article>
         </div>
 
         <div class="playlist-cockpit-mini-row">
           <article class="playlist-cockpit-mini" data-tone="info">
-            <div class="playlist-cockpit-mini-icon">${renderNeonMediaIcon('available', 'mini')}</div>
+            <div class="playlist-cockpit-mini-icon">${renderMediaMark('available', 'mini', 'success', 'playlist-cockpit-mini-mark')}</div>
             <div class="playlist-cockpit-mini-info">
-              <span class="playlist-cockpit-mini-label">Disponíveis</span>
+              <span class="playlist-cockpit-mini-label">Disponiveis</span>
               <strong class="playlist-cockpit-mini-value" data-counter="${totalAvailable}">0</strong>
               <span class="playlist-cockpit-mini-detail">prontos para publicar</span>
             </div>
           </article>
           <article class="playlist-cockpit-mini" data-tone="warning">
-            <div class="playlist-cockpit-mini-icon">${renderNeonMediaIcon('published', 'mini')}</div>
+            <div class="playlist-cockpit-mini-icon">${renderMediaMark('published', 'mini', 'warning', 'playlist-cockpit-mini-mark')}</div>
             <div class="playlist-cockpit-mini-info">
-              <span class="playlist-cockpit-mini-label">Já publicados</span>
+              <span class="playlist-cockpit-mini-label">Ja publicados</span>
               <strong class="playlist-cockpit-mini-value" data-counter="${totalUsed}">0</strong>
               <span class="playlist-cockpit-mini-detail">via Auto-mode</span>
             </div>
           </article>
           <article class="playlist-cockpit-mini" data-tone="info">
-            <div class="playlist-cockpit-mini-icon">${renderNeonMediaIcon('library', 'mini')}</div>
+            <div class="playlist-cockpit-mini-icon">${renderMediaMark('library', 'mini', 'info', 'playlist-cockpit-mini-mark')}</div>
             <div class="playlist-cockpit-mini-info">
-              <span class="playlist-cockpit-mini-label">Library</span>
+              <span class="playlist-cockpit-mini-label">Biblioteca</span>
               <strong class="playlist-cockpit-mini-value" data-counter="${libraryAssets}">0</strong>
-              <span class="playlist-cockpit-mini-detail">assets de vídeo</span>
+              <span class="playlist-cockpit-mini-detail">midias de video</span>
             </div>
           </article>
           <article class="playlist-cockpit-mini" data-tone="success">
-            <div class="playlist-cockpit-mini-icon">${renderNeonMediaIcon('star', 'mini')}</div>
+            <div class="playlist-cockpit-mini-icon">${renderMediaMark('star', 'mini', 'success', 'playlist-cockpit-mini-mark')}</div>
             <div class="playlist-cockpit-mini-info">
               <span class="playlist-cockpit-mini-label">Maior playlist</span>
               <strong class="playlist-cockpit-mini-value playlist-cockpit-mini-text">${escapeHtml((largestPlaylist?.name ?? '—').slice(0, 14) + ((largestPlaylist?.name ?? '').length > 14 ? '…' : ''))}</strong>
@@ -11238,7 +12222,7 @@ async function renderPlaylistsPage(options = {}) {
             </div>
           </article>
           <article class="playlist-cockpit-mini" data-tone="warning">
-            <div class="playlist-cockpit-mini-icon">${renderNeonMediaIcon('published', 'mini')}</div>
+            <div class="playlist-cockpit-mini-icon">${renderMediaMark('published', 'mini', 'warning', 'playlist-cockpit-mini-mark')}</div>
             <div class="playlist-cockpit-mini-info">
               <span class="playlist-cockpit-mini-label">Mais usada</span>
               <strong class="playlist-cockpit-mini-value playlist-cockpit-mini-text">${escapeHtml((mostDepleted?.name ?? '—').slice(0, 14) + ((mostDepleted?.name ?? '').length > 14 ? '…' : ''))}</strong>
@@ -11250,8 +12234,8 @@ async function renderPlaylistsPage(options = {}) {
         <div class="playlist-cockpit-footer">
           <div class="playlist-cockpit-footer-bar">
             <div class="playlist-cockpit-footer-bar-label">
-              <span>Distribuição global</span>
-              <strong>${100 - usagePct}% disponível</strong>
+              <span>Distribuicao global</span>
+              <strong>${100 - usagePct}% disponivel</strong>
             </div>
             <div class="playlist-cockpit-footer-bar-track">
               <div class="playlist-cockpit-footer-bar-fill" style="--width:${100 - usagePct}%"></div>
@@ -11260,9 +12244,9 @@ async function renderPlaylistsPage(options = {}) {
           <div class="playlist-cockpit-footer-meta">
             <span>${formatNumber(playlists.length)} playlists</span>
             <span aria-hidden="true">·</span>
-            <span>${formatNumber(totalVideos)} vídeos</span>
+            <span>${formatNumber(totalVideos)} videos</span>
             <span aria-hidden="true">·</span>
-            <span>${formatNumber(libraryAssets)} library assets</span>
+            <span>${formatNumber(libraryAssets)} midias na biblioteca</span>
             <span aria-hidden="true">·</span>
             <span class="playlist-cockpit-status-badge ${playlists.length > 0 ? 'active' : 'inactive'}">${playlists.length > 0 ? '● ATIVO' : '○ VAZIO'}</span>
           </div>
@@ -11277,24 +12261,24 @@ async function renderPlaylistsPage(options = {}) {
         <section class="platform-surface platform-dashboard-panel">
           <div class="platform-dashboard-panel-head">
             <div>
-              <span class="platform-dashboard-kicker">Import bay</span>
+              <span class="platform-dashboard-kicker">Entrada de playlists</span>
               <h3>Escanear pasta local</h3>
             </div>
             <span class="platform-dashboard-panel-meta">Subpastas → Playlists</span>
           </div>
           <div class="media-upload-zone">
             <div class="media-upload-zone-header">
-              <span class="media-upload-zone-icon">${renderNeonMediaIcon('folder', 'upload')}</span>
+              <span class="media-upload-zone-icon">${renderMediaMark('folder', 'upload', 'info', 'media-upload-mark')}</span>
               <div>
                 <p class="media-upload-zone-title">Importar da pasta do servidor</p>
                 <p class="media-upload-zone-sub">Cada subpasta vira uma playlist automaticamente</p>
               </div>
             </div>
             <div class="media-upload-pipeline" aria-hidden="true">
-              <span>${renderNeonMediaIcon('folder', 'chip')} Pasta</span>
-              <span>${renderNeonMediaIcon('playlist', 'chip')} Playlist</span>
-              <span>${renderNeonMediaIcon('video', 'chip')} Videos</span>
-              <span>${renderNeonMediaIcon('clock', 'chip')} Auto</span>
+              <span>${renderMediaPipelineMark('folder', 'Pasta')}</span>
+              <span>${renderMediaPipelineMark('playlist', 'Playlist')}</span>
+              <span>${renderMediaPipelineMark('video', 'Videos')}</span>
+              <span>${renderMediaPipelineMark('clock', 'Auto', 'warning')}</span>
             </div>
             <form id="scan-folder-form" class="form-grid">
               <label>
@@ -11340,7 +12324,7 @@ async function renderPlaylistsPage(options = {}) {
       <section class="platform-surface platform-dashboard-panel">
         <div class="platform-dashboard-panel-head">
           <div>
-            <span class="platform-dashboard-kicker">Playlist library</span>
+            <span class="platform-dashboard-kicker">Biblioteca de playlists</span>
             <h3>Playlists (${formatNumber(playlists.length)})</h3>
           </div>
           <span class="platform-dashboard-panel-meta">Auto · Sem repeticao</span>
@@ -11419,7 +12403,7 @@ async function renderPlaylistDetailPage(playlistId) {
     { icon: 'playlist', label: 'Progresso', value: items.length > 0 ? `${Math.round((usedCount / items.length) * 100)}%` : '—', hint: 'Completude da playlist', tone: 'info' },
   ].map((card) => `
     <article class="platform-dashboard-stat" data-tone="${escapeHtml(card.tone)}">
-      <span class="platform-dashboard-stat-icon">${renderNeonMediaIcon(card.icon, 'chip', card.tone)}</span>
+      <span class="platform-dashboard-stat-icon">${renderMediaMark(card.icon, 'stat-chip', card.tone, 'media-stat-mark')}</span>
       <span class="platform-dashboard-stat-label">${escapeHtml(card.label)}</span>
       <strong>${escapeHtml(card.value)}</strong>
       <span class="platform-dashboard-stat-detail">${escapeHtml(card.hint)}</span>
@@ -11435,7 +12419,7 @@ async function renderPlaylistDetailPage(playlistId) {
       <article class="platform-media-card">
         <div class="platform-media-card-head">
           <div class="platform-media-card-titleline">
-            <span class="platform-media-card-kind-icon">${renderNeonMediaIcon('video', 'chip')}</span>
+            <span class="platform-media-card-kind-icon">${renderMediaMark('video', 'chip', 'info', 'platform-media-card-kind-mark')}</span>
             <div>
               <span class="platform-dashboard-kicker">video</span>
               <h3>${escapeHtml(asset?.original_name ?? item.videoAssetId)}</h3>
@@ -11482,13 +12466,13 @@ async function renderPlaylistDetailPage(playlistId) {
         <article class="platform-surface platform-dashboard-hero-copy">
           <div class="platform-dashboard-kicker-row">
             <span class="platform-dashboard-kicker">Playlist</span>
-            <span class="platform-dashboard-live"><span class="platform-login-live-dot"></span> Synced ${escapeHtml(liveClock)}</span>
+            <span class="platform-dashboard-live"><span class="platform-login-live-dot"></span> Sincronizado ${escapeHtml(liveClock)}</span>
           </div>
           <h2>${escapeHtml(playlist.name)}</h2>
           <p>${escapeHtml(playlist.folderPath || 'Criada manualmente')}</p>
           <div class="platform-dashboard-chip-row">
-            <span class="platform-chip">${renderNeonMediaIcon('playlist', 'chip')} Auto aleatorio</span>
-            <span class="platform-chip">${renderNeonMediaIcon('available', 'chip')} Sem repeticao</span>
+            <span class="platform-chip">${renderMediaPipelineMark('playlist', 'Auto aleatorio')}</span>
+            <span class="platform-chip">${renderMediaPipelineMark('available', 'Sem repeticao', 'success')}</span>
           </div>
           <div class="platform-dashboard-chip-row">
             <span class="platform-dashboard-inline-stat">${formatNumber(items.length)} videos</span>
@@ -11535,7 +12519,7 @@ async function renderPlaylistDetailPage(playlistId) {
           ${videoOptions ? `
             <div class="media-upload-zone">
               <div class="media-upload-zone-header">
-                <span class="media-upload-zone-icon">${renderNeonMediaIcon('add', 'upload')}</span>
+                <span class="media-upload-zone-icon">${renderMediaMark('add', 'upload', 'info', 'media-upload-mark')}</span>
                 <div>
                   <p class="media-upload-zone-title">Selecione um video da biblioteca</p>
                   <p class="media-upload-zone-sub">Videos ja na playlist nao aparecem</p>
@@ -11741,8 +12725,8 @@ async function renderCampaignsPage() {
   };
   const platformLabel = topPlatform ? (topPlatform[0] === 'youtube' ? 'YouTube' : topPlatform[0] === 'tiktok' ? 'TikTok' : topPlatform[0] === 'instagram' ? 'Instagram' : topPlatform[0]) : '—';
   const platformIcon = topPlatform?.[0] && CAMPAIGN_FLOW_PLATFORMS.includes(topPlatform[0])
-    ? renderPlatformLogo3d(topPlatform[0], 36, 'mission-platform-logo')
-    : renderNeonMediaIcon('storage', 'mini');
+    ? renderCampaignPlatformMark(topPlatform[0], 'mission-platform-mark campaign-platform-mark')
+    : renderCampaignMark('SP', 'info', 'mission-platform-placeholder');
   const successCircumference = 2 * Math.PI * 36;
   const successOffset = successCircumference * (1 - successRate / 100);
   const campaignOutcomeTotals = campaigns.reduce((acc, campaign) => {
@@ -11769,14 +12753,14 @@ async function renderCampaignsPage() {
   const activeCampaignCount = statusTotals.ready + statusTotals.launching;
   const draftReadyCount = statusTotals.draft + statusTotals.ready;
   const campaignStatusCardsHtml = [
-    { key: 'draft', label: 'Rascunhos', hint: 'editaveis', icon: 'folder' },
-    { key: 'ready', label: 'Prontas', hint: 'aguardando lancamento', icon: 'available' },
-    { key: 'launching', label: 'Enviando', hint: 'fila ativa', icon: 'published' },
-    { key: 'completed', label: 'Concluidas', hint: 'publicadas', icon: 'star' },
-    { key: 'failed', label: 'Falhas', hint: 'precisam de acao', icon: 'error' },
+    { key: 'draft', label: 'Rascunhos', hint: 'editaveis', mark: 'RA' },
+    { key: 'ready', label: 'Prontas', hint: 'aguardando lancamento', mark: 'PR' },
+    { key: 'launching', label: 'Enviando', hint: 'fila ativa', mark: 'FL' },
+    { key: 'completed', label: 'Concluidas', hint: 'publicadas', mark: 'OK' },
+    { key: 'failed', label: 'Falhas', hint: 'precisam de acao', mark: 'ER' },
   ].map((item) => `
     <article class="campaign-control-status-card" data-status="${escapeHtml(item.key)}">
-      <span class="campaign-control-status-icon" aria-hidden="true">${renderNeonMediaIcon(item.icon, 'mini', item.key)}</span>
+      <span class="campaign-control-status-icon" aria-hidden="true">${renderCampaignMark(item.mark, item.key, 'campaign-control-status-mark')}</span>
       <span class="campaign-control-status-label">${escapeHtml(item.label)}</span>
       <strong data-target="${statusTotals[item.key] ?? 0}">0</strong>
       <small>${escapeHtml(item.hint)}</small>
@@ -11793,13 +12777,13 @@ async function renderCampaignsPage() {
   const platformDistributionHtml = platformStats.length > 0
     ? platformStats.map((item) => `
       <div class="campaign-control-platform-row">
-        ${renderPlatformLogo3d(item.platform, 30, 'campaign-control-platform-logo')}
+        ${renderCampaignPlatformMark(item.platform, 'campaign-control-platform-mark campaign-platform-mark')}
         <span>${escapeHtml(item.label)}</span>
         <div class="campaign-control-platform-track"><span style="--fill:${Math.min(100, (item.count / maxPlatformCount) * 100)}%"></span></div>
         <strong>${formatNumber(item.count)}</strong>
       </div>
     `).join('')
-    : `<div class="campaign-control-empty-note">${renderNeonMediaIcon('storage', 'mini')} Sem destinos conectados nas campanhas desta pagina.</div>`;
+    : `<div class="campaign-control-empty-note">${renderCampaignMark('SP', 'info', 'campaign-control-empty-mark')} Sem destinos conectados nas campanhas desta pagina.</div>`;
   const targetProgressHtml = `
     <div class="campaign-control-target-progress">
       <div class="campaign-control-target-head">
@@ -11819,13 +12803,13 @@ async function renderCampaignsPage() {
   `;
 
   const metricsHtml = [
-    { label: 'Campanhas', value: formatNumber(total), hint: `Pagina ${formatNumber(currentPage)} de ${formatNumber(totalPages)}`, tone: 'info', icon: 'playlist' },
-    { label: 'Concluidas', value: formatNumber(statusTotals.completed), hint: 'Publicadas com sucesso', tone: 'success', icon: 'star' },
-    { label: 'Em envio', value: formatNumber(statusTotals.launching), hint: 'Na fila de publicacao', tone: 'warning', icon: 'published' },
-    { label: 'Com erro', value: formatNumber(statusTotals.failed), hint: 'Precisam de revisao', tone: 'danger', icon: 'error' },
+    { label: 'Campanhas', value: formatNumber(total), hint: `Pagina ${formatNumber(currentPage)} de ${formatNumber(totalPages)}`, tone: 'info', mark: 'CP' },
+    { label: 'Concluidas', value: formatNumber(statusTotals.completed), hint: 'Publicadas com sucesso', tone: 'success', mark: 'OK' },
+    { label: 'Em envio', value: formatNumber(statusTotals.launching), hint: 'Na fila de publicacao', tone: 'warning', mark: 'FL' },
+    { label: 'Com erro', value: formatNumber(statusTotals.failed), hint: 'Precisam de revisao', tone: 'danger', mark: 'ER' },
   ].map((card) => `
     <article class="platform-dashboard-stat campaign-stat-card" data-tone="${escapeHtml(card.tone)}">
-      <span class="campaign-stat-icon" aria-hidden="true">${renderNeonMediaIcon(card.icon, 'mini', card.tone)}</span>
+      <span class="campaign-stat-icon" aria-hidden="true">${renderCampaignMark(card.mark, card.tone, 'campaign-stat-mark')}</span>
       <span class="platform-dashboard-stat-label">${escapeHtml(card.label)}</span>
       <strong>${escapeHtml(card.value)}</strong>
       <span class="platform-dashboard-stat-detail">${escapeHtml(card.hint)}</span>
@@ -11912,7 +12896,7 @@ async function renderCampaignsPage() {
         const statusMeta = getCampaignStatusMeta(campaign.status);
         return `
           <article class="campaign-item campaign-command-card" data-status="${escapeHtml(campaign.status)}" data-tone="${escapeHtml(statusMeta.tone)}">
-            <div class="campaign-command-icon" aria-hidden="true">${renderNeonMediaIcon(statusMeta.icon, 'stat', statusMeta.tone)}</div>
+            <div class="campaign-command-icon" aria-hidden="true">${renderCampaignMark(statusMeta.mark, statusMeta.tone, 'campaign-command-status-mark')}</div>
             <div class="campaign-command-main">
               <div class="campaign-command-head">
                 <div class="campaign-command-title-block">
@@ -11957,10 +12941,7 @@ async function renderCampaignsPage() {
           limit: pageLimit,
           offset: pageOffset,
         }))}" title="Atualizar lista">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="23 4 23 10 17 10" />
-            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-          </svg>
+          <span class="cc-refresh-indicator" aria-hidden="true"></span>
           <span>Atualizar</span>
         </a>
       </div>
@@ -11969,7 +12950,6 @@ async function renderCampaignsPage() {
       <div class="campaign-cockpit-row">
       <section class="campaign-control-panel" id="campaign-control-panel">
         <div class="campaign-control-bg-grid" aria-hidden="true"></div>
-        <div class="campaign-control-glow" aria-hidden="true"></div>
 
         <header class="campaign-control-header">
           <div class="campaign-control-header-main">
@@ -11991,7 +12971,7 @@ async function renderCampaignsPage() {
         <div class="campaign-control-grid">
           <div class="campaign-control-command">
             <div class="campaign-control-command-top">
-              <span class="campaign-control-command-icon" aria-hidden="true">${renderNeonMediaIcon('add', 'hero')}</span>
+              <span class="campaign-control-command-icon" aria-hidden="true">${renderCampaignMark('NOVO', 'info', 'campaign-control-command-mark')}</span>
               <div class="campaign-control-command-copy">
                 <span>Novo fluxo</span>
                 <h2>Criar campanha</h2>
@@ -12000,10 +12980,7 @@ async function renderCampaignsPage() {
             </div>
             <a class="campaign-control-create-btn" data-link href="/workspace/campanhas/nova" title="Criar nova campanha">
               <span>Comecar campanha</span>
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <line x1="5" y1="12" x2="19" y2="12" />
-                <polyline points="12 5 19 12 12 19" />
-              </svg>
+              <span class="campaign-text-arrow" aria-hidden="true"></span>
             </a>
             <div class="campaign-control-command-metrics">
               <span><strong data-target="${total}">0</strong> campanhas</span>
@@ -12069,7 +13046,6 @@ async function renderCampaignsPage() {
 
       <section class="mission-insights" id="mission-insights" data-next-iso="${nextScheduled ? escapeHtml(nextScheduled.scheduledAt) : ''}">
         <div class="mission-insights-bg" aria-hidden="true">
-          <div class="mission-insights-orb"></div>
           <div class="mission-insights-grid"></div>
         </div>
         <header class="mission-insights-head">
@@ -12096,7 +13072,7 @@ async function renderCampaignsPage() {
 
         <div class="mission-insights-tiles">
           <button type="button" class="mission-tile mission-tile-countdown" ${nextScheduled ? `data-link-href="/workspace/campanhas/${escapeHtml(nextScheduled.id)}"` : 'disabled'}>
-            <div class="mission-tile-icon">${renderNeonMediaIcon('clock', 'mini')}</div>
+            <div class="mission-tile-icon">${renderCampaignMark('D+', 'processing', 'mission-tile-mark')}</div>
             <div class="mission-tile-info">
               <span class="mission-tile-label">Proximo envio</span>
               <strong class="mission-tile-value" id="mission-countdown" data-countdown-ms="${nextCountdown ?? ''}">${nextScheduled ? escapeHtml(formatCountdown(nextCountdown)) : 'Sem fila'}</strong>
@@ -12105,7 +13081,7 @@ async function renderCampaignsPage() {
           </button>
 
           <button type="button" class="mission-tile" data-link-href="/workspace/campanhas?status=launching">
-            <div class="mission-tile-icon">${renderNeonMediaIcon('published', 'mini')}</div>
+            <div class="mission-tile-icon">${renderCampaignMark('HJ', 'success', 'mission-tile-mark')}</div>
             <div class="mission-tile-info">
               <span class="mission-tile-label">Hoje</span>
               <strong class="mission-tile-value" data-counter="${todayLaunches}">0</strong>
@@ -12123,7 +13099,7 @@ async function renderCampaignsPage() {
           </div>
 
           <div class="mission-tile mission-tile-static">
-            <div class="mission-tile-icon">${renderNeonMediaIcon('storage', 'mini')}</div>
+            <div class="mission-tile-icon">${renderCampaignMark('AT', 'info', 'mission-tile-mark')}</div>
             <div class="mission-tile-info">
               <span class="mission-tile-label">Ativas</span>
               <strong class="mission-tile-value" data-counter="${statusTotals.launching + statusTotals.ready}">0</strong>
@@ -12151,19 +13127,23 @@ async function renderCampaignsPage() {
 
       ${campaignReauthPanelHtml}
 
-      <section class="platform-dashboard-stat-grid">
-        ${metricsHtml}
-      </section>
       ${campaignsEmptyState}
       <section class="platform-surface platform-dashboard-panel">
         <div class="platform-dashboard-panel-head">
           <div>
-            <span class="platform-dashboard-kicker">Filtros de campanha</span>
-            <h3>Refinar fila</h3>
+            <span class="platform-dashboard-kicker">Painel de lancamento</span>
+            <h3>Campanhas (${formatNumber(total)})</h3>
           </div>
-          <span class="platform-dashboard-panel-meta">${formatNumber(total)} registros</span>
+          <div class="inline-actions">
+            ${previousHref
+              ? `<a class="button button-secondary" data-link href="${previousHref}">Anterior</a>`
+              : '<button class="button button-secondary" type="button" disabled>Anterior</button>'}
+            ${nextHref
+              ? `<a class="button button-secondary" data-link href="${nextHref}">Proxima</a>`
+              : '<button class="button button-secondary" type="button" disabled>Proxima</button>'}
+          </div>
         </div>
-        <form id="campaign-filter-form" class="filter-bar">
+        <form id="campaign-filter-form" class="filter-bar campaign-launch-toolbar">
           <label>
             Status
             <select name="status">
@@ -12185,39 +13165,15 @@ async function renderCampaignsPage() {
           </label>
           <div class="inline-actions cc-filter-actions">
             <button class="cc-apply-btn" type="submit" title="Aplicar filtros">
-              <span class="cc-apply-glow" aria-hidden="true"></span>
-              <span class="cc-apply-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-                </svg>
-              </span>
+              <span class="cc-apply-icon" aria-hidden="true">FL</span>
               <span class="cc-apply-label">Aplicar filtros</span>
             </button>
             <a class="cc-clear-btn" data-link href="/workspace/campanhas" title="Limpar filtros">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
+              <span class="cc-clear-mark" aria-hidden="true">X</span>
               Limpar
             </a>
           </div>
         </form>
-      </section>
-      <section class="platform-surface platform-dashboard-panel">
-        <div class="platform-dashboard-panel-head">
-          <div>
-            <span class="platform-dashboard-kicker">Painel de lancamento</span>
-            <h3>Campanhas (${formatNumber(total)})</h3>
-          </div>
-          <div class="inline-actions">
-            ${previousHref
-              ? `<a class="button button-secondary" data-link href="${previousHref}">Anterior</a>`
-              : '<button class="button button-secondary" type="button" disabled>Anterior</button>'}
-            ${nextHref
-              ? `<a class="button button-secondary" data-link href="${nextHref}">Proxima</a>`
-              : '<button class="button button-secondary" type="button" disabled>Proxima</button>'}
-          </div>
-        </div>
         ${campaignItemsHtml}
         ${total > 0 ? `<p class="muted">Mostrando ${formatNumber(pageStart)}-${formatNumber(pageEnd)} de ${formatNumber(total)} campanhas.</p>` : ''}
       </section>
@@ -12341,7 +13297,7 @@ async function renderCampaignsPage() {
         await renderCampaignsPage();
         return;
       }
-      setUiNotice('success', 'Campaign launched', 'Launch has started for the selected campaign.');
+      setUiNotice('success', 'Campanha lancada', 'O lancamento comecou para a campanha selecionada.');
       await renderCampaignsPage();
     });
   });
@@ -12351,21 +13307,21 @@ async function renderCampaignsPage() {
       const campaignId = button.getAttribute('data-campaign-id');
       if (!campaignId) return;
       const confirmed = await showConfirmDialog({
-        title: 'Delete campaign',
-        message: 'This will permanently remove the selected campaign from the list.',
-        confirmLabel: 'Delete campaign',
+        title: 'Excluir campanha',
+        message: 'Isso vai remover permanentemente a campanha selecionada da lista.',
+        confirmLabel: 'Excluir campanha',
         tone: 'warning',
       });
       if (!confirmed) return;
-      setButtonBusy(button, true, 'Deleting...');
+      setButtonBusy(button, true, 'Excluindo...');
       const response = await api.deleteCampaign(campaignId);
       setButtonBusy(button, false);
       if (!response.ok) {
-        setUiNotice('error', 'Delete failed', response.error);
+        setUiNotice('error', 'Falha ao excluir', response.error);
         await renderCampaignsPage();
         return;
       }
-      setUiNotice('success', 'Campaign deleted', 'The campaign was removed successfully.');
+      setUiNotice('success', 'Campanha excluida', 'A campanha foi removida com sucesso.');
       await renderCampaignsPage();
     });
   });
@@ -12963,12 +13919,12 @@ function renderCampaignFlowMediaStep(context, flowState) {
       <div class="campaign-segment-grid">
         <label class="campaign-segment" data-selected="${sourceType === 'media' ? 'true' : 'false'}">
           <input type="radio" name="campaignFlowSource" value="media" ${sourceType === 'media' ? 'checked' : ''} />
-          ${renderNeonMediaIcon('library', 'segment')}
+          ${renderCampaignMark('MID', 'info', 'campaign-segment-mark')}
           <strong>Midia</strong><span>Escolher um video manualmente.</span>
         </label>
         <label class="campaign-segment" data-selected="${sourceType === 'playlist' ? 'true' : 'false'}" data-disabled="${paidPlan ? 'false' : 'true'}">
           <input type="radio" name="campaignFlowSource" value="playlist" ${sourceType === 'playlist' ? 'checked' : ''} ${paidPlan ? '' : 'disabled'} />
-          ${renderNeonMediaIcon('playlist', 'segment')}
+          ${renderCampaignMark('AUTO', 'processing', 'campaign-segment-mark')}
           <strong>Playlist</strong><span>${paidPlan ? 'Escolha automatica a partir de uma playlist.' : 'Liberado somente para planos pagos.'}</span>
         </label>
       </div>
@@ -15056,16 +16012,16 @@ async function renderCampaignDetailPage(campaignId) {
 
   const actions = [];
   if (campaign.status === 'draft' && (campaign.targets?.length ?? 0) > 0) {
-    actions.push(`<button type="button" data-action="mark-ready" data-campaign-id="${escapeHtml(campaign.id)}">Mark ready</button>`);
+    actions.push(`<button type="button" data-action="mark-ready" data-campaign-id="${escapeHtml(campaign.id)}">Marcar pronta</button>`);
   }
   if (campaign.status === 'ready' && (campaign.targets?.length ?? 0) > 0) {
-    actions.push(`<button class="button button-primary" type="button" data-action="launch-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Launch</button>`);
+    actions.push(`<button class="button button-primary" type="button" data-action="launch-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Lancar</button>`);
   }
   if (campaign.status === 'draft' || campaign.status === 'ready') {
-    actions.push(`<button class="button button-danger" type="button" data-action="delete-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Delete</button>`);
+    actions.push(`<button class="button button-danger" type="button" data-action="delete-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Excluir</button>`);
   }
-  actions.push(`<button type="button" data-action="clone-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Clone</button>`);
-  actions.push(`<a class="button button-secondary" data-link href="/workspace/campanhas">Back</a>`);
+  actions.push(`<button type="button" data-action="clone-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Duplicar</button>`);
+  actions.push(`<a class="button button-secondary" data-link href="/workspace/campanhas">Voltar</a>`);
 
   const targets = Array.isArray(campaign.targets) ? campaign.targets : [];
   const existingChannelIds = new Set(targets.map((target) => `${target.platform ?? 'youtube'}:${target.destinationId ?? target.channelId}`).filter(Boolean));
@@ -15529,21 +16485,21 @@ async function renderCampaignDetailPage(campaignId) {
   document.querySelectorAll('[data-action="delete-campaign"]').forEach((button) => {
     button.addEventListener('click', async () => {
       const confirmed = await showConfirmDialog({
-        title: 'Delete campaign',
-        message: 'This will permanently remove the current campaign.',
-        confirmLabel: 'Delete campaign',
+        title: 'Excluir campanha',
+        message: 'Isso vai remover permanentemente a campanha atual.',
+        confirmLabel: 'Excluir campanha',
         tone: 'warning',
       });
       if (!confirmed) return;
-      setButtonBusy(button, true, 'Deleting...');
+      setButtonBusy(button, true, 'Excluindo...');
       const response = await api.deleteCampaign(campaign.id);
       setButtonBusy(button, false);
       if (!response.ok) {
-        setUiNotice('error', 'Delete failed', response.error);
+        setUiNotice('error', 'Falha ao excluir', response.error);
         await renderCampaignDetailPage(campaign.id);
         return;
       }
-      setUiNotice('success', 'Campaign deleted', 'The campaign was deleted successfully.');
+      setUiNotice('success', 'Campanha excluida', 'A campanha foi excluida com sucesso.');
       navigate('/workspace/campanhas');
     });
   });
@@ -15628,7 +16584,12 @@ async function renderRoute() {
       return;
     }
     if (path === '/') {
-      await renderPublicLandingPage();
+      const me = await ensureAuthenticated();
+      if (me) {
+        navigate(me.needsPlanSelection ? '/onboarding/plan' : '/workspace/dashboard', true);
+        return;
+      }
+      await renderPublicLandingPagePsychedelic();
       return;
     }
 

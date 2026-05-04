@@ -3,12 +3,15 @@ import type { LoginDto } from './dto/login.dto';
 import { validateLoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
 import { validateRegisterDto } from './dto/register.dto';
-import { AuthService } from './auth.service';
+import { AuthService, type AccountDeletionSchedule } from './auth.service';
 import { SessionGuard, type SessionRequestLike } from './session.guard';
 import { SessionStore } from './session-store';
 
 export interface AuthRequest extends SessionRequestLike {
-  body?: Partial<LoginDto & RegisterDto>;
+  body?: Partial<LoginDto & RegisterDto> & {
+    currentPassword?: string;
+    confirmationCode?: string;
+  };
   query?: {
     code?: string;
     state?: string;
@@ -29,6 +32,8 @@ type AuthenticatedUserResponse = {
   email: string;
   fullName?: string;
   needsPlanSelection: boolean;
+  accountDeletionConfirmationMethod?: 'password' | 'email_code';
+  accountDeletion?: AccountDeletionSchedule | null;
 };
 
 export class AuthController {
@@ -163,7 +168,7 @@ export class AuthController {
   async me(request: SessionRequestLike): Promise<ControllerResponse<{ error?: string; user?: AuthenticatedUserResponse }>> {
     const guardResult = this.sessionGuard.check(request);
 
-    if (!guardResult.allowed && !request.session?.adminUser?.email) {
+    if (!guardResult.allowed) {
       return {
         status: guardResult.status,
         body: {
@@ -174,17 +179,157 @@ export class AuthController {
     }
 
     const user = this.authService.getCurrentUser(request.session);
+    const accountDeletion = user?.email ? await this.authService.getAccountDeletionSchedule(user.email) : null;
+    const accountDeletionConfirmationMethod = user?.email
+      ? await this.authService.getAccountDeletionConfirmationMethod(user.email)
+      : null;
+
+    if (accountDeletion?.status === 'deactivated_pending_deletion') {
+      return {
+        status: 401,
+        body: {
+          error: 'This account is deactivated and scheduled for deletion.',
+        },
+        cookies: [
+          {
+            ...this.cookieOptions,
+            maxAge: 0,
+            name: SESSION_COOKIE_NAME,
+            value: '',
+          },
+        ],
+      };
+    }
+
+    const refreshedToken = this.sessionStore && user?.email && accountDeletion
+      ? this.sessionStore.createToken({
+          email: user.email,
+          fullName: user.fullName,
+          needsPlanSelection: user.needsPlanSelection,
+          accountDeletionConfirmationMethod: accountDeletionConfirmationMethod ?? user.accountDeletionConfirmationMethod,
+          accountDeletionRequestedAt: accountDeletion.requestedAt,
+          accountDeactivationAt: accountDeletion.deactivationAt,
+          accountDeletionAt: accountDeletion.deletionAt,
+        })
+      : null;
 
     return {
       status: 200,
       body: {
         user: user?.email
-          ? {
-              email: user.email,
-              fullName: user.fullName,
-              needsPlanSelection: Boolean(user.needsPlanSelection),
-            }
+          ? this.toAuthenticatedUser(user, accountDeletion, accountDeletionConfirmationMethod ?? user.accountDeletionConfirmationMethod)
           : undefined,
+      },
+      cookies: refreshedToken
+        ? [
+            {
+              ...this.cookieOptions,
+              name: SESSION_COOKIE_NAME,
+              value: refreshedToken,
+            },
+          ]
+        : [],
+    };
+  }
+
+  async requestAccountDeletion(
+    request: AuthRequest,
+  ): Promise<ControllerResponse<{ error?: string; accountDeletion?: AccountDeletionSchedule; alreadyRequested?: boolean }>> {
+    const guardResult = this.sessionGuard.check(request);
+    if (!guardResult.allowed) {
+      return {
+        status: guardResult.status,
+        body: { error: guardResult.reason },
+        cookies: [],
+      };
+    }
+
+    const user = this.authService.getCurrentUser(request.session);
+    if (!user?.email) {
+      return {
+        status: 401,
+        body: { error: 'Unauthorized' },
+        cookies: [],
+      };
+    }
+
+    const result = await this.authService.requestAccountDeletion(user.email, request.session, {
+      currentPassword: typeof request.body?.currentPassword === 'string' ? request.body.currentPassword : undefined,
+      confirmationCode: typeof request.body?.confirmationCode === 'string' ? request.body.confirmationCode : undefined,
+    });
+    if (!result.ok) {
+      return {
+        status: result.status,
+        body: { error: result.message },
+        cookies: [],
+      };
+    }
+
+    const sessionToken = this.sessionStore
+      ? this.sessionStore.createToken({
+          email: result.user.email,
+          fullName: result.user.fullName,
+          needsPlanSelection: result.user.needsPlanSelection,
+          accountDeletionConfirmationMethod: result.user.accountDeletionConfirmationMethod,
+          accountDeletionRequestedAt: result.schedule.requestedAt,
+          accountDeactivationAt: result.schedule.deactivationAt,
+          accountDeletionAt: result.schedule.deletionAt,
+        })
+      : request.session?.id ?? '';
+
+    return {
+      status: 200,
+      body: {
+        accountDeletion: result.schedule,
+        alreadyRequested: result.alreadyRequested,
+      },
+      cookies: sessionToken
+        ? [
+            {
+              ...this.cookieOptions,
+              name: SESSION_COOKIE_NAME,
+              value: sessionToken,
+            },
+          ]
+        : [],
+    };
+  }
+
+  async sendAccountDeletionConfirmation(
+    request: SessionRequestLike,
+  ): Promise<ControllerResponse<{ error?: string; expiresAt?: string; delivery?: 'email' }>> {
+    const guardResult = this.sessionGuard.check(request);
+    if (!guardResult.allowed) {
+      return {
+        status: guardResult.status,
+        body: { error: guardResult.reason },
+        cookies: [],
+      };
+    }
+
+    const user = this.authService.getCurrentUser(request.session);
+    if (!user?.email) {
+      return {
+        status: 401,
+        body: { error: 'Unauthorized' },
+        cookies: [],
+      };
+    }
+
+    const result = await this.authService.sendAccountDeletionConfirmation(user.email);
+    if (!result.ok) {
+      return {
+        status: result.status,
+        body: { error: result.message },
+        cookies: [],
+      };
+    }
+
+    return {
+      status: 200,
+      body: {
+        delivery: result.delivery,
+        expiresAt: result.expiresAt,
       },
       cookies: [],
     };
@@ -210,17 +355,17 @@ export class AuthController {
           email: refreshedUser.email,
           fullName: refreshedUser.fullName,
           needsPlanSelection: refreshedUser.needsPlanSelection,
+          accountDeletionConfirmationMethod: refreshedUser.accountDeletionConfirmationMethod,
+          accountDeletionRequestedAt: refreshedUser.accountDeletionRequestedAt,
+          accountDeactivationAt: refreshedUser.accountDeactivationAt,
+          accountDeletionAt: refreshedUser.accountDeletionAt,
         })
       : request.session?.id ?? '';
 
     return {
       status: 200,
       body: {
-        user: {
-          email: refreshedUser.email,
-          fullName: refreshedUser.fullName,
-          needsPlanSelection: Boolean(refreshedUser.needsPlanSelection),
-        },
+        user: this.toAuthenticatedUser(refreshedUser),
       },
       cookies: sessionToken
         ? [
@@ -252,17 +397,17 @@ export class AuthController {
           email: result.user.email,
           fullName: result.user.fullName,
           needsPlanSelection: result.user.needsPlanSelection,
+          accountDeletionConfirmationMethod: result.user.accountDeletionConfirmationMethod,
+          accountDeletionRequestedAt: result.user.accountDeletionRequestedAt,
+          accountDeactivationAt: result.user.accountDeactivationAt,
+          accountDeletionAt: result.user.accountDeletionAt,
         })
       : result.sessionId;
 
     return {
       status: 200,
       body: {
-        user: {
-          email: result.user.email,
-          fullName: result.user.fullName,
-          needsPlanSelection: Boolean(result.user.needsPlanSelection),
-        },
+        user: this.toAuthenticatedUser(result.user),
       },
       cookies: [
         {
@@ -271,6 +416,50 @@ export class AuthController {
           value: sessionToken,
         },
       ],
+    };
+  }
+
+  private toAuthenticatedUser(
+    user: {
+      email: string;
+      fullName?: string;
+      needsPlanSelection?: boolean;
+      accountDeletionConfirmationMethod?: 'password' | 'email_code';
+      accountDeletionRequestedAt?: string;
+      accountDeactivationAt?: string;
+      accountDeletionAt?: string;
+    },
+    accountDeletion = this.toDeletionScheduleFromSessionUser(user),
+    accountDeletionConfirmationMethod = user.accountDeletionConfirmationMethod,
+  ): AuthenticatedUserResponse {
+    const response: AuthenticatedUserResponse = {
+      email: user.email,
+      fullName: user.fullName,
+      needsPlanSelection: Boolean(user.needsPlanSelection),
+      accountDeletionConfirmationMethod,
+    };
+    if (accountDeletion) {
+      response.accountDeletion = accountDeletion;
+    }
+    return response;
+  }
+
+  private toDeletionScheduleFromSessionUser(user: {
+    accountDeletionRequestedAt?: string;
+    accountDeactivationAt?: string;
+    accountDeletionAt?: string;
+  }): AccountDeletionSchedule | null {
+    if (!user.accountDeletionRequestedAt || !user.accountDeactivationAt || !user.accountDeletionAt) {
+      return null;
+    }
+
+    return {
+      requestedAt: user.accountDeletionRequestedAt,
+      deactivationAt: user.accountDeactivationAt,
+      deletionAt: user.accountDeletionAt,
+      status: new Date(user.accountDeactivationAt).getTime() <= Date.now()
+        ? 'deactivated_pending_deletion'
+        : 'pending_deactivation',
     };
   }
 }

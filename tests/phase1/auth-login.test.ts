@@ -108,6 +108,7 @@ describe('seeded admin session authentication boundary', () => {
       email: 'creator@example.com',
       fullName: 'Creator User',
       needsPlanSelection: true,
+      accountDeletionConfirmationMethod: 'password',
     });
   });
 
@@ -225,5 +226,132 @@ describe('seeded admin session authentication boundary', () => {
         } as never,
       }),
     ).toEqual({ allowed: true });
+  });
+
+  test('schedules account deletion for 24 hour deactivation and 30 day removal', async () => {
+    let now = new Date('2026-05-04T12:00:00.000Z');
+    const repo = new InMemoryAuthUserRepository([
+      {
+        id: 'user-delete-1',
+        email: 'creator@example.com',
+        fullName: 'Creator',
+        passwordHash: 'plain:secret123',
+        googleSubject: null,
+        isActive: true,
+        planSelectionCompleted: true,
+        createdAt: new Date('2026-05-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-05-01T00:00:00.000Z'),
+      },
+    ]);
+    const authService = new AuthService({
+      userStore: repo,
+      now: () => now,
+    });
+    const controller = new AuthController(authService, createSessionCookieOptions({ NODE_ENV: 'test' }));
+    const session = {
+      adminUser: {
+        email: 'creator@example.com',
+        needsPlanSelection: false,
+      },
+    } as any;
+
+    const rejectedResponse = await controller.requestAccountDeletion({ session });
+    expect(rejectedResponse.status).toBe(401);
+
+    const response = await controller.requestAccountDeletion({
+      session,
+      body: {
+        currentPassword: 'secret123',
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.alreadyRequested).toBe(false);
+    expect(response.body.accountDeletion).toEqual({
+      requestedAt: '2026-05-04T12:00:00.000Z',
+      deactivationAt: '2026-05-05T12:00:00.000Z',
+      deletionAt: '2026-06-03T12:00:00.000Z',
+      status: 'pending_deactivation',
+    });
+
+    const meResponse = await controller.me({ session });
+    expect(meResponse.body.user?.accountDeletion?.deletionAt).toBe('2026-06-03T12:00:00.000Z');
+
+    const secondResponse = await controller.requestAccountDeletion({ session });
+    expect(secondResponse.body.alreadyRequested).toBe(true);
+
+    now = new Date('2026-05-05T12:00:01.000Z');
+    const loginResponse = await controller.login({
+      body: {
+        email: 'creator@example.com',
+        password: 'secret123',
+      },
+      session: createSession(),
+    });
+
+    expect(loginResponse.status).toBe(401);
+    expect(loginResponse.body.error).toContain('deactivated');
+
+    now = new Date('2026-06-03T12:00:01.000Z');
+    const deletionResult = await authService.processDueAccountDeletions();
+    expect(deletionResult.processed).toBe(1);
+    expect(deletionResult.results[0]).toMatchObject({
+      email: 'creator@example.com',
+      authUsersAnonymized: 1,
+    });
+    expect(await repo.findByEmail('creator@example.com')).toBeNull();
+  });
+
+  test('requires an emailed code before deleting a Google-only account', async () => {
+    const sentEmails: Array<{ to: string; subject: string; textBody?: string }> = [];
+    const repo = new InMemoryAuthUserRepository([
+      {
+        id: 'user-google-delete-1',
+        email: 'google-delete@example.com',
+        fullName: 'Google Delete',
+        passwordHash: null,
+        googleSubject: 'google-delete-subject',
+        isActive: true,
+        planSelectionCompleted: true,
+        createdAt: new Date('2026-05-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-05-01T00:00:00.000Z'),
+      },
+    ]);
+    const authService = new AuthService({
+      userStore: repo,
+      now: () => new Date('2026-05-04T12:00:00.000Z'),
+      emailService: {
+        async send(notification) {
+          sentEmails.push(notification);
+        },
+      },
+    });
+    const controller = new AuthController(authService, createSessionCookieOptions({ NODE_ENV: 'test' }));
+    const session = {
+      adminUser: {
+        email: 'google-delete@example.com',
+        needsPlanSelection: false,
+      },
+    } as any;
+
+    const rejectedResponse = await controller.requestAccountDeletion({ session });
+    expect(rejectedResponse.status).toBe(401);
+
+    const challengeResponse = await controller.sendAccountDeletionConfirmation({ session });
+    expect(challengeResponse.status).toBe(200);
+    expect(sentEmails).toHaveLength(1);
+    expect(sentEmails[0].to).toBe('google-delete@example.com');
+    const code = sentEmails[0].textBody?.match(/\b\d{6}\b/)?.[0] ?? '';
+    expect(code).toMatch(/^\d{6}$/);
+
+    const response = await controller.requestAccountDeletion({
+      session,
+      body: {
+        confirmationCode: code,
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.accountDeletion?.status).toBe('pending_deactivation');
   });
 });

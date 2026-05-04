@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PMP Workspace Direction 03 - Field Motion Console</title>
+  <style>
+    :root {
+      --bg: #111412;
+      --panel: #181c18;
+      --panel-2: #20251f;
+      --ink: #eff4ea;
+      --muted: #9da999;
+      --line: rgba(239, 244, 234, 0.14);
+      --acid: #b7f36b;
+      --amber: #e7ba60;
+      --blue: #84a9ff;
+      --bad: #ff7b6e;
+      --sans: "Inter", "Aptos", Arial, sans-serif;
+      --mono: "JetBrains Mono", Consolas, monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: var(--sans);
+      background:
+        linear-gradient(120deg, rgba(183, 243, 107, 0.08), transparent 34%),
+        radial-gradient(circle at 85% 15%, rgba(132, 169, 255, 0.12), transparent 30%),
+        var(--bg);
+    }
+
+    .stage {
+      width: min(1440px, 100%);
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 88px 1fr 170px;
+      align-items: center;
+      gap: 14px;
+      min-height: 72px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(24, 28, 24, 0.74);
+      backdrop-filter: blur(18px);
+    }
+
+    .brand {
+      display: grid;
+      place-items: center;
+      height: 50px;
+      border-radius: 16px;
+      background: #dce8cf;
+      color: #111412;
+      font-family: var(--mono);
+      font-weight: 900;
+      letter-spacing: -0.06em;
+    }
+
+    .nav {
+      display: flex;
+      gap: 6px;
+      overflow: auto;
+    }
+
+    .nav span {
+      display: inline-flex;
+      align-items: center;
+      min-height: 42px;
+      padding: 0 13px;
+      border: 1px solid transparent;
+      border-radius: 14px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 760;
+      white-space: nowrap;
+    }
+
+    .nav span[data-active="true"] {
+      border-color: rgba(183, 243, 107, 0.38);
+      background: rgba(183, 243, 107, 0.1);
+      color: var(--ink);
+    }
+
+    .meta {
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.45;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 0.9fr) minmax(360px, 1.1fr);
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      background: linear-gradient(180deg, rgba(32,37,31,0.9), rgba(24,28,24,0.9));
+      box-shadow: 0 30px 90px rgba(0,0,0,0.32);
+    }
+
+    .intro {
+      min-height: 440px;
+      padding: 34px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .intro::after {
+      content: "";
+      position: absolute;
+      inset: auto -80px -90px auto;
+      width: 280px;
+      height: 280px;
+      border-radius: 50%;
+      border: 1px solid rgba(183, 243, 107, 0.18);
+      background:
+        repeating-conic-gradient(from 20deg, rgba(183,243,107,0.18) 0deg 8deg, transparent 8deg 18deg);
+      animation: rotate 28s linear infinite;
+    }
+
+    @keyframes rotate { to { transform: rotate(360deg); } }
+
+    .kicker,
+    .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--acid);
+    }
+
+    h1 {
+      margin: 18px 0;
+      max-width: 720px;
+      font-size: clamp(48px, 6.5vw, 94px);
+      line-height: 0.9;
+      letter-spacing: -0.075em;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    .engine {
+      padding: 22px;
+      min-height: 440px;
+      display: grid;
+      gap: 14px;
+      grid-template-rows: auto 1fr auto;
+    }
+
+    .engine-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .sprite-stage {
+      position: relative;
+      min-height: 280px;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      overflow: hidden;
+      background:
+        linear-gradient(rgba(239,244,234,0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(239,244,234,0.05) 1px, transparent 1px),
+        #121512;
+      background-size: 34px 34px;
+    }
+
+    .sprite {
+      position: absolute;
+      width: 88px;
+      height: 42px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(183, 243, 107, 0.34);
+      background: rgba(183, 243, 107, 0.12);
+      color: var(--ink);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 900;
+      color: var(--acid);
+      animation: drift 8s ease-in-out infinite;
+    }
+
+    .sprite:nth-child(1) { left: 8%; top: 18%; animation-delay: 0s; }
+    .sprite:nth-child(2) { left: 38%; top: 52%; animation-delay: -2s; border-color: rgba(231,186,96,0.45); color: var(--amber); background: rgba(231,186,96,0.1); }
+    .sprite:nth-child(3) { left: 66%; top: 26%; animation-delay: -4s; border-color: rgba(132,169,255,0.45); color: var(--blue); background: rgba(132,169,255,0.1); }
+
+    @keyframes drift {
+      0%, 100% { transform: translate3d(0, 0, 0); }
+      50% { transform: translate3d(26px, -18px, 0); }
+    }
+
+    .api-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+
+    .api-row span {
+      min-height: 42px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      font-family: var(--mono);
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .pages {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(140px, 1fr));
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .page {
+      min-height: 174px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(24, 28, 24, 0.72);
+      display: grid;
+      align-content: space-between;
+    }
+
+    .mark {
+      width: 46px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      background: rgba(239, 244, 234, 0.08);
+      color: var(--acid);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.06em;
+    }
+
+    .page strong {
+      display: block;
+      margin-top: 18px;
+      font-size: 18px;
+      letter-spacing: -0.035em;
+    }
+
+    .page small {
+      display: block;
+      margin-top: 8px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .critique {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    .radar {
+      height: 220px;
+      margin: 18px;
+      border-radius: 24px;
+      background:
+        conic-gradient(from 198deg, rgba(183,243,107,0.18), rgba(132,169,255,0.18), rgba(231,186,96,0.18), rgba(183,243,107,0.18)),
+        linear-gradient(rgba(239,244,234,0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(239,244,234,0.05) 1px, transparent 1px);
+      background-size: auto, 28px 28px, 28px 28px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .radar::after {
+      content: "";
+      position: absolute;
+      inset: 50px 43px 34px 40px;
+      clip-path: polygon(50% 0%, 94% 36%, 74% 92%, 22% 86%, 6% 32%);
+      background: rgba(183, 243, 107, 0.68);
+      mix-blend-mode: screen;
+    }
+
+    .scores {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      padding: 18px;
+    }
+
+    .score {
+      min-height: 118px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 16px;
+      background: rgba(239,244,234,0.04);
+    }
+
+    .score span {
+      display: block;
+      font-family: var(--mono);
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .score strong {
+      display: block;
+      margin-top: 16px;
+      font-size: 36px;
+      letter-spacing: -0.06em;
+    }
+
+    @media (max-width: 980px) {
+      .topbar,
+      .hero,
+      .critique { grid-template-columns: 1fr; }
+      .pages,
+      .scores,
+      .api-row { grid-template-columns: repeat(2, 1fr); }
+      .meta { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <header class="topbar">
+      <div class="brand">PMP</div>
+      <nav class="nav" aria-label="Workspace">
+        <span>Dashboard</span>
+        <span>Growth</span>
+        <span>Campanhas</span>
+        <span>Contas</span>
+        <span data-active="true">Videos</span>
+        <span>Planos</span>
+        <span>Configuracoes</span>
+      </nav>
+      <div class="meta">Direction 03<br />Field Motion</div>
+    </header>
+
+    <section class="hero">
+      <article class="panel intro">
+        <span class="kicker">Motion poetics school / Field.io</span>
+        <h1>Data feels alive, but still serves decisions.</h1>
+        <p>This direction is for a more distinctive product. The shell remains restrained, while motion appears only in panels that benefit from temporal feedback: upload, queue, channel sync, report generation and video asset export.</p>
+      </article>
+      <article class="panel engine">
+        <div class="engine-head">
+          <span class="label">Motion Design Engine Stage</span>
+          <span class="meta">time-slice sprite model</span>
+        </div>
+        <div class="sprite-stage" aria-label="Motion stage placeholder">
+          <span class="sprite">useTime</span>
+          <span class="sprite">useSprite</span>
+          <span class="sprite">Easing</span>
+        </div>
+        <div class="api-row">
+          <span>interpolate()</span>
+          <span>MP4</span>
+          <span>GIF</span>
+          <span>60FPS</span>
+        </div>
+      </article>
+    </section>
+
+    <section class="pages">
+      <article class="page"><span class="mark">DASH</span><strong>Dashboard</strong><small>Motion only for pulse refresh and playlist state.</small></article>
+      <article class="page"><span class="mark">GROW</span><strong>Growth</strong><small>Best host for Motion Lab and exportable campaign clips.</small></article>
+      <article class="page"><span class="mark">CAMP</span><strong>Campanhas</strong><small>Queue animation shows launch progress, not decoration.</small></article>
+      <article class="page"><span class="mark">AUTH</span><strong>Contas</strong><small>Sync/reauth state gets small timed indicators.</small></article>
+      <article class="page"><span class="mark">VID</span><strong>Videos</strong><small>Media vault can preview animated assets safely.</small></article>
+      <article class="page"><span class="mark">PLAN</span><strong>Planos</strong><small>Token usage is visualized as capacity over time.</small></article>
+      <article class="page"><span class="mark">CFG</span><strong>Configuracoes</strong><small>Motion controls live here, not scattered across pages.</small></article>
+    </section>
+
+    <section class="critique">
+      <article class="panel"><div class="radar" role="img" aria-label="Radar score visualization"></div></article>
+      <article class="panel scores">
+        <div class="score"><span>Philosophy</span><strong>8.0</strong></div>
+        <div class="score"><span>Hierarchy</span><strong>7.5</strong></div>
+        <div class="score"><span>Craft</span><strong>7.9</strong></div>
+        <div class="score"><span>Function</span><strong>7.7</strong></div>
+        <div class="score"><span>Innovation</span><strong>9.0</strong></div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

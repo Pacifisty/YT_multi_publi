@@ -129,18 +129,21 @@ test('Growth module exposes the final decision-focused structure', () => {
 });
 
 test('Growth content actions route to real PMP flows instead of fake local success', () => {
-  assert.match(APP_JS, /data-growth-campaign-from-idea/);
-  assert.match(APP_JS, /navigate\(buildUrl\('\/workspace\/campanhas\/nova', \{ idea \}\)\);/);
+  assert.doesNotMatch(APP_JS, /data-growth-campaign-from-idea/);
+  assert.match(APP_JS, /Criar campanha com roteiro/);
+  assert.match(APP_JS, /buildUrl\('\/workspace\/campanhas\/nova', \{ idea: topic \}\)/);
   assert.match(APP_JS, /navigate\(buildUrl\('\/workspace\/growth\/conteudo', \{ idea \}\)\);/);
   assert.match(APP_JS, /href: '\/workspace\/accounts'/);
   assert.match(APP_JS, /Fluxo em tres passos: gere uma ideia, transforme em roteiro e so entao abra campanha real no PMP\./);
   assert.match(APP_JS, /<a class="button button-secondary" data-link href="\/workspace\/growth\/campanhas">Ver campanhas<\/a>/);
   assert.match(APP_JS, /<button class="button button-primary" type="button" data-growth-script-from-idea="\$\{escapeAttribute\(idea\.title\)\}">Gerar roteiro<\/button>/);
-  assert.match(APP_JS, /<button class="button button-secondary" type="button" data-growth-campaign-from-idea="\$\{escapeAttribute\(idea\.title\)\}">Criar campanha<\/button>/);
+  assert.doesNotMatch(APP_JS, /<button class="button button-secondary" type="button" data-growth-campaign-from-idea="\$\{escapeAttribute\(idea\.title\)\}">Criar campanha<\/button>/);
   assert.match(APP_CSS, /\.growth-module \.button \{/);
   assert.match(APP_CSS, /\.growth-page-title-actions > \.button \{/);
+  assert.match(APP_CSS, /\.growth-page-title\.growth-page-title-actions \{/);
   assert.match(APP_CSS, /\.growth-filter-card \.button \{/);
   assert.match(APP_CSS, /\.growth-list-plain \.button \{/);
+  assert.match(APP_CSS, /\.growth-script-next-action \{/);
   assert.match(APP_JS, /function renderGrowthEmptyState\(title, description, action = '', actionHref = ''\)/);
   assert.doesNotMatch(APP_JS, /data-growth-calendar-from-idea/);
   assert.doesNotMatch(APP_JS, /data-growth-connect-platform/);
@@ -158,6 +161,7 @@ test('Growth script generator uses backend brief and renders the brief used', as
 
   const sources = [
     extractFunctionSource(APP_JS, 'renderGrowthScriptList'),
+    extractFunctionSource(APP_JS, 'renderGrowthScriptCampaignAction'),
     extractFunctionSource(APP_JS, 'renderGrowthScriptTimeline'),
     extractFunctionSource(APP_JS, 'renderGrowthScriptResearchResult'),
     extractFunctionSource(APP_JS, 'renderGrowthScriptResult'),
@@ -167,10 +171,11 @@ test('Growth script generator uses backend brief and renders the brief used', as
   const result = await AsyncFunction(`
     const calls = [];
     function escapeHtml(value) { return String(value ?? ''); }
+    function escapeAttribute(value) { return String(value ?? ''); }
     function renderNeonMediaIcon() { return '<i></i>'; }
     function parseCurrentQuery() { return new Map(); }
     function setGrowthButtonFeedback(button, label) { button.feedback = label; }
-    function buildUrl(path) { return path; }
+    function buildUrl(path, params) { return path + '?' + new URLSearchParams(params).toString(); }
     function navigate(path) { calls.push({ navigate: path }); }
     class HTMLInputElement {}
     class FormData {
@@ -246,6 +251,8 @@ test('Growth script generator uses backend brief and renders the brief used', as
   assert.equal(result.calls[0].topic, 'Retencao em videos curtos');
   assert.match(result.html, /Brief sobre retencao usando sinais reais/);
   assert.match(result.html, /Gancho 1/);
+  assert.match(result.html, /Criar campanha com roteiro/);
+  assert.match(result.html, /\/workspace\/campanhas\/nova\?idea=Retencao\+em\+videos\+curtos/);
   assert.equal(result.button.disabled, false);
   assert.equal(result.button.feedback, 'Brief + roteiro gerados');
 });

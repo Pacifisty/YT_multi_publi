@@ -3,6 +3,10 @@ export interface AdminSessionUser {
   fullName?: string;
   authenticatedAt?: string;
   needsPlanSelection?: boolean;
+  accountDeletionConfirmationMethod?: 'password' | 'email_code';
+  accountDeletionRequestedAt?: string;
+  accountDeactivationAt?: string;
+  accountDeletionAt?: string;
 }
 
 export interface AdminSession {
@@ -33,6 +37,14 @@ export class SessionGuard {
 
   check(request: SessionRequestLike): SessionGuardResult {
     if (request.session?.adminUser?.email) {
+      if (isPastIsoDate(request.session.adminUser.accountDeactivationAt)) {
+        return {
+          allowed: false,
+          reason: 'Unauthorized',
+          status: 401,
+        };
+      }
+
       if (request.session.adminUser.needsPlanSelection && !this.allowPendingPlanSelection) {
         return {
           allowed: false,
@@ -50,4 +62,10 @@ export class SessionGuard {
       status: 401,
     };
   }
+}
+
+function isPastIsoDate(value: string | undefined): boolean {
+  if (!value) return false;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) && timestamp <= Date.now();
 }

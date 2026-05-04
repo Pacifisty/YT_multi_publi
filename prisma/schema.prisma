@@ -15,6 +15,9 @@ model AdminUser {
   googleSubject          String?  @unique @map("google_subject")
   isActive               Boolean  @default(true) @map("is_active")
   planSelectionCompleted Boolean  @default(false) @map("plan_selection_completed")
+  accountDeletionRequestedAt     DateTime? @map("account_deletion_requested_at")
+  accountDeactivationScheduledAt DateTime? @map("account_deactivation_scheduled_at")
+  accountDeletionScheduledAt     DateTime? @map("account_deletion_scheduled_at")
   createdAt              DateTime @default(now()) @map("created_at")
   updatedAt              DateTime @updatedAt @map("updated_at")
 

@@ -11,6 +11,10 @@ interface TokenPayload {
   fullName?: string;
   authenticatedAt: string;
   needsPlanSelection?: boolean;
+  accountDeletionConfirmationMethod?: 'password' | 'email_code';
+  accountDeletionRequestedAt?: string;
+  accountDeactivationAt?: string;
+  accountDeletionAt?: string;
 }
 
 export class SessionStore {
@@ -20,12 +24,24 @@ export class SessionStore {
     this.secret = options.secret;
   }
 
-  createToken(user: { email: string; fullName?: string; needsPlanSelection?: boolean }): string {
+  createToken(user: {
+    email: string;
+    fullName?: string;
+    needsPlanSelection?: boolean;
+    accountDeletionConfirmationMethod?: 'password' | 'email_code';
+    accountDeletionRequestedAt?: string;
+    accountDeactivationAt?: string;
+    accountDeletionAt?: string;
+  }): string {
     const payload: TokenPayload = {
       email: user.email,
       fullName: user.fullName,
       authenticatedAt: new Date().toISOString(),
       needsPlanSelection: Boolean(user.needsPlanSelection),
+      accountDeletionConfirmationMethod: user.accountDeletionConfirmationMethod,
+      accountDeletionRequestedAt: user.accountDeletionRequestedAt,
+      accountDeactivationAt: user.accountDeactivationAt,
+      accountDeletionAt: user.accountDeletionAt,
     };
 
     const data = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -60,6 +76,10 @@ export class SessionStore {
           fullName: payload.fullName,
           authenticatedAt: payload.authenticatedAt,
           needsPlanSelection: Boolean(payload.needsPlanSelection),
+          accountDeletionConfirmationMethod: payload.accountDeletionConfirmationMethod,
+          accountDeletionRequestedAt: payload.accountDeletionRequestedAt,
+          accountDeactivationAt: payload.accountDeactivationAt,
+          accountDeletionAt: payload.accountDeletionAt,
         },
       };
     } catch {

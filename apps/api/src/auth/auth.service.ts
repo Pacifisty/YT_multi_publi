@@ -1,4 +1,4 @@
-import { createHash, randomUUID, scrypt as nodeScrypt, timingSafeEqual } from 'node:crypto';
+import { createHash, randomInt, randomUUID, scrypt as nodeScrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 
 import { GoogleOauthService, GOOGLE_AUTH_SCOPES, type GoogleOauthSession, type GoogleTokenResult } from '../integrations/google/google-oauth.service';
@@ -16,6 +16,16 @@ export interface AuthServiceOptions {
   now?: () => Date;
   userStore?: AuthUserRepository;
   googleOauthService?: GoogleOauthService;
+  emailService?: AccountDeletionEmailService;
+}
+
+export interface AccountDeletionEmailService {
+  send(notification: {
+    to: string;
+    subject: string;
+    htmlBody: string;
+    textBody?: string;
+  }): Promise<void>;
 }
 
 export type LoginResult =
@@ -40,20 +50,51 @@ const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
 const GOOGLE_STATE_TTL_MS = 10 * 60 * 1000;
 const DEV_GOOGLE_LOGIN_CODE = 'dev-google-login';
+const ACCOUNT_DEACTIVATION_DELAY_MS = 24 * 60 * 60 * 1000;
+const ACCOUNT_DELETION_DELAY_MS = 30 * 24 * 60 * 60 * 1000;
+const ACCOUNT_DELETION_CONFIRMATION_TTL_MS = 10 * 60 * 1000;
+
+type AccountDeletionConfirmationMethod = 'password' | 'email_code';
+
+export interface AccountDeletionSchedule {
+  requestedAt: string;
+  deactivationAt: string;
+  deletionAt: string;
+  status: 'pending_deactivation' | 'deactivated_pending_deletion';
+}
+
+export interface AccountDeletionConfirmationInput {
+  currentPassword?: string;
+  confirmationCode?: string;
+}
+
+export interface AccountDeletionChallengeResult {
+  ok: true;
+  expiresAt: string;
+  delivery: 'email';
+}
+
+export interface AccountDeletionProcessingResult {
+  processed: number;
+  results: Awaited<ReturnType<AuthUserRepository['finalizeAccountDeletion']>>[];
+}
 
 export class AuthService {
   private readonly env: Record<string, string | undefined>;
   private readonly now: () => Date;
   private readonly userStore: AuthUserRepository;
   private readonly googleOauthService: GoogleOauthService;
+  private readonly emailService?: AccountDeletionEmailService;
   private readonly failedAttempts = new Map<string, FailedAttemptState>();
   private readonly googleOauthStates = new Map<string, number>();
+  private readonly accountDeletionChallenges = new Map<string, { codeHash: string; expiresAt: number }>();
 
   constructor(options: AuthServiceOptions = {}) {
     this.env = options.env ?? process.env;
     this.now = options.now ?? (() => new Date());
     this.userStore = options.userStore ?? new InMemoryAuthUserRepository(buildSeedUsers(this.env));
     this.googleOauthService = options.googleOauthService ?? createAuthGoogleOauthService(this.env);
+    this.emailService = options.emailService;
   }
 
   async login(credentials: LoginDto, session?: AdminSession | null): Promise<LoginResult> {
@@ -70,12 +111,12 @@ export class AuthService {
 
     const user = await this.userStore.findByEmail(loginKey);
 
-    if (!user?.isActive) {
+    if (!user?.isActive || this.isAccountDeactivated(user)) {
       this.recordFailedAttempt(loginKey);
       return {
         ok: false,
         status: 401,
-        message: 'Invalid email or password.',
+        message: this.isAccountDeactivated(user) ? 'This account is deactivated and scheduled for deletion.' : 'Invalid email or password.',
       };
     }
 
@@ -220,6 +261,14 @@ export class AuthService {
     });
     user = updated ?? existing;
 
+    if (this.isAccountDeactivated(user)) {
+      return {
+        ok: false,
+        status: 401,
+        message: 'This account is deactivated and scheduled for deletion.',
+      };
+    }
+
     const refreshed = await this.userStore.findByEmail(user.email);
     if (refreshed) {
       user = refreshed;
@@ -230,6 +279,135 @@ export class AuthService {
 
   getCurrentUser(session?: AdminSession | null): AdminSessionUser | null {
     return session?.adminUser ?? null;
+  }
+
+  async getAccountDeletionSchedule(email: string): Promise<AccountDeletionSchedule | null> {
+    const user = await this.userStore.findByEmail(email);
+    return user ? this.toAccountDeletionSchedule(user) : null;
+  }
+
+  async getAccountDeletionConfirmationMethod(email: string): Promise<AccountDeletionConfirmationMethod | null> {
+    const user = await this.userStore.findByEmail(email);
+    return user ? this.getAccountDeletionConfirmationMethodForUser(user) : null;
+  }
+
+  async sendAccountDeletionConfirmation(
+    email: string,
+  ): Promise<
+    | AccountDeletionChallengeResult
+    | { ok: false; status: 404; message: string }
+  > {
+    const user = await this.userStore.findByEmail(email);
+    if (!user) {
+      return {
+        ok: false,
+        status: 404,
+        message: 'Authenticated user not found.',
+      };
+    }
+
+    const code = createAccountDeletionConfirmationCode();
+    const expiresAt = this.now().getTime() + ACCOUNT_DELETION_CONFIRMATION_TTL_MS;
+    this.accountDeletionChallenges.set(normalizeEmail(email), {
+      codeHash: this.hashAccountDeletionConfirmationCode(email, code),
+      expiresAt,
+    });
+
+    await this.emailService?.send({
+      to: user.email,
+      subject: 'Codigo para excluir sua conta Platform Multi Publisher',
+      htmlBody: `<p>Use o codigo <strong>${code}</strong> para confirmar a solicitacao de exclusao da sua conta.</p><p>O codigo expira em 10 minutos. Se voce nao solicitou isso, ignore este email.</p>`,
+      textBody: `Use o codigo ${code} para confirmar a solicitacao de exclusao da sua conta. O codigo expira em 10 minutos.`,
+    });
+
+    return {
+      ok: true,
+      delivery: 'email',
+      expiresAt: new Date(expiresAt).toISOString(),
+    };
+  }
+
+  async requestAccountDeletion(
+    email: string,
+    session?: AdminSession | null,
+    confirmation: AccountDeletionConfirmationInput = {},
+  ): Promise<
+    | { ok: true; schedule: AccountDeletionSchedule; user: AdminSessionUser; alreadyRequested: boolean }
+    | { ok: false; status: 401 | 404; message: string }
+  > {
+    const user = await this.userStore.findByEmail(email);
+    if (!user) {
+      return {
+        ok: false,
+        status: 404,
+        message: 'Authenticated user not found.',
+      };
+    }
+
+    const existingSchedule = this.toAccountDeletionSchedule(user);
+    if (existingSchedule) {
+      const sessionUser = this.toSessionUser(user);
+      if (session) {
+        session.adminUser = sessionUser;
+      }
+      return {
+        ok: true,
+        schedule: existingSchedule,
+        user: sessionUser,
+        alreadyRequested: true,
+      };
+    }
+
+    const confirmationResult = await this.verifyAccountDeletionConfirmation(user, confirmation);
+    if (!confirmationResult.ok) {
+      return confirmationResult;
+    }
+
+    const requestedAt = this.now();
+    const updated = await this.userStore.update(user.id, {
+      accountDeletionRequestedAt: requestedAt,
+      accountDeactivationScheduledAt: new Date(requestedAt.getTime() + ACCOUNT_DEACTIVATION_DELAY_MS),
+      accountDeletionScheduledAt: new Date(requestedAt.getTime() + ACCOUNT_DELETION_DELAY_MS),
+      updatedAt: requestedAt,
+    });
+
+    const resolved = updated ?? user;
+    const schedule = this.toAccountDeletionSchedule(resolved);
+    if (!schedule) {
+      return {
+        ok: false,
+        status: 401,
+        message: 'Unable to schedule account deletion.',
+      };
+    }
+
+    const sessionUser = this.toSessionUser(resolved);
+    if (session) {
+      session.adminUser = sessionUser;
+    }
+
+    return {
+      ok: true,
+      schedule,
+      user: sessionUser,
+      alreadyRequested: false,
+    };
+  }
+
+  async processDueAccountDeletions(limit = 25): Promise<AccountDeletionProcessingResult> {
+    const now = this.now();
+    const dueUsers = (await this.userStore.listDueForAccountDeletion(now)).slice(0, limit);
+    const results = [];
+
+    for (const user of dueUsers) {
+      results.push(await this.userStore.finalizeAccountDeletion(user, now));
+      this.accountDeletionChallenges.delete(normalizeEmail(user.email));
+    }
+
+    return {
+      processed: results.length,
+      results,
+    };
   }
 
   async markPlanSelectionCompleted(email: string, session?: AdminSession | null): Promise<AdminSessionUser | null> {
@@ -289,12 +467,88 @@ export class AuthService {
   }
 
   private toSessionUser(user: AuthUser): AdminSessionUser {
+    const schedule = this.toAccountDeletionSchedule(user);
     return {
       email: user.email,
       fullName: user.fullName ?? undefined,
       authenticatedAt: this.now().toISOString(),
       needsPlanSelection: !user.planSelectionCompleted,
+      accountDeletionConfirmationMethod: this.getAccountDeletionConfirmationMethodForUser(user),
+      accountDeletionRequestedAt: schedule?.requestedAt,
+      accountDeactivationAt: schedule?.deactivationAt,
+      accountDeletionAt: schedule?.deletionAt,
     };
+  }
+
+  private toAccountDeletionSchedule(user: AuthUser): AccountDeletionSchedule | null {
+    const requestedAt = user.accountDeletionRequestedAt;
+    const deactivationAt = user.accountDeactivationScheduledAt;
+    const deletionAt = user.accountDeletionScheduledAt;
+    if (!requestedAt || !deactivationAt || !deletionAt) {
+      return null;
+    }
+
+    return {
+      requestedAt: requestedAt.toISOString(),
+      deactivationAt: deactivationAt.toISOString(),
+      deletionAt: deletionAt.toISOString(),
+      status: deactivationAt.getTime() <= this.now().getTime()
+        ? 'deactivated_pending_deletion'
+        : 'pending_deactivation',
+    };
+  }
+
+  private isAccountDeactivated(user: AuthUser | null | undefined): boolean {
+    const deactivationAt = user?.accountDeactivationScheduledAt;
+    return Boolean(deactivationAt && deactivationAt.getTime() <= this.now().getTime());
+  }
+
+  private getAccountDeletionConfirmationMethodForUser(user: AuthUser): AccountDeletionConfirmationMethod {
+    return user.passwordHash ? 'password' : 'email_code';
+  }
+
+  private async verifyAccountDeletionConfirmation(
+    user: AuthUser,
+    confirmation: AccountDeletionConfirmationInput,
+  ): Promise<{ ok: true } | { ok: false; status: 401; message: string }> {
+    const currentPassword = confirmation.currentPassword?.trim();
+    if (currentPassword && user.passwordHash && await verifyPasswordHash(currentPassword, user.passwordHash)) {
+      return { ok: true };
+    }
+
+    const confirmationCode = confirmation.confirmationCode?.trim();
+    if (confirmationCode && this.verifyAccountDeletionConfirmationCode(user.email, confirmationCode)) {
+      return { ok: true };
+    }
+
+    return {
+      ok: false,
+      status: 401,
+      message: user.passwordHash
+        ? 'Confirm your current password before requesting account deletion.'
+        : 'Confirm the deletion code sent to your account email before requesting account deletion.',
+    };
+  }
+
+  private verifyAccountDeletionConfirmationCode(email: string, code: string): boolean {
+    const normalizedEmail = normalizeEmail(email);
+    const challenge = this.accountDeletionChallenges.get(normalizedEmail);
+    if (!challenge || challenge.expiresAt <= this.now().getTime()) {
+      this.accountDeletionChallenges.delete(normalizedEmail);
+      return false;
+    }
+
+    const expectedHash = this.hashAccountDeletionConfirmationCode(email, code);
+    const valid = safeEquals(challenge.codeHash, expectedHash);
+    this.accountDeletionChallenges.delete(normalizedEmail);
+    return valid;
+  }
+
+  private hashAccountDeletionConfirmationCode(email: string, code: string): string {
+    const secret = this.env.OAUTH_TOKEN_KEY ?? this.env.ADMIN_PASSWORD_HASH ?? 'account-deletion-confirmation';
+    return createHash('sha256')
+      .update(`${normalizeEmail(email)}:${code}:${secret}`)
+      .digest('hex');
   }
 
   private getRateLimitMessage(loginKey: string): string | null {
@@ -468,6 +722,14 @@ function safeEquals(left: string, right: string): boolean {
   }
 
   return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function createAccountDeletionConfirmationCode(): string {
+  return String(randomInt(0, 1_000_000)).padStart(6, '0');
 }
 
 export async function createPasswordHash(password: string): Promise<string> {

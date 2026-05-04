@@ -111,8 +111,13 @@ export function createApp(config: AppConfig = {}): AppInstance {
   validatePaymentConfig(env as Record<string, string | undefined>, nodeEnv);
 
   const publicMediaUrlService = createPublicMediaUrlService(config.env);
+  const emailProvider = selectEmailProvider();
+  const emailService = new EmailService({ provider: emailProvider });
+  const emailProviderType = config.env?.EMAIL_PROVIDER || 'mock';
+  console.log(`[api] email provider: ${emailProviderType}`);
   const authModule = createAuthModule({
     env: config.env,
+    emailService,
     ...config.authModuleOptions,
   });
   const accountPlanService = new AccountPlanService({
@@ -132,12 +137,6 @@ export function createApp(config: AppConfig = {}): AppInstance {
   console.log(`[api] payment provider: ${paymentProviderName}`);
   console.log(`[api] mercadopago api timeout: ${MERCADOPAGO_TIMEOUT_MS}ms`);
   console.log(`[api] webhook deduplication: ${paymentWebhookDeduplicator ? 'enabled' : 'disabled (no persistent deduplicator configured)'}`);
-
-  // Initialize email service
-  const emailProvider = selectEmailProvider();
-  const emailService = new EmailService({ provider: emailProvider });
-  const emailProviderType = config.env?.EMAIL_PROVIDER || 'mock';
-  console.log(`[api] email provider: ${emailProviderType}`);
 
   const paymentService = new PaymentService({
     provider: paymentProvider,
@@ -241,6 +240,7 @@ export function createApp(config: AppConfig = {}): AppInstance {
 
       processingQueue = true;
       try {
+        await authModule.authService.processDueAccountDeletions();
         await scheduledLaunchChecker.checkAndLaunch();
         await resilientJobRunner.processAll();
       } finally {

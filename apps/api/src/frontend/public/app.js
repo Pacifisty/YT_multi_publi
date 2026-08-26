@@ -3114,7 +3114,294 @@ function renderLoginPage(options = {}) {
 }
 
 function renderRichLoginPage(options = {}) {
-  return renderModernLoginPage(options);
+  return renderMerchantLoginPage(options);
+}
+
+function renderMerchantLegalPanel(documentKey) {
+  const documentData = getLegalDocument(documentKey);
+  if (!documentData) {
+    return `
+      <article class="merchant-legal-panel">
+        <h3>Documento indisponivel</h3>
+        <p>Atualize a pagina para carregar este conteudo legal.</p>
+      </article>
+    `;
+  }
+
+  const sectionsHtml = documentData.sections.slice(0, 5).map((section) => `
+    <details class="merchant-legal-item">
+      <summary>${escapeHtml(section.heading)}</summary>
+      <div>${String(section.html ?? '')}</div>
+    </details>
+  `).join('');
+
+  return `
+    <article class="merchant-legal-panel">
+      <div class="merchant-section-kicker">${escapeHtml(documentData.lastUpdated || LEGAL_LAST_UPDATED)}</div>
+      <h3>${escapeHtml(documentData.ptTitle || documentData.title)}</h3>
+      <p>${escapeHtml(documentData.subtitle)}</p>
+      ${sectionsHtml}
+      <a class="merchant-text-link" href="${escapeAttribute(LEGAL_DOCUMENT_PATHS[documentKey] || '/')}" data-link>Ver documento completo</a>
+    </article>
+  `;
+}
+
+function renderMerchantLoginPage(options = {}) {
+  const mode = options.mode === 'register' ? 'register' : 'login';
+  const verifying = options.verifying === true;
+  const initialSection = String(options.initialSection ?? '').replace(/[^a-z0-9_-]/gi, '');
+  const draft = {
+    fullName: String(options.draft?.fullName ?? ''),
+    email: String(options.draft?.email ?? ''),
+    password: String(options.draft?.password ?? ''),
+  };
+  const publicPlanOptions = mergePlanDisplayOptions();
+  const planCardsHtml = publicPlanOptions.map((plan) => renderPublicPlanCard(plan)).join('');
+  const errorHtml = options.error ? `<div class="merchant-alert" role="alert">${escapeHtml(options.error)}</div>` : '';
+  const noticeHtml = renderUiNotice();
+
+  root.innerHTML = `
+    <div class="merchant-login" data-initial-section="${escapeAttribute(initialSection)}" data-mode="${escapeAttribute(mode)}">
+      <header class="merchant-nav">
+        <a class="merchant-brand" href="/" data-link aria-label="Platform Multi Publisher">
+          <span class="merchant-brand-mark merchant-brand-mark-animated" aria-hidden="true">
+            <span>PMP</span>
+          </span>
+          <span>
+            <strong>Platform Multi Publisher</strong>
+            <small>video operations</small>
+          </span>
+        </a>
+        <nav aria-label="Menu principal">
+          <a href="#programa">Programa</a>
+          <a href="#planos">Planos</a>
+          <a href="#acesso">Login</a>
+          <a href="#terms">Termos</a>
+          <a href="#privacy">Privacidade</a>
+          <a href="#data-deletion">Exclusao</a>
+        </nav>
+        <a class="merchant-nav-cta" href="/login?mode=register#acesso" data-link>Criar conta</a>
+      </header>
+
+      <main>
+        <section id="programa" class="merchant-hero" aria-label="Demonstracao animada do programa">
+          <div class="merchant-scene" aria-hidden="true">
+            <div class="merchant-sun"></div>
+            <div class="merchant-satellite">
+              <span class="satellite-body"></span>
+              <span class="satellite-panel panel-left"></span>
+              <span class="satellite-panel panel-right"></span>
+              <span class="satellite-signal signal-one"></span>
+              <span class="satellite-signal signal-two"></span>
+            </div>
+            <div class="merchant-earth-link">
+              <span class="earth-link-line"></span>
+              <span class="earth-pulse earth-pulse-up pulse-one"></span>
+              <span class="earth-pulse earth-pulse-up pulse-two"></span>
+              <span class="earth-pulse earth-pulse-down pulse-three"></span>
+              <span class="earth-pulse earth-pulse-down pulse-four"></span>
+            </div>
+            <div class="merchant-earth">
+              <span class="earth-cloud cloud-one"></span>
+              <span class="earth-cloud cloud-two"></span>
+              <span class="earth-cloud cloud-three"></span>
+            </div>
+            <div class="merchant-water"></div>
+            <div class="merchant-copy">
+              <span>primeiro painel</span>
+              <h1>Publique videos em tres canais sem reconstruir a operacao.</h1>
+              <p>Campanhas, midia, destinos OAuth, fila, logs e revisao em um unico workspace.</p>
+            </div>
+          </div>
+
+          <aside class="merchant-demo-panel">
+            <div class="merchant-section-kicker">como e o programa</div>
+            <h2>Uma sala de controle para YouTube, TikTok e Instagram.</h2>
+            <div class="merchant-workflow">
+              <article><strong>01</strong><span>Conectar contas autorizadas por OAuth</span></article>
+              <article><strong>02</strong><span>Subir videos, capas e descricoes</span></article>
+              <article><strong>03</strong><span>Montar campanhas por destino</span></article>
+              <article><strong>04</strong><span>Acompanhar fila, erros e publicacoes</span></article>
+            </div>
+            <a class="merchant-primary" href="#planos">Ver planos</a>
+          </aside>
+        </section>
+
+        <section id="planos" class="merchant-section merchant-plans">
+          <div class="merchant-section-head">
+            <div class="merchant-section-kicker">segundo painel</div>
+            <h2>Escolha o plano antes de abrir o workspace.</h2>
+            <p>Esta secao tambem atende o fluxo publico de <a href="/onboarding/plan" data-link>/onboarding/plan</a>. Depois do cadastro, usuarios autenticados escolhem o plano e seguem para o painel.</p>
+          </div>
+          <div class="public-pricing-grid merchant-pricing-grid">${planCardsHtml}</div>
+        </section>
+
+        <section id="acesso" class="merchant-section merchant-access">
+          <div class="merchant-access-copy">
+            <div class="merchant-section-kicker">acesso</div>
+            <h2>${mode === 'register' ? 'Crie sua conta operacional.' : 'Entre no workspace.'}</h2>
+            <p>${mode === 'register' ? 'Cadastre email e senha, escolha o plano e comece a organizar campanhas.' : 'Use email e senha ou continue com Google para restaurar sua sessao.'}</p>
+            <ul>
+              <li>SEO publico em / e /login</li>
+              <li>Termos, privacidade e exclusao logo na mesma pagina</li>
+              <li>Fluxo real de login mantido</li>
+            </ul>
+          </div>
+          <div class="merchant-login-card">
+            ${noticeHtml}
+            ${errorHtml}
+            <div class="merchant-tabs" role="tablist">
+              <button type="button" role="tab" aria-selected="${mode === 'login'}" data-auth-mode="login" class="${mode === 'login' ? 'is-active' : ''}">Entrar</button>
+              <button type="button" role="tab" aria-selected="${mode === 'register'}" data-auth-mode="register" class="${mode === 'register' ? 'is-active' : ''}">Criar conta</button>
+            </div>
+            <button id="google-auth-btn" type="button" class="merchant-google">
+              ${renderGoogleGlyph('small')}
+              <span>Continuar com Google</span>
+            </button>
+            <div class="merchant-divider"><span>ou por email</span></div>
+            <form id="login-modern-form" class="merchant-form" novalidate>
+              ${mode === 'register' ? `
+                <label>
+                  <span>Nome completo</span>
+                  <input name="fullName" type="text" autocomplete="name" value="${escapeHtml(draft.fullName)}" placeholder="Seu nome" />
+                </label>
+              ` : ''}
+              <label>
+                <span>Email</span>
+                <input name="email" type="email" required autocomplete="username" value="${escapeHtml(draft.email)}" placeholder="voce@empresa.com" />
+              </label>
+              <label>
+                <span>Senha</span>
+                <div class="merchant-password-wrap">
+                  <input name="password" type="password" required autocomplete="${mode === 'register' ? 'new-password' : 'current-password'}" value="${escapeHtml(draft.password)}" placeholder="${mode === 'register' ? 'minimo 6 caracteres' : 'sua senha'}" minlength="6" />
+                  <button type="button" data-action="toggle-password" aria-label="Mostrar ou ocultar senha">ver</button>
+                </div>
+              </label>
+              <button type="submit" class="merchant-primary">${mode === 'register' ? 'Criar conta' : 'Entrar no workspace'}</button>
+            </form>
+            <p class="merchant-footnote">
+              ${mode === 'register'
+                ? 'Ao criar uma conta, voce concorda com os termos e politica de privacidade abaixo.'
+                : 'Se sua conta comecou pelo Google, use Google para restaurar o workspace correto.'}
+            </p>
+          </div>
+        </section>
+
+        <section id="terms" class="merchant-section merchant-legal-section">
+          <div class="merchant-section-head">
+            <div class="merchant-section-kicker">/terms</div>
+            <h2>Termos de uso na propria pagina principal.</h2>
+          </div>
+          ${renderMerchantLegalPanel('terms')}
+        </section>
+
+        <section id="privacy" class="merchant-section merchant-legal-section">
+          <div class="merchant-section-head">
+            <div class="merchant-section-kicker">/privacy</div>
+            <h2>Privacidade e uso de dados de plataformas conectadas.</h2>
+          </div>
+          ${renderMerchantLegalPanel('privacy')}
+        </section>
+
+        <section id="data-deletion" class="merchant-section merchant-legal-section">
+          <div class="merchant-section-head">
+            <div class="merchant-section-kicker">/data-deletion</div>
+            <h2>Exclusao de dados e revogacao de acesso.</h2>
+          </div>
+          ${renderMerchantLegalPanel('data-deletion')}
+        </section>
+      </main>
+
+      <footer class="merchant-footer">
+        <strong>Platform Multi Publisher</strong>
+        <nav aria-label="Links finais">
+          <a href="/login" data-link>Login</a>
+          <a href="/terms" data-link>Termos</a>
+          <a href="/privacy" data-link>Privacidade</a>
+          <a href="/data-deletion" data-link>Exclusao de dados</a>
+          <a href="/onboarding/plan" data-link>Planos</a>
+        </nav>
+      </footer>
+
+      ${verifying ? `
+        <div class="merchant-loading" role="status" aria-live="polite">
+          <div>
+            <span></span>
+            <strong>Autenticando</strong>
+            <small>Preparando seu workspace...</small>
+          </div>
+        </div>
+      ` : ''}
+    </div>
+  `;
+
+  const form = document.getElementById('login-modern-form');
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const data = new FormData(form);
+    const fullName = String(data.get('fullName') ?? '').trim();
+    const email = String(data.get('email') ?? '').trim();
+    const password = String(data.get('password') ?? '');
+
+    if (!email || !email.includes('@')) {
+      renderMerchantLoginPage({ error: 'Email must be valid.', mode, draft: { fullName, email, password }, initialSection: 'acesso' });
+      return;
+    }
+    if (!password) {
+      renderMerchantLoginPage({ error: 'Password is required.', mode, draft: { fullName, email, password }, initialSection: 'acesso' });
+      return;
+    }
+    if (mode === 'register' && password.length < 6) {
+      renderMerchantLoginPage({ error: 'Password must be at least 6 characters.', mode, draft: { fullName, email, password }, initialSection: 'acesso' });
+      return;
+    }
+
+    renderMerchantLoginPage({ mode, draft: { fullName, email, password }, verifying: true, initialSection: 'acesso' });
+    await new Promise((resolve) => window.requestAnimationFrame(() => window.setTimeout(resolve, 90)));
+
+    const result = mode === 'register'
+      ? await api.register({ email, password, fullName: fullName || undefined })
+      : await api.login({ email, password });
+
+    if (!result.ok) {
+      renderMerchantLoginPage({ error: result.error, mode, draft: { fullName, email, password }, initialSection: 'acesso' });
+      return;
+    }
+    handleAuthenticatedNavigation(result.body?.user);
+  });
+
+  document.querySelectorAll('[data-auth-mode]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const nextMode = button.getAttribute('data-auth-mode') === 'register' ? 'register' : 'login';
+      navigate(buildUrl('/login', nextMode === 'register' ? { mode: 'register' } : {}), true);
+      window.setTimeout(() => document.getElementById('acesso')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 40);
+    });
+  });
+
+  document.getElementById('google-auth-btn')?.addEventListener('click', async () => {
+    const result = await api.startAuthGoogleOauth();
+    if (!result.ok || !result.body?.redirectUrl) {
+      renderMerchantLoginPage({ error: result.error || 'Unable to start Google sign-in.', mode, draft, initialSection: 'acesso' });
+      return;
+    }
+    window.location.assign(result.body.redirectUrl);
+  });
+
+  document.querySelector('[data-action="toggle-password"]')?.addEventListener('click', (event) => {
+    const wrapper = event.currentTarget.closest('.merchant-password-wrap');
+    const input = wrapper?.querySelector('input');
+    if (!input) return;
+    input.type = input.type === 'password' ? 'text' : 'password';
+    event.currentTarget.textContent = input.type === 'password' ? 'ver' : 'ocultar';
+  });
+
+  if (initialSection) {
+    window.requestAnimationFrame(() => {
+      document.getElementById(initialSection)?.scrollIntoView({ block: 'start' });
+    });
+  }
+
+  bindUiNoticeDismiss();
 }
 
 function renderModernLoginPage(options = {}) {
@@ -16589,22 +16876,23 @@ async function renderRoute() {
         navigate(me.needsPlanSelection ? '/onboarding/plan' : '/workspace/dashboard', true);
         return;
       }
-      await renderPublicLandingPagePsychedelic();
+      const query = parseCurrentQuery();
+      renderLoginPage({ mode: query.get('mode') === 'register' ? 'register' : 'login' });
       return;
     }
 
     if (path === '/privacy') {
-      renderPrivacyPolicyPage();
+      renderLoginPage({ initialSection: 'privacy' });
       return;
     }
 
     if (path === '/terms') {
-      renderTermsOfServicePage();
+      renderLoginPage({ initialSection: 'terms' });
       return;
     }
 
     if (path === '/data-deletion') {
-      renderDataDeletionPage();
+      renderLoginPage({ initialSection: 'data-deletion' });
       return;
     }
 
@@ -16627,7 +16915,7 @@ async function renderRoute() {
     if (path === '/onboarding/plan') {
       const me = await ensureAuthenticated();
       if (!me) {
-        unauthorizedRedirect();
+        renderLoginPage({ initialSection: 'planos' });
         return;
       }
       if (!me.needsPlanSelection) {

@@ -107,7 +107,7 @@ function repairUtf8Mojibake(value: string): string {
   }
 }
 
-const PUBLIC_INDEXABLE_PATHS = ['/', '/privacy', '/terms', '/data-deletion'] as const;
+const PUBLIC_INDEXABLE_PATHS = ['/', '/login', '/onboarding/plan', '/privacy', '/terms', '/data-deletion'] as const;
 const LEGAL_PATH_TO_DOCUMENT_KEY: Partial<Record<string, LegalDocumentKey>> = {
   '/privacy': 'privacy',
   '/terms': 'terms',
@@ -182,8 +182,6 @@ function buildRobotsTxt(): string {
     'Disallow: /api/',
     'Disallow: /auth/',
     'Disallow: /workspace/',
-    'Disallow: /login',
-    'Disallow: /onboarding/',
     'Disallow: /media-files/',
     'Disallow: /public-media/',
     `Sitemap: ${buildAbsoluteUrl('/sitemap.xml')}`,
@@ -278,6 +276,17 @@ function getSeoForPath(path: string, locale: FrontendLocale) {
       ...base,
       title: `${getLegalDocumentTitle(document, locale)} | Platform Multi Publisher`,
       description: document.subtitle,
+    };
+  }
+  if (normalizedPath === '/' || normalizedPath === '/login' || normalizedPath === '/onboarding/plan') {
+    return {
+      ...base,
+      title: locale === 'en'
+        ? 'Platform Multi Publisher | Login, plans and publishing workspace'
+        : 'Platform Multi Publisher | Login, planos e publicacao multi plataforma',
+      description: locale === 'en'
+        ? 'Main Platform Multi Publisher page with login, plans, terms, privacy, data deletion and publishing workflows for YouTube, TikTok and Instagram.'
+        : 'Pagina principal do Platform Multi Publisher com login, planos, termos, privacidade, exclusao de dados e fluxo para publicar videos no YouTube, TikTok e Instagram.',
     };
   }
   return base;

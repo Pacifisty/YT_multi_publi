@@ -3180,12 +3180,12 @@ function renderMerchantLoginPage(options = {}) {
           <a href="#data-deletion">Exclusao</a>
         </nav>
         <div class="merchant-nav-actions" aria-label="Acesso à conta">
-          <a class="merchant-nav-cta merchant-nav-cta-secondary" href="/login#acesso" data-link>
+          <button class="merchant-nav-cta merchant-nav-cta-secondary" type="button" data-auth-mode="login">
             <span>Login</span><span class="merchant-nav-cta-icon" aria-hidden="true">↗</span>
-          </a>
-          <a class="merchant-nav-cta" href="/login?mode=register#acesso" data-link>
+          </button>
+          <button class="merchant-nav-cta" type="button" data-auth-mode="register">
             <span>Criar conta</span><span class="merchant-nav-cta-icon" aria-hidden="true">↗</span>
-          </a>
+          </button>
         </div>
       </header>
 
@@ -3242,18 +3242,32 @@ function renderMerchantLoginPage(options = {}) {
 
         <section id="acesso" class="merchant-section merchant-access">
           <div class="merchant-access-copy">
-            <div class="merchant-section-kicker">acesso</div>
+            <div class="merchant-section-kicker">acesso seguro</div>
             <h2>${mode === 'register' ? 'Crie sua conta operacional.' : 'Entre no workspace.'}</h2>
-            <p>${mode === 'register' ? 'Cadastre email e senha, escolha o plano e comece a organizar campanhas.' : 'Use email e senha ou continue com Google para restaurar sua sessao.'}</p>
-            <ul>
-              <li>SEO publico em / e /login</li>
-              <li>Termos, privacidade e exclusao logo na mesma pagina</li>
-              <li>Fluxo real de login mantido</li>
-            </ul>
+            <p>${mode === 'register' ? 'Cadastre seus dados, escolha o plano e prepare um workspace central para toda a operação de vídeo.' : 'Retome campanhas, canais conectados e publicações exatamente de onde parou.'}</p>
+            <div class="merchant-access-benefits">
+              <article><strong>Operação central</strong><span>Campanhas, mídia, destinos e fila no mesmo ambiente.</span></article>
+              <article><strong>Acesso protegido</strong><span>Entre com sua conta PMP ou continue pelo Google OAuth.</span></article>
+              <article><strong>Continuidade real</strong><span>Sua sessão restaura o workspace e o plano associados.</span></article>
+            </div>
+            <div class="merchant-access-flow" aria-label="Etapas para começar">
+              <span><b>01</b> Conta</span>
+              <i aria-hidden="true"></i>
+              <span><b>02</b> Plano</span>
+              <i aria-hidden="true"></i>
+              <span><b>03</b> Workspace</span>
+            </div>
           </div>
           <div class="merchant-login-card">
             ${noticeHtml}
             ${errorHtml}
+            <header class="merchant-login-card-head">
+              <div>
+                <span>Conta PMP</span>
+                <h3>${mode === 'register' ? 'Comece sua operação' : 'Bem-vindo de volta'}</h3>
+              </div>
+              <span class="merchant-secure-badge"><i aria-hidden="true"></i> Ambiente seguro</span>
+            </header>
             <div class="merchant-tabs" role="tablist">
               <button type="button" role="tab" aria-selected="${mode === 'login'}" data-auth-mode="login" class="${mode === 'login' ? 'is-active' : ''}">Entrar</button>
               <button type="button" role="tab" aria-selected="${mode === 'register'}" data-auth-mode="register" class="${mode === 'register' ? 'is-active' : ''}">Criar conta</button>
@@ -3288,6 +3302,11 @@ function renderMerchantLoginPage(options = {}) {
                 ? 'Ao criar uma conta, voce concorda com os termos e politica de privacidade abaixo.'
                 : 'Se sua conta comecou pelo Google, use Google para restaurar o workspace correto.'}
             </p>
+            <div class="merchant-auth-notes" aria-label="Informações de segurança">
+              <span>Sessão protegida</span>
+              <span>Google OAuth</span>
+              <span>Controle de acesso</span>
+            </div>
           </div>
         </section>
 
@@ -3377,8 +3396,8 @@ function renderMerchantLoginPage(options = {}) {
   document.querySelectorAll('[data-auth-mode]').forEach((button) => {
     button.addEventListener('click', () => {
       const nextMode = button.getAttribute('data-auth-mode') === 'register' ? 'register' : 'login';
-      navigate(buildUrl('/login', nextMode === 'register' ? { mode: 'register' } : {}), true);
-      window.setTimeout(() => document.getElementById('acesso')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 40);
+      const authUrl = buildUrl('/login', nextMode === 'register' ? { mode: 'register' } : {});
+      navigate(`${authUrl}#acesso`, true);
     });
   });
 
@@ -16881,7 +16900,10 @@ async function renderRoute() {
         return;
       }
       const query = parseCurrentQuery();
-      renderLoginPage({ mode: query.get('mode') === 'register' ? 'register' : 'login' });
+      renderLoginPage({
+        mode: query.get('mode') === 'register' ? 'register' : 'login',
+        initialSection: window.location.hash.replace(/^#/, ''),
+      });
       return;
     }
 
@@ -16907,7 +16929,10 @@ async function renderRoute() {
         return;
       }
       const query = parseCurrentQuery();
-      renderLoginPage({ mode: query.get('mode') === 'register' ? 'register' : 'login' });
+      renderLoginPage({
+        mode: query.get('mode') === 'register' ? 'register' : 'login',
+        initialSection: window.location.hash.replace(/^#/, ''),
+      });
       return;
     }
 

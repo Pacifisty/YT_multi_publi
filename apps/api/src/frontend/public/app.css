@@ -18945,6 +18945,120 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .campaign-co
   }
 }
 
+/* PMP supplied artwork: primary logo above, tagline directly below. */
+.pmp-logo-mark,
+.legal-brand-mark,
+.psy-brand-mark,
+.psy-sun-mark,
+.merchant-brand-mark,
+.settings-mark-pmp-logo {
+  position: relative !important;
+  background-color: transparent !important;
+  background-image: url("/assets/PMP-logo.png") !important;
+  background-position: center top !important;
+  background-repeat: no-repeat !important;
+  background-size: 100% auto !important;
+  overflow: visible !important;
+}
+
+.pmp-logo-mark::after,
+.legal-brand-mark::after,
+.psy-brand-mark::after,
+.psy-sun-mark::after,
+.merchant-brand-mark::after,
+.settings-mark-pmp-logo::after {
+  content: none !important;
+  display: none !important;
+}
+
+.pmp-logo-mark {
+  width: 168px !important;
+  height: 56px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  filter: drop-shadow(0 4px 8px rgba(18, 24, 38, 0.18));
+}
+
+.pmp-logo-mark .pmp-logo-svg,
+.pmp-logo-mark .pmp-logo-pulse {
+  display: none !important;
+}
+
+.legal-brand-mark,
+.psy-brand-mark,
+.psy-sun-mark,
+.merchant-brand-mark,
+.settings-mark-pmp-logo {
+  color: transparent !important;
+  font-size: 0 !important;
+  letter-spacing: 0 !important;
+  text-shadow: none !important;
+}
+
+.pmp-brand > .pmp-brand-text,
+.merchant-brand > span:last-child,
+.psy-brand > span:last-child {
+  display: none !important;
+}
+
+.legal-brand-mark {
+  width: 144px !important;
+  height: 48px !important;
+  min-width: 144px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.merchant-brand-mark {
+  width: 168px !important;
+  height: 56px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.merchant-brand-mark::before,
+.merchant-brand-mark > span {
+  display: none !important;
+}
+
+.psy-brand-mark {
+  width: 144px !important;
+  height: 48px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+
+.psy-sun-mark {
+  width: 264px !important;
+  height: 88px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  animation: none !important;
+  transform: translate(-50%, -50%) !important;
+}
+
+.settings-mark-pmp-logo {
+  width: 96px !important;
+  height: 32px !important;
+  min-width: 96px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 760px) {
+  .pmp-logo-mark {
+    width: 132px !important;
+    height: 44px !important;
+  }
+}
+
 /* ==================== Merchant Login Principal ==================== */
 .merchant-login {
   --merchant-ink: #1d2421;
@@ -18980,7 +19094,7 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .campaign-co
   top: 0;
   z-index: 50;
   display: grid;
-  grid-template-columns: minmax(230px, 1fr) auto minmax(126px, 1fr);
+  grid-template-columns: minmax(190px, 0.8fr) auto minmax(250px, 0.8fr);
   align-items: center;
   gap: 18px;
   min-height: 76px;
@@ -19091,14 +19205,56 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .campaign-co
 }
 
 .merchant-nav-cta {
-  justify-self: end;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 9px;
   padding: 0 16px;
   background: var(--merchant-jade-dark);
   color: #fffaf0;
   text-decoration: none;
+  white-space: nowrap;
+  transition: transform 180ms ease, background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+
+.merchant-nav-actions {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.merchant-nav-cta-secondary {
+  border-color: rgba(13, 98, 92, 0.5);
+  background: transparent;
+  color: var(--merchant-jade-dark);
+}
+
+.merchant-nav-cta-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.merchant-nav-cta:hover {
+  transform: translateY(-1px);
+  background: #0a524d;
+}
+
+.merchant-nav-cta-secondary:hover {
+  border-color: var(--merchant-jade-dark);
+  background: rgba(13, 98, 92, 0.08);
+  color: var(--merchant-jade-dark);
+}
+
+.merchant-nav-cta:focus-visible {
+  outline: 3px solid rgba(10, 143, 133, 0.3);
+  outline-offset: 3px;
 }
 
 .merchant-hero {
@@ -19112,7 +19268,7 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .campaign-co
   position: relative;
   min-height: 640px;
   overflow: hidden;
-  background: linear-gradient(135deg, #bfb2a7 0%, #d8cfbd 44%, #a8bbb2 100%);
+  background: #020617 url("/assets/UNI.png") center / cover no-repeat;
   isolation: isolate;
 }
 
@@ -19132,35 +19288,31 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .campaign-co
   height: clamp(100px, 12vw, 156px);
   right: clamp(58px, 12vw, 170px);
   top: clamp(64px, 13vh, 132px);
-  z-index: 3;
+  z-index: 6;
   border-radius: 999px;
-  background:
-    radial-gradient(circle at 38% 32%, rgba(255, 250, 240, 0.88) 0 10%, transparent 11%),
-    radial-gradient(circle, #f6dfa4 0 56%, #d5aa58 100%);
-  box-shadow:
-    0 0 0 10px rgba(255, 240, 189, 0.08),
-    0 0 38px rgba(219, 169, 75, 0.18);
-  opacity: 0.58;
+  background: url("/assets/SOL.png") center / contain no-repeat;
+  filter:
+    brightness(1.32)
+    saturate(1.18)
+    drop-shadow(0 0 16px rgba(255, 207, 64, 0.95))
+    drop-shadow(0 0 38px rgba(255, 153, 0, 0.72));
+  opacity: 1;
   animation: merchant-sun-pulse 9s ease-in-out infinite;
 }
 
 .merchant-sun::after {
-  content: "";
-  position: absolute;
-  inset: -10%;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 250, 240, 0.18);
-  pointer-events: none;
-  animation: merchant-sun-halo 8s ease-in-out infinite;
+  content: none;
 }
 
 .merchant-satellite {
   position: absolute;
-  top: clamp(34px, 8vh, 76px);
-  left: clamp(72px, 15vw, 170px);
+  top: clamp(18px, 4vh, 40px);
+  left: clamp(52px, 11vw, 130px);
   z-index: 4;
-  width: 150px;
-  height: 82px;
+  width: clamp(170px, 20vw, 250px);
+  aspect-ratio: 1;
+  height: auto;
+  background: url("/assets/sate.png") center / contain no-repeat;
   transform-origin: center;
   animation: merchant-satellite-float 7s ease-in-out infinite;
 }
@@ -19268,38 +19420,81 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .campaign-co
 .pulse-three { animation-delay: 0.55s; }
 .pulse-four { animation-delay: 2.05s; }
 
+.merchant-earth-system {
+  --earth-size: clamp(170px, 18vw, 220px);
+  position: absolute;
+  left: clamp(86px, 11vw, 132px);
+  bottom: 17%;
+  z-index: 3;
+  width: var(--earth-size);
+  height: var(--earth-size);
+  animation: merchant-earth-float 6.4s ease-in-out infinite;
+}
+
 .merchant-earth {
   position: absolute;
-  left: clamp(76px, 13vw, 160px);
-  bottom: 21%;
-  z-index: 3;
-  width: 132px;
-  height: 132px;
-  border: 1px solid rgba(255, 250, 240, 0.36);
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  border: 0;
   border-radius: 999px;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 62% 32%, rgba(255, 250, 240, 0.18) 0 10%, transparent 11%),
-    radial-gradient(circle at 50% 50%, #0a8f85 0 47%, #123f45 100%);
-  box-shadow:
-    0 22px 54px rgba(18, 63, 69, 0.32),
-    inset -18px -16px 0 rgba(0, 0, 0, 0.12);
-  animation: merchant-earth-float 6.4s ease-in-out infinite;
+  isolation: isolate;
+  background: none;
+  box-shadow: none;
 }
 
 .merchant-earth::before,
 .merchant-earth::after {
   content: "";
   position: absolute;
-  inset: 16px -28px;
-  border-radius: 999px;
-  border: 1px solid rgba(134, 230, 221, 0.28);
-  transform: rotate(-18deg);
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.merchant-earth::before {
+  z-index: 0;
+  background: url("/assets/PLANETA.png") center / contain no-repeat;
+  animation: merchant-earth-spin 60s linear infinite;
 }
 
 .merchant-earth::after {
-  inset: 34px -22px;
-  transform: rotate(17deg);
+  z-index: 1;
+  background: linear-gradient(
+    90deg,
+    rgba(0, 5, 20, 0.76) 0%,
+    rgba(0, 6, 22, 0.54) 30%,
+    rgba(0, 6, 22, 0.14) 56%,
+    transparent 72%
+  );
+  animation: merchant-earth-night-side 15s linear infinite;
+}
+
+.merchant-moon-orbit {
+  --orbit-size: calc(var(--earth-size) * 1.55);
+  --moon-size: calc(var(--earth-size) * 0.4);
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 3;
+  width: var(--orbit-size);
+  height: var(--orbit-size);
+  pointer-events: none;
+  animation: merchant-moon-orbit 9s linear infinite;
+}
+
+.merchant-moon {
+  position: absolute;
+  right: calc(var(--moon-size) * -0.5);
+  top: 50%;
+  width: var(--moon-size);
+  height: var(--moon-size);
+  border-radius: 999px;
+  background: url("/assets/LUA.png") center / contain no-repeat;
+  filter: brightness(1.08) drop-shadow(0 0 9px rgba(230, 238, 255, 0.38));
+  animation: merchant-moon-counter-orbit 9s linear infinite;
 }
 
 .earth-cloud {
@@ -19760,8 +19955,8 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .campaign-co
 }
 
 @keyframes merchant-sun-pulse {
-  0%, 100% { transform: scale(0.98); opacity: 0.52; }
-  50% { transform: scale(1.03); opacity: 0.62; }
+  0%, 100% { transform: scale(0.98); opacity: 1; }
+  50% { transform: scale(1.03); opacity: 1; }
 }
 
 @keyframes merchant-skyline {
@@ -19817,6 +20012,34 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .campaign-co
   50% { transform: translateY(-9px) rotate(2deg); }
 }
 
+@keyframes merchant-earth-spin {
+  from {
+    transform: rotate(0deg) scale(1.01);
+  }
+  to {
+    transform: rotate(360deg) scale(1.01);
+  }
+}
+
+@keyframes merchant-earth-night-side {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes merchant-moon-orbit {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+@keyframes merchant-moon-counter-orbit {
+  from { transform: translateY(-50%) rotate(0deg); }
+  to { transform: translateY(-50%) rotate(-360deg); }
+}
+
 @keyframes merchant-earth-cloud {
   0% { transform: translateX(-36px); }
   100% { transform: translateX(128px); }
@@ -19836,8 +20059,9 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .campaign-co
     justify-content: flex-start;
   }
 
-  .merchant-nav-cta {
+  .merchant-nav-actions {
     justify-self: start;
+    flex-wrap: wrap;
   }
 
   .merchant-hero,
@@ -19889,11 +20113,10 @@ body[data-theme='light'] .workspace-page-platform .od-shell-content .campaign-co
     height: 250px;
   }
 
-  .merchant-earth {
-    left: 28px;
-    bottom: 26%;
-    width: 108px;
-    height: 108px;
+  .merchant-earth-system {
+    --earth-size: 150px;
+    left: 74px;
+    bottom: 24%;
   }
 
   .merchant-copy h1 {

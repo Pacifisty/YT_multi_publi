@@ -1955,7 +1955,7 @@ function renderPlanBackgroundCards(planId = getCurrentAccountPlanId()) {
 
 function renderSettingsMark(label = 'PMP', tone = 'info', className = '') {
   const safeLabel = String(label ?? 'PMP').trim().slice(0, 4).toUpperCase() || 'PMP';
-  const classes = ['settings-mark', className].filter(Boolean).join(' ');
+  const classes = ['settings-mark', safeLabel === 'PMP' ? 'settings-mark-pmp-logo' : '', className].filter(Boolean).join(' ');
   return `
     <span class="${escapeAttribute(classes)}" data-tone="${escapeAttribute(tone)}" aria-hidden="true">
       ${escapeHtml(safeLabel)}
@@ -3175,12 +3175,18 @@ function renderMerchantLoginPage(options = {}) {
         <nav aria-label="Menu principal">
           <a href="#programa">Programa</a>
           <a href="#planos">Planos</a>
-          <a href="#acesso">Login</a>
           <a href="#terms">Termos</a>
           <a href="#privacy">Privacidade</a>
           <a href="#data-deletion">Exclusao</a>
         </nav>
-        <a class="merchant-nav-cta" href="/login?mode=register#acesso" data-link>Criar conta</a>
+        <div class="merchant-nav-actions" aria-label="Acesso à conta">
+          <a class="merchant-nav-cta merchant-nav-cta-secondary" href="/login#acesso" data-link>
+            <span>Login</span><span class="merchant-nav-cta-icon" aria-hidden="true">↗</span>
+          </a>
+          <a class="merchant-nav-cta" href="/login?mode=register#acesso" data-link>
+            <span>Criar conta</span><span class="merchant-nav-cta-icon" aria-hidden="true">↗</span>
+          </a>
+        </div>
       </header>
 
       <main>
@@ -3188,9 +3194,6 @@ function renderMerchantLoginPage(options = {}) {
           <div class="merchant-scene" aria-hidden="true">
             <div class="merchant-sun"></div>
             <div class="merchant-satellite">
-              <span class="satellite-body"></span>
-              <span class="satellite-panel panel-left"></span>
-              <span class="satellite-panel panel-right"></span>
               <span class="satellite-signal signal-one"></span>
               <span class="satellite-signal signal-two"></span>
             </div>
@@ -3201,10 +3204,11 @@ function renderMerchantLoginPage(options = {}) {
               <span class="earth-pulse earth-pulse-down pulse-three"></span>
               <span class="earth-pulse earth-pulse-down pulse-four"></span>
             </div>
-            <div class="merchant-earth">
-              <span class="earth-cloud cloud-one"></span>
-              <span class="earth-cloud cloud-two"></span>
-              <span class="earth-cloud cloud-three"></span>
+            <div class="merchant-earth-system">
+              <div class="merchant-moon-orbit">
+                <div class="merchant-moon"></div>
+              </div>
+              <div class="merchant-earth"></div>
             </div>
             <div class="merchant-water"></div>
             <div class="merchant-copy">

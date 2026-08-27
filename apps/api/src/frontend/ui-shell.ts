@@ -9,6 +9,14 @@ interface FrontendAsset {
 const APP_JS_PATH = new URL('./public/app.js', import.meta.url);
 const APP_CSS_PATH = new URL('./public/app.css', import.meta.url);
 const I18N_JS_PATH = new URL('./public/i18n.js', import.meta.url);
+const UNI_BACKGROUND_PATH = new URL('./public/assets/UNI.png', import.meta.url);
+const PLANET_IMAGE_PATH = new URL('./public/assets/PLANETA.png', import.meta.url);
+const SATELLITE_IMAGE_PATH = new URL('./public/assets/sate.png', import.meta.url);
+const SUN_IMAGE_PATH = new URL('./public/assets/SOL.png', import.meta.url);
+const MOON_IMAGE_PATH = new URL('./public/assets/LUA.png', import.meta.url);
+const PMP_LOGO_PATH = new URL('./public/assets/PMP.png', import.meta.url);
+const PMP_PRIMARY_LOGO_PATH = new URL('./public/assets/PMP-logo.png', import.meta.url);
+const PMP_TAGLINE_PATH = new URL('./public/assets/PMP-tagline.png', import.meta.url);
 const SITE_NAME = 'Platform Multi Publisher';
 const DEFAULT_LOCALE = 'pt-BR';
 const SUPPORTED_LOCALES = new Set(['pt-BR', 'en']);
@@ -59,8 +67,49 @@ const FRONTEND_ASSET_VERSION = [
   statSync(APP_JS_PATH).mtimeMs,
   statSync(APP_CSS_PATH).mtimeMs,
   statSync(I18N_JS_PATH).mtimeMs,
+  statSync(UNI_BACKGROUND_PATH).mtimeMs,
+  statSync(PLANET_IMAGE_PATH).mtimeMs,
+  statSync(SATELLITE_IMAGE_PATH).mtimeMs,
+  statSync(SUN_IMAGE_PATH).mtimeMs,
+  statSync(MOON_IMAGE_PATH).mtimeMs,
+  statSync(PMP_LOGO_PATH).mtimeMs,
+  statSync(PMP_PRIMARY_LOGO_PATH).mtimeMs,
+  statSync(PMP_TAGLINE_PATH).mtimeMs,
 ].map((value) => Math.round(value)).join('.');
-const FRONTEND_STATIC_ASSETS = new Map<string, FrontendAsset>();
+const FRONTEND_STATIC_ASSETS = new Map<string, FrontendAsset>([
+  ['/assets/UNI.png', {
+    contentType: 'image/png',
+    body: readFileSync(UNI_BACKGROUND_PATH),
+  }],
+  ['/assets/PLANETA.png', {
+    contentType: 'image/png',
+    body: readFileSync(PLANET_IMAGE_PATH),
+  }],
+  ['/assets/sate.png', {
+    contentType: 'image/png',
+    body: readFileSync(SATELLITE_IMAGE_PATH),
+  }],
+  ['/assets/SOL.png', {
+    contentType: 'image/png',
+    body: readFileSync(SUN_IMAGE_PATH),
+  }],
+  ['/assets/LUA.png', {
+    contentType: 'image/png',
+    body: readFileSync(MOON_IMAGE_PATH),
+  }],
+  ['/assets/PMP.png', {
+    contentType: 'image/png',
+    body: readFileSync(PMP_LOGO_PATH),
+  }],
+  ['/assets/PMP-logo.png', {
+    contentType: 'image/png',
+    body: readFileSync(PMP_PRIMARY_LOGO_PATH),
+  }],
+  ['/assets/PMP-tagline.png', {
+    contentType: 'image/png',
+    body: readFileSync(PMP_TAGLINE_PATH),
+  }],
+]);
 
 function escapeHtml(value: string): string {
   return value

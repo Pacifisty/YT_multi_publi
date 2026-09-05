@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">BG - Aparência</title>
+<desc id="desc">Paleta de cores com pincel e engrenagem em azul e ciano.</desc>
+<defs>
+  <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#19E6F2"/>
+    <stop offset="1" stop-color="#1267FF"/>
+  </linearGradient>
+  <linearGradient id="g2" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#0ED8E7"/>
+    <stop offset="1" stop-color="#0B47D1"/>
+  </linearGradient>
+</defs>
+<g fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M247 72c-102 0-184 70-184 158 0 69 51 128 123 149 25 7 47-16 38-40-7-19 6-40 27-40h40c81 0 147-54 147-121 0-58-75-106-191-106z"
+        fill="#F6FBFF" stroke="#1267FF" stroke-width="16"/>
+  <circle cx="151" cy="184" r="28" fill="#16D7DE"/>
+  <circle cx="235" cy="141" r="27" fill="#123DD8"/>
+  <circle cx="309" cy="195" r="26" fill="#1683FF"/>
+  <circle cx="143" cy="260" r="24" fill="#51B5FF"/>
+  <path d="M293 312L401 148" stroke="#0B47D1" stroke-width="24"/>
+  <path d="M300 314L389 178" stroke="url(#g1)" stroke-width="13"/>
+  <path d="M390 178c18-27 38-48 57-60-1 25-9 52-26 78-12 19-31 24-48 15-15-9-15-20 17-33z"
+        fill="url(#g1)" stroke="#0B47D1" stroke-width="10"/>
+  <path d="M350 365l18-11 18 11 15-18 21 5 5-21 21-5-5-21 18-15-11-18 11-18-18-15 5-21-21-5-5-21-21 5-15-18-18 11-18-11-15 18-21-5-5 21-21 5 5 21-18 15 11 18-11 18 18 15-5 21 21 5 5 21 21-5z"
+        fill="url(#g2)" stroke="#0B47D1" stroke-width="10"/>
+  <circle cx="350" cy="274" r="25" fill="#F6FBFF" stroke="#0B47D1" stroke-width="10"/>
+</g>
+<rect x="186" y="389" width="140" height="64" rx="28" fill="url(#g1)"/>
+<text x="256" y="433" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="42" font-weight="700" fill="#fff">BG</text>
+</svg>

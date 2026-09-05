@@ -5,15 +5,38 @@ import {
 } from '../../apps/api/src/bootstrap';
 
 const validEnv: Record<string, string> = {
-  DATABASE_URL: 'postgresql://user:pass@localhost:5432/mydb',
   GOOGLE_CLIENT_ID: 'google-client-id',
   GOOGLE_CLIENT_SECRET: 'google-client-secret',
-  GOOGLE_REDIRECT_URI: 'http://localhost:3000/auth/callback',
+  GOOGLE_REDIRECT_URI: 'https://app.example.test/workspace/accounts/callback',
+  GOOGLE_AUTH_REDIRECT_URI: 'https://app.example.test/login/callback',
+  TIKTOK_CLIENT_KEY: 'tiktok-client-key',
+  TIKTOK_CLIENT_SECRET: 'tiktok-client-secret',
+  TIKTOK_REDIRECT_URI: 'https://app.example.test/workspace/accounts/callback?provider=tiktok',
+  INSTAGRAM_CLIENT_ID: 'instagram-client-id',
+  INSTAGRAM_CLIENT_SECRET: 'instagram-client-secret',
+  INSTAGRAM_REDIRECT_URI: 'https://app.example.test/workspace/accounts/callback?provider=instagram',
   OAUTH_TOKEN_KEY: 'a]3Fk9$2mP!xL7nQ&vR4wY6zA0cE8gI5',
-  ADMIN_EMAIL: 'admin@example.com',
+  ADMIN_EMAIL: 'admin@example.test',
   ADMIN_PASSWORD_HASH: 'plain:secret123',
   PORT: '4000',
   NODE_ENV: 'test',
+};
+
+const productionEnv: Record<string, string> = {
+  ...validEnv,
+  DATABASE_URL: 'postgresql://user:pass@localhost:5432/mydb',
+  NODE_ENV: 'production',
+  ADMIN_PASSWORD_HASH: 'scrypt:test-salt:test-derived-key',
+  PUBLIC_APP_URL: 'https://app.example.test',
+  MEDIA_STORAGE_ROOT: 'C:\\persistent-data',
+  MERCADOPAGO_ACCESS_TOKEN: 'APP_USR-production-token-value',
+  MERCADOPAGO_WEBHOOK_SECRET: 'production-webhook-secret-value',
+  PAYMENT_SUCCESS_URL: 'https://app.example.test/workspace/planos?payment=success',
+  PAYMENT_CANCEL_URL: 'https://app.example.test/workspace/planos?payment=cancel',
+  PAYMENT_WEBHOOK_URL: 'https://app.example.test/api/account/payments/webhook',
+  EMAIL_PROVIDER: 'resend',
+  EMAIL_PROVIDER_API_KEY: 'production-email-key',
+  EMAIL_FROM_ADDRESS: 'PMP <noreply@app.example.test>',
 };
 
 // --- test helpers ---
@@ -84,7 +107,7 @@ describe('Bootstrap — error handler wiring', () => {
   });
 
   test('error handler does not expose stack in production mode', async () => {
-    const result = bootstrap({ env: { ...validEnv, NODE_ENV: 'production' } });
+    const result = bootstrap({ env: productionEnv });
 
     const req = createMockReq({ method: 'GET', url: '/nonexistent-route' });
     const res = createMockRes();

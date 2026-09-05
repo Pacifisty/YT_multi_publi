@@ -88,7 +88,7 @@ export class AccountPlanController {
       return { status: 503, body: { error: 'Payment service not configured.' } };
     }
 
-    const body = request.body as { plan?: string; successUrl?: string; cancelUrl?: string } | undefined;
+    const body = request.body as { plan?: string } | undefined;
     const normalizedPlan = typeof body?.plan === 'string' ? body.plan.trim().toUpperCase() : '';
     if (!VALID_PLAN_CODES.includes(normalizedPlan as AccountPlanType)) {
       return { status: 400, body: { error: `Plano invalido. Use ${VALID_PLAN_CODES.join(', ')}.` } };
@@ -100,14 +100,10 @@ export class AccountPlanController {
     }
 
     try {
-      // Use provided URLs or construct from public app URL
-      const publicUrl = process.env.PUBLIC_APP_URL || `http://${process.env.HOST || '127.0.0.1'}:${process.env.PORT || '3000'}`;
       const result = await this.paymentService.createCheckout({
         kind: 'plan',
         email,
         planDefinition: definition,
-        successUrl: body?.successUrl || `${publicUrl}/account/billing?payment_status=success`,
-        cancelUrl: body?.cancelUrl || `${publicUrl}/account/billing?payment_status=cancel`,
       });
       return {
         status: 200,
@@ -137,7 +133,7 @@ export class AccountPlanController {
       return { status: 503, body: { error: 'Payment service not configured.' } };
     }
 
-    const body = request.body as { packId?: string; successUrl?: string; cancelUrl?: string } | undefined;
+    const body = request.body as { packId?: string } | undefined;
     const packId = typeof body?.packId === 'string' ? body.packId.trim() : '';
     const pack = TOKEN_PACK_DEFINITIONS[packId];
     if (!pack || !pack.active) {
@@ -146,14 +142,10 @@ export class AccountPlanController {
     }
 
     try {
-      // Use provided URLs or construct from public app URL
-      const publicUrl = process.env.PUBLIC_APP_URL || `http://${process.env.HOST || '127.0.0.1'}:${process.env.PORT || '3000'}`;
       const result = await this.paymentService.createCheckout({
         kind: 'token_pack',
         email,
         pack,
-        successUrl: body?.successUrl || `${publicUrl}/account/tokens?payment_status=success`,
-        cancelUrl: body?.cancelUrl || `${publicUrl}/account/tokens?payment_status=cancel`,
       });
       return {
         status: 200,
@@ -221,7 +213,7 @@ export class AccountPlanController {
       if (updated) {
         paymentLogger.logStatusUpdated(updated.id, 'unknown', updated.status, updated.provider);
         if (updated?.status === 'paid') {
-          await this.applyPaidIntent(updated);
+          await this.fulfillPaidIntent(updated);
         }
       }
       return { status: 200, body: { received: true, intent: updated } };
@@ -256,7 +248,7 @@ export class AccountPlanController {
       return { status: 404, body: { error: 'Payment intent not found.' } };
     }
 
-    await this.applyPaidIntent(updated);
+    await this.fulfillPaidIntent(updated);
     return { status: 200, body: { intent: updated } };
   }
 
@@ -376,6 +368,20 @@ export class AccountPlanController {
       }
     } catch (error) {
       paymentLogger.logError(intent.id, 'apply_paid_intent', error instanceof Error ? error.message : 'Failed to apply paid intent', { email: intent.email, purchaseKind: intent.purchase.kind });
+      throw error;
+    }
+  }
+
+  private async fulfillPaidIntent(intent: import('./payment.service').PaymentIntent): Promise<void> {
+    if (!this.paymentService) return;
+    const claimed = await this.paymentService.claimFulfillment(intent.id);
+    if (!claimed) return;
+
+    try {
+      await this.applyPaidIntent(claimed);
+      await this.paymentService.completeFulfillment(intent.id);
+    } catch (error) {
+      await this.paymentService.failFulfillment(intent.id, error);
       throw error;
     }
   }

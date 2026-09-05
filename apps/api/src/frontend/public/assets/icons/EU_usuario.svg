@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">Usuário</title>
+<desc id="desc">Ícone PMP EU em azul-ciano.</desc>
+
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#063A9A"/>
+    <stop offset="55%" stop-color="#0968D8"/>
+    <stop offset="100%" stop-color="#08D8E8"/>
+  </linearGradient>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#1FE8F2"/>
+    <stop offset="100%" stop-color="#00A7F5"/>
+  </linearGradient>
+  <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+    <feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#001A49" flood-opacity=".35"/>
+  </filter>
+</defs>
+
+<circle cx="256" cy="220" r="164" fill="url(#bg)" stroke="url(#ring)" stroke-width="14" filter="url(#shadow)"/>
+
+<g fill="#FFFFFF" filter="url(#shadow)">
+  <circle cx="256" cy="166" r="58"/>
+  <path d="M160 328c6-69 45-108 96-108s90 39 96 108c2 20-13 36-33 36H193c-20 0-35-16-33-36z"/>
+</g>
+
+<rect x="116" y="392" width="280" height="82" rx="41" fill="#063B96" stroke="#17DCEB" stroke-width="8"/>
+<text x="256" y="448" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="700" fill="#FFFFFF">EU</text>
+</svg>

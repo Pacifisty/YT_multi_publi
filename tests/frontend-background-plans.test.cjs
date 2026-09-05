@@ -4,40 +4,49 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const test = require('node:test');
+const ts = require('typescript');
 
 const APP_JS_PATH = path.join(__dirname, '..', 'apps', 'api', 'src', 'frontend', 'public', 'app.js');
+const APP_CSS_PATH = path.join(__dirname, '..', 'apps', 'api', 'src', 'frontend', 'public', 'app.css');
 const PLAN_ORDER = ['FREE', 'BASIC', 'PRO', 'PREMIUM'];
-const THEMES_PER_PLAN = 4;
+const PAID_PLAN_IDS = ['BASIC', 'PRO', 'PREMIUM'];
+const PREMIUM_THEME_COUNT = 6;
 
-function extractConstant(source, name, nextConstName) {
-  const startToken = `const ${name} = `;
-  const endToken = `\nconst ${nextConstName}`;
-  const start = source.indexOf(startToken);
-  const end = source.indexOf(endToken, start);
-
-  assert.notStrictEqual(start, -1, `Missing ${name}`);
-  assert.notStrictEqual(end, -1, `Missing ${nextConstName} after ${name}`);
-
-  const literal = source.slice(start + startToken.length, end).trim().replace(/;$/, '');
+function extractConstant(source, name) {
+  const sourceFile = ts.createSourceFile('app.js', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  let initializer = null;
+  for (const statement of sourceFile.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (ts.isIdentifier(declaration.name) && declaration.name.text === name) {
+        initializer = declaration.initializer?.getText(sourceFile) ?? null;
+      }
+    }
+  }
+  assert.ok(initializer, `Missing ${name}`);
+  const literal = initializer;
   return Function(`"use strict"; return (${literal});`)();
 }
 
 function loadBackgroundConfig() {
   const source = fs.readFileSync(APP_JS_PATH, 'utf8');
   return {
-    backgroundThemes: extractConstant(source, 'BACKGROUND_THEME_OPTIONS', 'FONT_THEME_OPTIONS'),
-    planThemeMap: extractConstant(source, 'PLAN_BACKGROUND_THEME_MAP', 'PLAN_BACKGROUND_TIER_ORDER'),
+    backgroundThemes: extractConstant(source, 'BACKGROUND_THEME_OPTIONS'),
+    planThemeMap: extractConstant(source, 'PLAN_BACKGROUND_THEME_MAP'),
   };
 }
 
-test('workspace background plans unlock exactly four own sets per plan', () => {
+test('free workspace uses one fixed theme and every paid plan unlocks six sets', () => {
   const { planThemeMap } = loadBackgroundConfig();
 
-  for (const planId of PLAN_ORDER) {
+  assert.strictEqual(planThemeMap.FREE.themeIds.length, 1);
+  assert.strictEqual(planThemeMap.FREE.defaultTheme, planThemeMap.FREE.themeIds[0]);
+
+  for (const planId of PAID_PLAN_IDS) {
     assert.strictEqual(
       planThemeMap[planId].themeIds.length,
-      THEMES_PER_PLAN,
-      `${planId} should unlock exactly ${THEMES_PER_PLAN} own background sets`,
+      PREMIUM_THEME_COUNT,
+      `${planId} should unlock exactly ${PREMIUM_THEME_COUNT} premium visual sets`,
     );
   }
 });
@@ -53,27 +62,57 @@ test('workspace background plan ids all point to existing themes', () => {
   }
 });
 
-test('paid workspace background plans include cheaper plan sets cumulatively', () => {
+test('all paid plans unlock the same curated theme catalog', () => {
   const { planThemeMap } = loadBackgroundConfig();
-  const seen = [];
-
-  PLAN_ORDER.forEach((planId, index) => {
-    seen.push(...planThemeMap[planId].themeIds);
-    assert.strictEqual(
-      new Set(seen).size,
-      (index + 1) * THEMES_PER_PLAN,
-      `${planId} cumulative unlock count should include cheaper plan backgrounds`,
-    );
-  });
+  const expected = planThemeMap.BASIC.themeIds;
+  for (const planId of PAID_PLAN_IDS) {
+    assert.deepStrictEqual(planThemeMap[planId].themeIds, expected);
+    assert.ok(!planThemeMap[planId].themeIds.includes(planThemeMap.FREE.defaultTheme));
+  }
 });
 
-test('free workspace backgrounds are not only neutral white variations', () => {
+test('every visual set owns an accessible text hierarchy', () => {
   const { backgroundThemes, planThemeMap } = loadBackgroundConfig();
-  const themesById = new Map(backgroundThemes.map((theme) => [theme.id, theme]));
-  const freeThemes = planThemeMap.FREE.themeIds.map((themeId) => themesById.get(themeId));
-  const freeTypes = new Set(freeThemes.map((theme) => theme.type));
-  const freePrimaryColors = new Set(freeThemes.map((theme) => theme.primary.toLowerCase()));
+  const activeThemeIds = new Set([
+    ...planThemeMap.FREE.themeIds,
+    ...planThemeMap.BASIC.themeIds,
+  ]);
+  const activeThemes = backgroundThemes.filter((theme) => activeThemeIds.has(theme.id));
 
-  assert.ok(freeTypes.size >= 2, 'FREE should mix background families, not only one neutral style');
-  assert.ok(freePrimaryColors.size >= 3, 'FREE should include varied accent colors');
+  assert.strictEqual(activeThemes.length, PREMIUM_THEME_COUNT + 1);
+  for (const theme of activeThemes) {
+    assert.match(theme.text, /^#[0-9a-f]{6}$/i);
+    assert.match(theme.textSubtle, /^#[0-9a-f]{6}$/i);
+    assert.match(theme.textMuted, /^#[0-9a-f]{6}$/i);
+    assert.match(theme.onAccent, /^#[0-9a-f]{6}$/i);
+  }
+});
+
+test('independent text color selection is removed from the workspace', () => {
+  const source = fs.readFileSync(APP_JS_PATH, 'utf8');
+  assert.doesNotMatch(source, /data-font-theme-id/);
+  assert.doesNotMatch(source, /function applyFontTheme/);
+  assert.doesNotMatch(source, />Cor do texto</);
+});
+
+test('active visual set propagates to headers and panels on every workspace page', () => {
+  const source = fs.readFileSync(APP_JS_PATH, 'utf8');
+  const css = fs.readFileSync(APP_CSS_PATH, 'utf8');
+
+  assert.match(source, /setProperty\('--surface', selectedTheme\.surface\)/);
+  assert.match(source, /setProperty\('--text', selectedTheme\.text\)/);
+  assert.match(source, /setProperty\('--text-on-accent', selectedTheme\.onAccent\)/);
+  assert.match(css, /PMP Global Theme Bridge/);
+  assert.match(css, /--workspace-panel-bg:/);
+  assert.match(css, /\.workspace-page \.header-shell-fullwidth \{/);
+  assert.match(css, /--workspace-header-ink: var\(--text\)/);
+  assert.match(css, /body \.workspace-page \.pmp-dashboard \{/);
+  assert.match(css, /--pmp-surface: var\(--surface\)/);
+  assert.match(css, /\.growth-card,/);
+  assert.match(css, /\.campaign-flow-panel,/);
+  assert.match(css, /\.accounts-cockpit,/);
+  assert.match(css, /\.media-vault-summary-strip,/);
+  assert.match(css, /\.playlist-cockpit,/);
+  assert.match(css, /\.plan-card,/);
+  assert.match(css, /\.settings-hub-card,/);
 });

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PMP Workspace Header QA</title>
+  <link rel="stylesheet" href="http://127.0.0.1:3000/app.css?qa=20260828-2">
+  <style>
+    body { margin: 0; min-height: 100vh; background: #020914; }
+    .page { padding-bottom: 0; }
+    @media (max-width: 620px) { .page { width: 390px; } }
+  </style>
+</head>
+<body>
+  <div class="page workspace-page workspace-page-dashboard">
+    <header class="header header-fullwidth">
+      <div class="header-shell header-shell-fullwidth">
+        <a class="header-brand-block pmp-brand" href="#" aria-label="Platform Multi Publisher">
+          <div class="pmp-logo-mark" aria-hidden="true"></div>
+        </a>
+        <nav class="nav header-nav" aria-label="Workspace">
+          <a class="nav-link active" href="#" aria-current="page">Dashboard</a>
+          <a class="nav-link" href="#">Growth</a>
+          <a class="nav-link" href="#">Campanhas</a>
+          <a class="nav-link" href="#">Contas</a>
+          <a class="nav-link" href="#">Vídeos</a>
+          <a class="nav-link" href="#">Planos</a>
+          <a class="nav-link" href="#">Configurações</a>
+        </nav>
+        <div class="header-actions">
+          <div class="token-capsule" data-state="full">
+            <span class="token-capsule-icon" aria-hidden="true">◆</span>
+            <span class="token-capsule-count"><span class="token-capsule-current">2.165</span><span class="token-capsule-label">tokens</span></span>
+            <span class="token-capsule-claim done">✓</span>
+          </div>
+          <details class="settings-picker compact-settings">
+            <summary class="theme-toggle-btn">
+              <span class="header-control-icon">CFG</span>
+              <span class="theme-toggle-copy"><span class="theme-toggle-label">Configurações</span><span class="background-picker-current">Mesh Gradient</span></span>
+            </summary>
+          </details>
+          <a class="header-account-chip" href="#">
+            <div class="header-user-block"><span class="user-email">admin@example.com</span><span class="header-plan-badge">Plano Premium</span></div>
+          </a>
+          <button class="logout-btn" type="button" aria-label="Sair da conta">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M14 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/></svg>
+            <span>Sair</span>
+          </button>
+        </div>
+      </div>
+    </header>
+  </div>
+</body>
+</html>

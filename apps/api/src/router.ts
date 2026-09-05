@@ -9,6 +9,7 @@ import type { AuthController } from './auth/auth.controller';
 import type { BackgroundProcessor } from './app';
 import type { AccountPlanController, AccountPlanRequest } from './account-plan/account-plan.controller';
 import type { GrowthScriptController, GrowthScriptRequest } from './growth/growth-script.controller';
+import type { ServiceRequestController } from './service-requests/service-request.controller';
 
 export interface ApiRequest {
   method: string;
@@ -46,6 +47,7 @@ export function createApiRouter(options: {
   backgroundProcessor?: BackgroundProcessor | null;
   accountPlanController?: AccountPlanController;
   growthScriptController?: GrowthScriptController;
+  serviceRequestController?: ServiceRequestController;
 }): ApiRouter {
   const {
     campaignsModule,
@@ -57,6 +59,7 @@ export function createApiRouter(options: {
     backgroundProcessor,
     accountPlanController,
     growthScriptController,
+    serviceRequestController,
   } = options;
   const ctrl = campaignsModule.campaignsController;
 
@@ -85,6 +88,18 @@ export function createApiRouter(options: {
         pattern: /^\/auth\/login$/,
         paramNames: [],
         handler: (req) => authController.login(req),
+      },
+      {
+        method: 'POST',
+        pattern: /^\/auth\/password-reset\/request$/,
+        paramNames: [],
+        handler: (req) => authController.requestPasswordReset(req),
+      },
+      {
+        method: 'POST',
+        pattern: /^\/auth\/password-reset\/confirm$/,
+        paramNames: [],
+        handler: (req) => authController.resetPassword(req),
       },
       {
         method: 'GET',
@@ -121,6 +136,41 @@ export function createApiRouter(options: {
         pattern: /^\/auth\/me$/,
         paramNames: [],
         handler: (req) => authController.me(req),
+      },
+    );
+  }
+
+  if (serviceRequestController) {
+    routes.push(
+      {
+        method: 'POST',
+        pattern: /^\/support\/requests$/,
+        paramNames: [],
+        handler: (req) => serviceRequestController.createPublic(req),
+      },
+      {
+        method: 'GET',
+        pattern: /^\/support\/requests\/([^/]+)$/,
+        paramNames: ['protocol'],
+        handler: (req) => serviceRequestController.trackPublic(req),
+      },
+      {
+        method: 'POST',
+        pattern: /^\/api\/service-requests$/,
+        paramNames: [],
+        handler: (req) => serviceRequestController.createAuthenticated(req),
+      },
+      {
+        method: 'GET',
+        pattern: /^\/api\/service-requests$/,
+        paramNames: [],
+        handler: (req) => serviceRequestController.listMine(req),
+      },
+      {
+        method: 'GET',
+        pattern: /^\/api\/service-requests\/([^/]+)$/,
+        paramNames: ['protocol'],
+        handler: (req) => serviceRequestController.getMine(req),
       },
     );
   }

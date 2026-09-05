@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">TikTok</title>
+<desc id="desc">Marca do TikTok em SVG e fundo transparente.</desc>
+
+<defs>
+  <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+    <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#00194F" flood-opacity=".28"/>
+  </filter>
+</defs>
+
+<g transform="translate(70 35) scale(1.28)" filter="url(#shadow)">
+  <path d="M196 42c0 36 25 64 62 72v45c-24-2-44-10-62-24v88c0 55-43 99-98 99S0 278 0 223s43-99 98-99c8 0 15 1 22 3v49c-7-3-14-5-22-5-29 0-52 23-52 52s23 52 52 52 52-23 52-52V42z" fill="#25F4EE" transform="translate(12 8)"/>
+  <path d="M196 42c0 36 25 64 62 72v45c-24-2-44-10-62-24v88c0 55-43 99-98 99S0 278 0 223s43-99 98-99c8 0 15 1 22 3v49c-7-3-14-5-22-5-29 0-52 23-52 52s23 52 52 52 52-23 52-52V42z" fill="#FE2C55" transform="translate(-8 -4)"/>
+  <path d="M196 42c0 36 25 64 62 72v45c-24-2-44-10-62-24v88c0 55-43 99-98 99S0 278 0 223s43-99 98-99c8 0 15 1 22 3v49c-7-3-14-5-22-5-29 0-52 23-52 52s23 52 52 52 52-23 52-52V42z" fill="#111111"/>
+</g>
+</svg>

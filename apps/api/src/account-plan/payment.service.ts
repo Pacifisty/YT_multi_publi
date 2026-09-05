@@ -5,6 +5,7 @@ import type { WebhookDeduplicator } from './webhook-deduplication';
 
 export type PaymentProvider = 'stripe' | 'mercadopago' | 'mock';
 export type PaymentStatus = 'pending' | 'processing' | 'paid' | 'failed' | 'cancelled' | 'refunded';
+export type FulfillmentStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 export type Purchase =
   | { kind: 'plan'; planCode: AccountPlanType }
@@ -25,6 +26,10 @@ export interface PaymentIntent {
   createdAt: string;
   updatedAt: string;
   paidAt: string | null;
+  fulfillmentStatus?: FulfillmentStatus;
+  fulfillmentError?: string | null;
+  fulfillmentStartedAt?: string | null;
+  fulfilledAt?: string | null;
 }
 
 export type CreateCheckoutInput =
@@ -77,6 +82,7 @@ export interface PaymentRepository {
   findByProviderIntentId(provider: PaymentProvider, providerIntentId: string): Promise<PaymentIntent | null> | PaymentIntent | null;
   update(id: string, patch: Partial<PaymentIntent>): Promise<PaymentIntent | null> | PaymentIntent | null;
   listByEmail(email: string): Promise<PaymentIntent[]> | PaymentIntent[];
+  claimFulfillment?(id: string, startedAt: string): Promise<PaymentIntent | null>;
 }
 
 export interface PaymentServiceOptions {
@@ -140,34 +146,58 @@ export class PaymentService {
     const successUrl = input.successUrl ?? this.defaultSuccessUrl;
     const cancelUrl = input.cancelUrl ?? this.defaultCancelUrl;
 
-    const providerResult = await this.provider.createCheckout({
-      email: input.email,
-      purchase,
-      amountBrl,
-      successUrl,
-      cancelUrl,
-      externalReference: id,
-      notificationUrl: this.defaultNotificationUrl,
-    });
-
     const intent: PaymentIntent = {
       id,
       provider: this.provider.name,
-      providerIntentId: providerResult.providerIntentId,
+      providerIntentId: null,
       email: input.email.trim().toLowerCase(),
       purchase,
       amountBrl,
       currency: 'BRL',
       status: 'pending',
-      checkoutUrl: providerResult.checkoutUrl,
+      checkoutUrl: null,
       externalReference: id,
       errorMessage: null,
       createdAt: nowIso,
       updatedAt: nowIso,
       paidAt: null,
+      fulfillmentStatus: 'pending',
+      fulfillmentError: null,
+      fulfillmentStartedAt: null,
+      fulfilledAt: null,
     };
 
-    const saved = await this.repository.create(intent);
+    await this.repository.create(intent);
+
+    let providerResult: { providerIntentId: string; checkoutUrl: string | null };
+    try {
+      providerResult = await this.provider.createCheckout({
+        email: input.email,
+        purchase,
+        amountBrl,
+        successUrl,
+        cancelUrl,
+        externalReference: id,
+        notificationUrl: this.defaultNotificationUrl,
+      });
+    } catch (error) {
+      await this.repository.update(id, {
+        status: 'failed',
+        errorMessage: error instanceof Error ? error.message : 'Payment provider request failed',
+        updatedAt: this.now().toISOString(),
+      });
+      throw error;
+    }
+
+    const saved = await this.repository.update(id, {
+      providerIntentId: providerResult.providerIntentId,
+      checkoutUrl: providerResult.checkoutUrl,
+      updatedAt: this.now().toISOString(),
+    });
+
+    if (!saved) {
+      throw new Error(`Payment intent ${id} disappeared before checkout could be finalized.`);
+    }
 
     const purchaseId = purchase.kind === 'plan' ? purchase.planCode : purchase.packId;
     paymentLogger.logCheckoutCreated(saved.id, saved.email, purchaseId, amountBrl);
@@ -213,7 +243,7 @@ export class PaymentService {
         planName = `${tokensGranted} Tokens Pack`;
       }
 
-      const costStr = `R$ ${(intent.amountBrl / 100).toFixed(2)}`;
+      const costStr = `R$ ${intent.amountBrl.toFixed(2)}`;
       const emailData = buildPaymentEmail(intent.email, {
         planName,
         tokensGranted,
@@ -246,16 +276,21 @@ export class PaymentService {
     const verified = await this.provider.verifyWebhook(headers, rawBody);
     if (!verified) return null;
 
-    // Webhook idempotency: check if already processed
+    // In production the Prisma implementation atomically claims the event.
+    // The legacy pre-check remains for test/in-memory implementations.
     if (this.webhookDeduplicator && verified.providerEventId) {
-      const alreadyProcessed = await this.webhookDeduplicator.hasProcessedEvent(this.provider.name, verified.providerEventId);
-      if (alreadyProcessed) {
-        paymentLogger.logWebhookReceived(verified.externalReference || 'unknown', this.provider.name, rawBody.length);
-        let intent: PaymentIntent | null = null;
-        if (verified.externalReference) {
-          intent = await this.repository.findById(verified.externalReference);
-        }
-        return intent;
+      if (this.webhookDeduplicator.claimWebhookEvent) {
+        const claimed = await this.webhookDeduplicator.claimWebhookEvent(
+          this.provider.name,
+          verified.providerEventId,
+          verified.externalReference ?? verified.providerIntentId ?? 'unknown',
+          'payment',
+          rawBody,
+        );
+        if (!claimed) return null;
+      } else {
+        const alreadyProcessed = await this.webhookDeduplicator.hasProcessedEvent(this.provider.name, verified.providerEventId);
+        if (alreadyProcessed) return null;
       }
     }
 
@@ -268,6 +303,23 @@ export class PaymentService {
     }
     if (!intent) return null;
 
+    if (intent.status === verified.status) {
+      if (
+        this.webhookDeduplicator
+        && verified.providerEventId
+        && (intent.status !== 'paid' || !this.webhookDeduplicator.completeWebhookEventsForReference)
+      ) {
+        await this.webhookDeduplicator.recordWebhookEvent(
+          this.provider.name,
+          verified.providerEventId,
+          intent.id,
+          'payment',
+          rawBody,
+        );
+      }
+      return intent.status === 'paid' && intent.fulfillmentStatus !== 'completed' ? intent : null;
+    }
+
     paymentLogger.logWebhookReceived(intent.id, this.provider.name, rawBody.length);
     const oldStatus = intent.status;
     const updated = await this.repository.update(intent.id, {
@@ -277,7 +329,9 @@ export class PaymentService {
     });
 
     if (updated && this.webhookDeduplicator && verified.providerEventId) {
-      await this.webhookDeduplicator.recordWebhookEvent(this.provider.name, verified.providerEventId, intent.id, 'payment', rawBody);
+      if (updated.status !== 'paid' || !this.webhookDeduplicator.completeWebhookEventsForReference) {
+        await this.webhookDeduplicator.recordWebhookEvent(this.provider.name, verified.providerEventId, intent.id, 'payment', rawBody);
+      }
       paymentLogger.logStatusUpdated(updated.id, oldStatus, updated.status, this.provider.name);
     }
 
@@ -306,6 +360,51 @@ export class PaymentService {
       await this.notifyPaymentSuccess(updated);
     }
 
+    return updated;
+  }
+
+  async claimFulfillment(id: string): Promise<PaymentIntent | null> {
+    const startedAt = this.now().toISOString();
+    if (this.repository.claimFulfillment) {
+      return this.repository.claimFulfillment(id, startedAt);
+    }
+
+    const intent = await this.repository.findById(id);
+    if (!intent || intent.status !== 'paid' || intent.fulfillmentStatus === 'completed' || intent.fulfillmentStatus === 'processing') {
+      return null;
+    }
+    return this.repository.update(id, {
+      fulfillmentStatus: 'processing',
+      fulfillmentError: null,
+      fulfillmentStartedAt: startedAt,
+      updatedAt: startedAt,
+    });
+  }
+
+  async completeFulfillment(id: string): Promise<PaymentIntent | null> {
+    const now = this.now().toISOString();
+    const updated = await this.repository.update(id, {
+      fulfillmentStatus: 'completed',
+      fulfillmentError: null,
+      fulfilledAt: now,
+      updatedAt: now,
+    });
+    if (updated && this.webhookDeduplicator?.completeWebhookEventsForReference) {
+      await this.webhookDeduplicator.completeWebhookEventsForReference(id);
+    }
+    return updated;
+  }
+
+  async failFulfillment(id: string, error: unknown): Promise<PaymentIntent | null> {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const updated = await this.repository.update(id, {
+      fulfillmentStatus: 'failed',
+      fulfillmentError: errorMessage,
+      updatedAt: this.now().toISOString(),
+    });
+    if (this.webhookDeduplicator?.failWebhookEventsForReference) {
+      await this.webhookDeduplicator.failWebhookEventsForReference(id, errorMessage);
+    }
     return updated;
   }
 }
@@ -353,5 +452,18 @@ export class InMemoryPaymentRepository implements PaymentRepository {
 
   async listByEmail(email: string): Promise<PaymentIntent[]> {
     return Array.from(this.records.values()).filter((r) => r.email === email);
+  }
+
+  async claimFulfillment(id: string, startedAt: string): Promise<PaymentIntent | null> {
+    const intent = this.records.get(id);
+    if (!intent || intent.status !== 'paid' || intent.fulfillmentStatus === 'processing' || intent.fulfillmentStatus === 'completed') {
+      return null;
+    }
+    return this.update(id, {
+      fulfillmentStatus: 'processing',
+      fulfillmentError: null,
+      fulfillmentStartedAt: startedAt,
+      updatedAt: startedAt,
+    });
   }
 }

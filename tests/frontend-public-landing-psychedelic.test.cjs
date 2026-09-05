@@ -10,28 +10,23 @@ const APP_JS = fs.readFileSync(path.join(ROOT, 'apps', 'api', 'src', 'frontend',
 const APP_CSS = fs.readFileSync(path.join(ROOT, 'apps', 'api', 'src', 'frontend', 'public', 'app.css'), 'utf8');
 const UI_SHELL = fs.readFileSync(path.join(ROOT, 'apps', 'api', 'src', 'frontend', 'ui-shell.ts'), 'utf8');
 
-test('public root uses the psychedelic SEO conversion landing', () => {
-  assert.match(APP_JS, /async function renderPublicLandingPagePsychedelic\(\)/);
-  assert.match(APP_JS, /await renderPublicLandingPagePsychedelic\(\);/);
-  assert.match(APP_JS, /Publique vídeos no YouTube, TikTok e Instagram em um só painel/);
-  assert.match(APP_JS, /Organize campanhas, conecte suas contas, acompanhe falhas/);
-  assert.match(APP_JS, /psy-type-rail/);
-  assert.match(APP_JS, /Publicar em três canais/);
-  assert.match(APP_JS, /psy-mascot/);
-  assert.match(APP_JS, /Conectar contas/);
-  assert.match(APP_JS, /Criar campanha/);
-  assert.match(APP_JS, /Acompanhar status/);
+test('public root uses the complete login experience without retired landing renderers', () => {
+  assert.doesNotMatch(APP_JS, /renderPublicLandingPage(?:Psychedelic|Legacy)?/);
+  assert.match(APP_JS, /if \(path === '\/'\) \{[\s\S]*?const me = await ensureAuthenticated\(\)/);
+  assert.match(APP_JS, /if \(path === '\/'\) \{[\s\S]*?renderLoginPage\(\{[\s\S]*?accessFirst: false/);
+  assert.match(APP_JS, /navigate\(me\.needsPlanSelection \? '\/onboarding\/plan' : '\/workspace\/dashboard', true\)/);
 });
 
-test('public landing keeps the selected psychedelic visual system isolated', () => {
-  assert.match(APP_CSS, /\.public-psychedelic-page\s*\{/);
-  assert.match(APP_CSS, /\.psy-poster-frame\s*\{/);
-  assert.match(APP_CSS, /\.psy-type-rail\s*\{/);
-  assert.match(APP_CSS, /\.psy-dot-number\s*\{/);
-  assert.match(APP_CSS, /@keyframes psy-mascot-nod/);
-  assert.match(APP_CSS, /@keyframes psy-sun-spin/);
-  assert.match(APP_CSS, /@keyframes psy-frame-breathe/);
-  assert.match(APP_CSS, /@media \(prefers-reduced-motion: reduce\)/);
+test('legacy neon and psychedelic systems are absent from the production bundle', () => {
+  assert.doesNotMatch(APP_JS, /renderPlatformLogo3d|renderAnimatedLogoByPlatform|injectLogoStyles|LOGO_STYLES/);
+  assert.doesNotMatch(APP_CSS, /\.neon-media-|\.platform-logo-3d|\.public-psychedelic-page|\.psy-/);
+  assert.doesNotMatch(APP_CSS, /@keyframes (?:neon-media|psy|login)-/);
+  assert.match(APP_JS, /function renderPlatformArtwork\(platform, size = 32, extraClass = ''\)/);
+  assert.match(APP_JS, /\/assets\/icons\/YT_youtube\.svg/);
+  assert.match(APP_JS, /\/assets\/icons\/TT_tiktok\.svg/);
+  assert.match(APP_JS, /\/assets\/icons\/IG_instagram\.svg/);
+  assert.equal(fs.existsSync(path.join(ROOT, 'apps', 'api', 'src', 'frontend', 'logo-renderers.js')), false);
+  assert.equal(fs.existsSync(path.join(ROOT, 'apps', 'api', 'src', 'frontend', 'public', 'assets', 'neon-icons')), false);
 });
 
 test('server-rendered SEO metadata describes the landing conversion goal', () => {

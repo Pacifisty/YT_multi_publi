@@ -288,10 +288,10 @@ describe('HTTP adapter — createRequestHandler', () => {
     expect(res._body).toContain('<link rel="canonical" href="https://platform.example/" />');
     expect(res._body).toContain('<script type="application/ld+json">');
     expect(res._body).toContain('Fluxo de publicacao multi plataforma');
-    expect(res._body).toContain('<a href="/privacy">Politica de Privacidade</a>');
-    expect(res._body).toContain('<a href="/terms">Termos de Servico</a>');
-    expect(res._body).toContain('<a href="/data-deletion">Exclusao de Dados do Usuario</a>');
-    expect(res._body).not.toContain('window.__PMP_LEGAL_DOCUMENTS__');
+    expect(res._body).toContain('<a href="/privacy">Política de Privacidade</a>');
+    expect(res._body).toContain('<a href="/terms">Termos de Uso</a>');
+    expect(res._body).toContain('<a href="/data-deletion">Exclusão de Dados</a>');
+    expect(res._body).toContain('window.__PMP_LEGAL_DOCUMENTS__');
     expect(res._body).toMatch(/<script src="\/i18n\.js\?v=[^"]+"><\/script>/);
   });
 
@@ -320,18 +320,18 @@ describe('HTTP adapter — createRequestHandler', () => {
     }
 
     expect(privacyRes._status).toBe(200);
-    expect(privacyRes._body).toContain('<title>Politica de Privacidade | Platform Multi Publisher</title>');
+    expect(privacyRes._body).toContain('<title>Política de Privacidade | Platform Multi Publisher</title>');
     expect(privacyRes._body).toContain('<meta name="robots" content="index,follow" />');
     expect(privacyRes._body).toContain('<link rel="canonical" href="https://platform.example/privacy" />');
     expect(privacyRes._body).toContain('window.__PMP_LEGAL_DOCUMENTS__');
 
     expect(termsRes._status).toBe(200);
-    expect(termsRes._body).toContain('<title>Termos de Servico | Platform Multi Publisher</title>');
+    expect(termsRes._body).toContain('<title>Termos de Uso | Platform Multi Publisher</title>');
     expect(termsRes._body).toContain('<meta name="robots" content="index,follow" />');
     expect(termsRes._body).toContain('<link rel="canonical" href="https://platform.example/terms" />');
 
     expect(deletionRes._status).toBe(200);
-    expect(deletionRes._body).toContain('<title>Exclusao de Dados do Usuario | Platform Multi Publisher</title>');
+    expect(deletionRes._body).toContain('<title>Exclusão de Dados e Revogação de Acesso | Platform Multi Publisher</title>');
     expect(deletionRes._body).toContain('<meta name="robots" content="index,follow" />');
     expect(deletionRes._body).toContain('<link rel="canonical" href="https://platform.example/data-deletion" />');
     expect(app.handleRequest).not.toHaveBeenCalled();
@@ -346,9 +346,9 @@ describe('HTTP adapter — createRequestHandler', () => {
     await handler(req, res as any);
 
     expect(res._status).toBe(200);
-    expect(res._body).toContain('<title>Exclusao de Dados do Usuario | Platform Multi Publisher</title>');
+    expect(res._body).toContain('<title>Exclusão de Dados e Revogação de Acesso | Platform Multi Publisher</title>');
     expect(res._body).toContain('<link rel="canonical" href="http://127.0.0.1:3000/data-deletion" />');
-    expect(res._body).toContain('How to request deletion');
+    expect(res._body).toContain('Como solicitar a exclusão');
     expect(app.handleRequest).not.toHaveBeenCalled();
   });
 
@@ -382,7 +382,7 @@ describe('HTTP adapter — createRequestHandler', () => {
     expect(res._body).toContain('<html lang="en">');
     expect(res._body).toContain('<title>Privacy Policy | Platform Multi Publisher</title>');
     expect(res._body).toContain('<h1>Privacy Policy</h1>');
-    expect(res._body).not.toContain('<title>Politica de Privacidade | Platform Multi Publisher</title>');
+    expect(res._body).not.toContain('<title>Política de Privacidade | Platform Multi Publisher</title>');
     expect(res._headers['set-cookie']).toContain('pmp_locale=en');
     expect(app.handleRequest).not.toHaveBeenCalled();
   });
@@ -462,6 +462,61 @@ describe('HTTP adapter — createRequestHandler', () => {
     expect(res._headers['content-type']).toBe('application/javascript; charset=utf-8');
     expect(res._body).toContain('renderRoute');
     expect(app.handleRequest).not.toHaveBeenCalled();
+  });
+
+  test('compresses and caches versioned frontend assets', async () => {
+    const app = mockApp();
+    const handler = createRequestHandler({ app });
+    const req = mockReq({
+      method: 'GET',
+      url: '/app.css?v=build-123',
+      headers: { 'accept-encoding': 'br, gzip' },
+    });
+    const res = mockRes();
+
+    await handler(req, res as any);
+
+    expect(res._status).toBe(200);
+    expect(res._headers['cache-control']).toBe('public, max-age=31536000, immutable');
+    expect(res._headers['content-encoding']).toBe('br');
+    expect(res._headers.etag).toMatch(/^W\//);
+    expect(res._headers.vary).toBe('accept-encoding');
+    expect(Buffer.isBuffer(res._body)).toBe(true);
+  });
+
+  test('returns 304 when a cached frontend representation matches its ETag', async () => {
+    const app = mockApp();
+    const handler = createRequestHandler({ app });
+    const firstReq = mockReq({ method: 'GET', url: '/i18n.js?v=build-123' });
+    const firstRes = mockRes();
+
+    await handler(firstReq, firstRes as any);
+
+    const secondReq = mockReq({
+      method: 'GET',
+      url: '/i18n.js?v=build-123',
+      headers: { 'if-none-match': firstRes._headers.etag },
+    });
+    const secondRes = mockRes();
+    await handler(secondReq, secondRes as any);
+
+    expect(secondRes._status).toBe(304);
+    expect(secondRes._body).toBe('');
+    expect(secondRes._headers.etag).toBe(firstRes._headers.etag);
+  });
+
+  test('serves optimized WebP artwork with revalidation-friendly caching', async () => {
+    const app = mockApp();
+    const handler = createRequestHandler({ app });
+    const req = mockReq({ method: 'GET', url: '/assets/optimized/PLANETA.webp' });
+    const res = mockRes();
+
+    await handler(req, res as any);
+
+    expect(res._status).toBe(200);
+    expect(res._headers['content-type']).toBe('image/webp');
+    expect(res._headers['cache-control']).toContain('stale-while-revalidate');
+    expect(Buffer.isBuffer(res._body)).toBe(true);
   });
 
   test('serves authenticated media asset files for video preview', async () => {

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">Diretório / pasta</title>
+<desc id="desc">Ícone DIR em estilo PMP, com fundo transparente.</desc>
+
+<defs>
+  <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#0636AE"/>
+    <stop offset="55%" stop-color="#0A68E8"/>
+    <stop offset="100%" stop-color="#18DEE9"/>
+  </linearGradient>
+  <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#44F4FF"/>
+    <stop offset="100%" stop-color="#00B4FF"/>
+  </linearGradient>
+  <linearGradient id="white" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#FFFFFF"/>
+    <stop offset="100%" stop-color="#DDEEFF"/>
+  </linearGradient>
+  <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+    <feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#00194F" flood-opacity=".34"/>
+  </filter>
+</defs>
+
+
+<g filter="url(#shadow)" stroke-linejoin="round">
+  <path d="M116 150c0-18 14-32 32-32h88l28 34h100c18 0 32 14 32 32v134H116z" fill="url(#blue)" stroke="url(#cyan)" stroke-width="12"/>
+  <path d="M116 182h280l-26 138H142z" fill="url(#white)" opacity=".96"/>
+  <path d="M186 236h140" stroke="#0A68E8" stroke-width="16" stroke-linecap="round"/>
+</g>
+
+<g filter="url(#shadow)">
+  <rect x="116.0" y="390" width="280" height="82" rx="41" fill="#073A9F" stroke="url(#cyan)" stroke-width="8"/>
+  <text x="256" y="446" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="700" fill="#FFFFFF">DIR</text>
+</g>
+</svg>

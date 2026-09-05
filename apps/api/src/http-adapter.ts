@@ -2,7 +2,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { readFile, mkdir, unlink } from 'node:fs/promises';
 import { createWriteStream } from 'node:fs';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { brotliCompressSync, constants as zlibConstants, gzipSync } from 'node:zlib';
 import Busboy from 'busboy';
 import type { AppInstance, HttpRequest, HttpResponse } from './app';
 import type { AdminSession } from './auth/session.guard';
@@ -29,6 +30,132 @@ interface CookieEntry {
     path?: string;
     maxAge?: number;
   };
+}
+
+type FrontendContentEncoding = 'br' | 'gzip' | 'identity';
+
+interface CachedFrontendContent {
+  source: string | Buffer;
+  identity: Buffer;
+  hash: string;
+  variants: Partial<Record<Exclude<FrontendContentEncoding, 'identity'>, Buffer>>;
+}
+
+const FRONTEND_COMPRESSION_THRESHOLD = 1_024;
+const frontendContentCache = new Map<string, CachedFrontendContent>();
+
+function encodingIsAccepted(header: string | string[] | undefined, encoding: string): boolean {
+  const value = Array.isArray(header) ? header.join(',') : header ?? '';
+  return value.split(',').some((entry) => {
+    const [name, ...parameters] = entry.trim().toLowerCase().split(';');
+    if (name !== encoding && name !== '*') {
+      return false;
+    }
+    const quality = parameters
+      .map((parameter) => parameter.trim())
+      .find((parameter) => parameter.startsWith('q='));
+    return quality ? Number(quality.slice(2)) > 0 : true;
+  });
+}
+
+function isCompressibleFrontendType(contentType: string): boolean {
+  return contentType.startsWith('text/')
+    || contentType.includes('javascript')
+    || contentType.includes('json')
+    || contentType.includes('xml')
+    || contentType.includes('svg');
+}
+
+function getCachedFrontendContent(cacheKey: string, source: string | Buffer): CachedFrontendContent {
+  const cached = frontendContentCache.get(cacheKey);
+  if (cached?.source === source) {
+    return cached;
+  }
+
+  const identity = Buffer.isBuffer(source) ? source : Buffer.from(source);
+  const content: CachedFrontendContent = {
+    source,
+    identity,
+    hash: createHash('sha256').update(identity).digest('base64url').slice(0, 24),
+    variants: {},
+  };
+  frontendContentCache.set(cacheKey, content);
+  return content;
+}
+
+function requestMatchesEtag(header: string | string[] | undefined, etag: string): boolean {
+  const value = Array.isArray(header) ? header.join(',') : header ?? '';
+  return value.split(',').some((candidate) => candidate.trim() === etag || candidate.trim() === '*');
+}
+
+function sendOptimizedFrontendBody(
+  req: IncomingMessage,
+  res: ServerResponse,
+  options: {
+    body: string | Buffer;
+    cacheControl: string;
+    cacheKey: string;
+    contentType: string;
+    method: string;
+    vary?: string;
+  },
+): void {
+  const cached = getCachedFrontendContent(options.cacheKey, options.body);
+  const canCompress = cached.identity.length >= FRONTEND_COMPRESSION_THRESHOLD
+    && isCompressibleFrontendType(options.contentType);
+  let encoding: FrontendContentEncoding = 'identity';
+
+  if (canCompress && encodingIsAccepted(req.headers['accept-encoding'], 'br')) {
+    encoding = 'br';
+  } else if (canCompress && encodingIsAccepted(req.headers['accept-encoding'], 'gzip')) {
+    encoding = 'gzip';
+  }
+
+  let responseBody = cached.identity;
+  if (encoding === 'br') {
+    cached.variants.br ??= brotliCompressSync(cached.identity, {
+      params: {
+        [zlibConstants.BROTLI_PARAM_QUALITY]: 5,
+      },
+    });
+    responseBody = cached.variants.br;
+  } else if (encoding === 'gzip') {
+    cached.variants.gzip ??= gzipSync(cached.identity, { level: 6 });
+    responseBody = cached.variants.gzip;
+  }
+
+  const etag = `W/"${cached.hash}-${encoding}"`;
+  res.setHeader('content-type', options.contentType);
+  res.setHeader('cache-control', options.cacheControl);
+  res.setHeader('etag', etag);
+  res.setHeader('vary', options.vary ?? 'accept-encoding');
+  if (encoding !== 'identity') {
+    res.setHeader('content-encoding', encoding);
+  }
+
+  if (requestMatchesEtag(req.headers['if-none-match'], etag)) {
+    res.writeHead(304);
+    res.end();
+    return;
+  }
+
+  res.setHeader('content-length', responseBody.length);
+  res.writeHead(200);
+  const responsePayload = encoding === 'identity' ? options.body : responseBody;
+  res.end(options.method === 'HEAD' ? undefined : responsePayload);
+}
+
+function frontendAssetCacheControl(path: string, hasVersion: boolean): string {
+  if (hasVersion && (path === '/app.js' || path === '/app.css' || path === '/i18n.js')) {
+    return 'public, max-age=31536000, immutable';
+  }
+  if (path.startsWith('/assets/')) {
+    return 'public, max-age=86400, stale-while-revalidate=604800';
+  }
+  if (path === '/robots.txt' || path === '/sitemap.xml') {
+    return 'public, max-age=3600, stale-while-revalidate=86400';
+  }
+  return 'public, max-age=0, must-revalidate';
 }
 
 function serializeCookie(cookie: CookieEntry): string {
@@ -248,10 +375,13 @@ export function createRequestHandler(
     if (method === 'GET' || method === 'HEAD') {
       const frontendAsset = resolveFrontendAsset(path);
       if (frontendAsset) {
-        res.setHeader('content-type', frontendAsset.contentType);
-        res.setHeader('cache-control', 'no-cache');
-        res.writeHead(200);
-        res.end(method === 'HEAD' ? undefined : frontendAsset.body);
+        sendOptimizedFrontendBody(req, res, {
+          body: frontendAsset.body,
+          cacheControl: frontendAssetCacheControl(path, Boolean(query.v)),
+          cacheKey: `asset:${path}`,
+          contentType: frontendAsset.contentType,
+          method,
+        });
         return;
       }
 
@@ -269,10 +399,14 @@ export function createRequestHandler(
             },
           }));
         }
-        res.setHeader('content-type', 'text/html; charset=utf-8');
-        res.setHeader('cache-control', 'no-cache');
-        res.writeHead(200);
-        res.end(method === 'HEAD' ? undefined : html);
+        sendOptimizedFrontendBody(req, res, {
+          body: html,
+          cacheControl: 'private, max-age=0, must-revalidate',
+          cacheKey: `html:${path}:${locale}`,
+          contentType: 'text/html; charset=utf-8',
+          method,
+          vary: 'accept-encoding, accept-language, cookie',
+        });
         return;
       }
     }

@@ -172,7 +172,7 @@ test('Growth script generator uses backend brief and renders the brief used', as
     const calls = [];
     function escapeHtml(value) { return String(value ?? ''); }
     function escapeAttribute(value) { return String(value ?? ''); }
-    function renderNeonMediaIcon() { return '<i></i>'; }
+    function renderMediaMark() { return '<i></i>'; }
     function parseCurrentQuery() { return new Map(); }
     function setGrowthButtonFeedback(button, label) { button.feedback = label; }
     function buildUrl(path, params) { return path + '?' + new URLSearchParams(params).toString(); }
@@ -948,6 +948,6 @@ test('Growth module keeps its visual system isolated from the main dashboard', (
   assert.match(APP_CSS, /\.growth-settings-merged/);
   assert.match(APP_CSS, /\.growth-nav-link\.active/);
   assert.match(APP_CSS, /\.growth-action-done/);
-  assert.match(APP_CSS, /\.growth-calendar-grid/);
+  assert.match(APP_CSS, /\.growth-decision-list \.growth-decision-card/);
   assert.match(APP_CSS, /\.growth-table/);
 });

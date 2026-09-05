@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">Idioma</title>
+<desc id="desc">Ícone PMP IDI em azul-ciano.</desc>
+
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#063A9A"/>
+    <stop offset="55%" stop-color="#0968D8"/>
+    <stop offset="100%" stop-color="#08D8E8"/>
+  </linearGradient>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#1FE8F2"/>
+    <stop offset="100%" stop-color="#00A7F5"/>
+  </linearGradient>
+  <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+    <feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#001A49" flood-opacity=".35"/>
+  </filter>
+</defs>
+
+<circle cx="256" cy="220" r="164" fill="url(#bg)" stroke="url(#ring)" stroke-width="14" filter="url(#shadow)"/>
+
+<g fill="none" stroke="#FFFFFF" stroke-width="12" filter="url(#shadow)">
+  <circle cx="256" cy="220" r="100"/>
+  <ellipse cx="256" cy="220" rx="48" ry="100"/>
+  <path d="M156 220h200M172 174c26 12 54 18 84 18s58-6 84-18M172 266c26-12 54-18 84-18s58 6 84 18"/>
+</g>
+<path d="M152 300c50 40 144 50 224 8" fill="none" stroke="#18DDEA" stroke-width="18" stroke-linecap="round"/>
+<path d="M360 286l34 20-32 24z" fill="#18DDEA"/>
+
+<rect x="116" y="392" width="280" height="82" rx="41" fill="#063B96" stroke="#17DCEB" stroke-width="8"/>
+<text x="256" y="448" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="700" fill="#FFFFFF">IDI</text>
+</svg>

@@ -46,6 +46,7 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
   const authModuleOptions: AuthServiceOptions | undefined = databaseProvider.authUserRepository
     ? {
         userStore: databaseProvider.authUserRepository,
+        passwordResetStore: databaseProvider.passwordResetRepository ?? undefined,
       }
     : undefined;
 
@@ -73,13 +74,12 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
     ? { ...accountRepoOverrides, ...channelStoreOverride }
     : undefined;
 
-  const mediaModuleOptions = (databaseProvider.mediaAssetRepository || databaseProvider.playlistRepository || databaseProvider.presetRepository)
-    ? {
+  const mediaModuleOptions = {
+        ...(env.MEDIA_STORAGE_ROOT ? { storageRoot: env.MEDIA_STORAGE_ROOT } : {}),
         ...(databaseProvider.mediaAssetRepository ? { repository: createMediaRepoAdapter(databaseProvider.mediaAssetRepository) } : {}),
         ...(databaseProvider.playlistRepository ? { playlistRepository: databaseProvider.playlistRepository } : {}),
         ...(databaseProvider.presetRepository ? { presetRepository: databaseProvider.presetRepository } : {}),
-      }
-    : undefined;
+      };
 
   const server = createServer({
     env,
@@ -90,6 +90,8 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
     mediaModuleOptions,
     accountPlanStore: databaseProvider.accountPlanRepository ?? undefined,
     paymentWebhookDeduplicator: databaseProvider.webhookDeduplicator,
+    paymentRepository: databaseProvider.paymentRepository ?? undefined,
+    serviceRequestRepository: databaseProvider.serviceRequestRepository ?? undefined,
   });
 
   // Determine allowed origins
@@ -99,6 +101,7 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
   const securityMiddleware = createSecurityMiddleware({ allowedOrigins });
   const errorHandler = createErrorHandler({ nodeEnv: server.config.nodeEnv });
   const authRateLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 10 });
+  const supportRateLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 5 });
   const healthCheck = createHealthCheck({
     nodeEnv: server.config.nodeEnv,
     getDatabaseStatus: () => ({
@@ -136,6 +139,13 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
         const isAuthRoute = path.startsWith('/auth/');
         if (isAuthRoute) {
           await authRateLimiter(req, res, async () => {
+            await server.requestHandler(req, res);
+          });
+          return;
+        }
+
+        if (path.startsWith('/support/')) {
+          await supportRateLimiter(req, res, async () => {
             await server.requestHandler(req, res);
           });
           return;

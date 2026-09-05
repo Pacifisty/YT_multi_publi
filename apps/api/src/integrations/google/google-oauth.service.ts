@@ -84,6 +84,18 @@ export interface GoogleOauthServiceOptions {
   createUserInfoClient?: (client: GoogleOauthClient) => Promise<GoogleUserInfoClient>;
 }
 
+export class GoogleOauthConfigurationError extends Error {
+  readonly code = 'GOOGLE_OAUTH_NOT_CONFIGURED';
+
+  constructor(redirectUri?: string) {
+    const authorizedRedirect = redirectUri?.trim() || 'http://127.0.0.1:3000/workspace/accounts/callback';
+    super(
+      `A conexao com o YouTube ainda nao esta configurada. Informe credenciais reais em GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET, cadastre ${authorizedRedirect} como URI de redirecionamento autorizada no Google Cloud e reinicie o servidor.`,
+    );
+    this.name = 'GoogleOauthConfigurationError';
+  }
+}
+
 export class GoogleOauthService {
   private readonly env: Record<string, string | undefined>;
   private readonly createClient: () => Promise<GoogleOauthClient>;
@@ -203,17 +215,32 @@ export class GoogleOauthService {
 
 function createOfficialOauthClient(env: Record<string, string | undefined>): () => Promise<GoogleOauthClient> {
   return async () => {
-    const { google } = await importGoogleApisModule();
     const clientId = env.GOOGLE_CLIENT_ID;
     const clientSecret = env.GOOGLE_CLIENT_SECRET;
     const redirectUri = env.GOOGLE_REDIRECT_URI;
 
-    if (!clientId || !clientSecret || !redirectUri) {
-      throw new Error('Google OAuth env is incomplete. Expected GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI.');
+    if (
+      isUnsetOrPlaceholder(clientId)
+      || isUnsetOrPlaceholder(clientSecret)
+      || isUnsetOrPlaceholder(redirectUri)
+    ) {
+      throw new GoogleOauthConfigurationError(redirectUri);
     }
 
+    const { google } = await importGoogleApisModule();
     return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
   };
+}
+
+function isUnsetOrPlaceholder(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase() ?? '';
+  return !normalized
+    || normalized === 'replace-me'
+    || normalized === 'changeme'
+    || normalized === 'change-me'
+    || normalized.startsWith('your-')
+    || normalized.includes('<set-')
+    || normalized.includes('example-secret');
 }
 
 async function createOfficialUserInfoClient(client: GoogleOauthClient): Promise<GoogleUserInfoClient> {

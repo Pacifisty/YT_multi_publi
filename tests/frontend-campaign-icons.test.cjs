@@ -49,6 +49,10 @@ test('campaign page uses lightweight CSS marks instead of neon/media icon helper
 
   assert.match(statusMeta, /mark: 'RA'/);
   assert.match(statusMeta, /mark: 'OK'/);
+  assert.match(APP_JS, /RA: '\/assets\/icons\/RA_rascunho\.svg'/);
+  assert.match(APP_JS, /PR: '\/assets\/icons\/PR_pronta\.svg'/);
+  assert.match(APP_JS, /FL: '\/assets\/icons\/FL_enviando\.svg'/);
+  assert.match(APP_JS, /ST: '\/assets\/icons\/ST_estado_generico\.svg'/);
   assert.match(mark, /campaign-mark/);
   assert.match(platformMark, /campaign-platform-mark/);
   assert.match(platformMark, /getCampaignPlatformMark/);
@@ -60,6 +64,11 @@ test('campaign page uses lightweight CSS marks instead of neon/media icon helper
   assert.match(campaignsPage, /renderCampaignMark\('NOVO', 'info', 'campaign-control-command-mark'\)/);
   assert.match(campaignsPage, /cc-refresh-indicator/);
   assert.match(campaignsPage, /cc-clear-mark/);
+  assert.match(campaignsPage, /src="\/assets\/icons\/FL_aplicar_filtros\.svg"/);
+  assert.match(campaignsPage, /src="\/assets\/icons\/X_limpar_filtros\.svg"/);
+  assert.match(CSS, /\.cc-filter-artwork-image/);
+  assert.doesNotMatch(campaignsPage, /class="cc-apply-icon" aria-hidden="true">FL</);
+  assert.doesNotMatch(campaignsPage, /class="cc-clear-mark" aria-hidden="true">X</);
 
   assert.doesNotMatch(campaignsPage, /renderNeonMediaIcon/);
   assert.doesNotMatch(campaignsPage, /renderPlatformLogo3d/);
@@ -166,7 +175,8 @@ test('accounts cockpit uses Portuguese copy and restrained text marks', () => {
   assert.match(CSS, /\.accounts-platform-mark/);
   assert.match(CSS, /\.accounts-cockpit-stat-mark/);
   assert.match(CSS, /\.account-platform-mark/);
-  assert.match(CSS, /\.accounts-cockpit-card-glow,\s*\.accounts-cockpit-card-icon-ring,\s*\.accounts-cockpit-scan/);
+  assert.doesNotMatch(CSS, /\.accounts-cockpit-card-glow|\.accounts-cockpit-card-icon-ring/);
+  assert.match(CSS, /\.accounts-cockpit-scan\s*\{\s*display:\s*none/);
 });
 
 test('campaign page consolidates filters into the launch board', () => {

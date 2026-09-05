@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">Instagram</title>
+<desc id="desc">Marca do Instagram em SVG e fundo transparente.</desc>
+
+<defs>
+  <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+    <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#00194F" flood-opacity=".28"/>
+  </filter>
+</defs>
+
+<defs>
+  <radialGradient id="iggrad" cx="30%" cy="100%" r="120%">
+    <stop offset="0%" stop-color="#FED373"/>
+    <stop offset="25%" stop-color="#F15245"/>
+    <stop offset="50%" stop-color="#D92E7F"/>
+    <stop offset="75%" stop-color="#9B36B7"/>
+    <stop offset="100%" stop-color="#515ECF"/>
+  </radialGradient>
+</defs>
+<g transform="translate(56 56) scale(1.25)" filter="url(#shadow)">
+  <rect x="0" y="0" width="320" height="320" rx="76" fill="url(#iggrad)"/>
+  <rect x="54" y="54" width="212" height="212" rx="62" fill="none" stroke="#FFFFFF" stroke-width="22"/>
+  <circle cx="160" cy="160" r="54" fill="none" stroke="#FFFFFF" stroke-width="22"/>
+  <circle cx="230" cy="90" r="16" fill="#FFFFFF"/>
+</g>
+</svg>

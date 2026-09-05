@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">Adicionar</title>
+<desc id="desc">Ícone ADD em estilo PMP, com fundo transparente.</desc>
+
+<defs>
+  <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#0636AE"/>
+    <stop offset="55%" stop-color="#0A68E8"/>
+    <stop offset="100%" stop-color="#18DEE9"/>
+  </linearGradient>
+  <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#44F4FF"/>
+    <stop offset="100%" stop-color="#00B4FF"/>
+  </linearGradient>
+  <linearGradient id="white" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#FFFFFF"/>
+    <stop offset="100%" stop-color="#DDEEFF"/>
+  </linearGradient>
+  <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+    <feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#00194F" flood-opacity=".34"/>
+  </filter>
+</defs>
+
+
+<g filter="url(#shadow)" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="126" y="108" width="260" height="220" rx="34" fill="url(#blue)" stroke="url(#cyan)" stroke-width="12"/>
+  <path d="M166 158h110M166 206h110M166 254h82" stroke="#FFFFFF" stroke-width="16"/>
+  <circle cx="332" cy="270" r="56" fill="url(#cyan)" stroke="#FFFFFF" stroke-width="10"/>
+  <path d="M332 238v64M300 270h64" stroke="#FFFFFF" stroke-width="18"/>
+</g>
+
+<g filter="url(#shadow)">
+  <rect x="106.0" y="390" width="300" height="82" rx="41" fill="#073A9F" stroke="url(#cyan)" stroke-width="8"/>
+  <text x="256" y="446" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="700" fill="#FFFFFF">ADD</text>
+</g>
+</svg>

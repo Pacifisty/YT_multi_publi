@@ -126,4 +126,68 @@ describe('Payment E2E Tests', () => {
     expect(result.intent.purchase.kind).toBe('plan');
     expect(result.intent.status).toBe('pending');
   });
+
+  it('persists a pending intent before contacting the external provider', async () => {
+    const calls: string[] = [];
+    let record: any = null;
+    const repository = {
+      create: async (intent: any) => {
+        calls.push('repository.create');
+        record = { ...intent };
+        return record;
+      },
+      findById: async () => record,
+      findByProviderIntentId: async () => null,
+      update: async (_id: string, patch: any) => {
+        calls.push('repository.update');
+        record = { ...record, ...patch };
+        return record;
+      },
+      listByEmail: async () => record ? [record] : [],
+    };
+    const provider = {
+      name: 'mercadopago' as const,
+      createCheckout: async () => {
+        calls.push('provider.createCheckout');
+        expect(record?.status).toBe('pending');
+        expect(record?.providerIntentId).toBeNull();
+        return { providerIntentId: 'mp_real_123', checkoutUrl: 'https://pay.example.test/123' };
+      },
+    };
+
+    const paymentService = new PaymentService({ provider, repository });
+    const result = await paymentService.createCheckout({
+      email: 'buyer@example.test',
+      kind: 'token_pack',
+      pack: { id: 'pack_1', tokens: 100, priceBrl: 49.9 },
+    });
+
+    expect(calls).toEqual(['repository.create', 'provider.createCheckout', 'repository.update']);
+    expect(result.intent.providerIntentId).toBe('mp_real_123');
+  });
+
+  it('marks the durable intent as failed when the provider request fails', async () => {
+    let record: any = null;
+    const repository = {
+      create: async (intent: any) => (record = { ...intent }),
+      findById: async () => record,
+      findByProviderIntentId: async () => null,
+      update: async (_id: string, patch: any) => (record = { ...record, ...patch }),
+      listByEmail: async () => record ? [record] : [],
+    };
+    const provider = {
+      name: 'mercadopago' as const,
+      createCheckout: async () => { throw new Error('provider unavailable'); },
+    };
+
+    const paymentService = new PaymentService({ provider, repository });
+    await expect(paymentService.createCheckout({
+      email: 'buyer@example.test',
+      kind: 'token_pack',
+      pack: { id: 'pack_1', tokens: 100, priceBrl: 49.9 },
+    })).rejects.toThrow('provider unavailable');
+
+    expect(record.status).toBe('failed');
+    expect(record.errorMessage).toBe('provider unavailable');
+  });
 });

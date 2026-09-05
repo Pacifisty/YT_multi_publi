@@ -48,6 +48,12 @@ interface PrismaClient {
   auditEvent: {
     deleteMany(args: any): Promise<{ count: number }>;
   };
+  passwordResetToken: {
+    deleteMany(args: any): Promise<{ count: number }>;
+  };
+  serviceRequest: {
+    deleteMany(args: any): Promise<{ count: number }>;
+  };
 }
 
 function toAuthUser(row: any): AuthUser {
@@ -257,6 +263,8 @@ export class PrismaAuthUserRepository implements AuthUserRepository {
         ? await tx.connectedAccount.deleteMany({ where: { id: { in: connectedAccountIds } } })
         : { count: 0 };
       const accountPlansDeleted = await tx.accountPlan.deleteMany({ where: { email } });
+      await tx.passwordResetToken.deleteMany({ where: { userId: user.id } });
+      const serviceRequestsDeleted = await tx.serviceRequest.deleteMany({ where: { ownerEmail: email } });
 
       await tx.adminUser.update({
         where: { id: user.id },
@@ -285,6 +293,7 @@ export class PrismaAuthUserRepository implements AuthUserRepository {
         mediaAssetsDeleted: mediaAssetsDeleted.count,
         playlistsDeleted: playlistsDeleted.count,
         auditEventsDeleted: auditEventsDeleted.count,
+        serviceRequestsDeleted: serviceRequestsDeleted.count,
       };
     });
   }

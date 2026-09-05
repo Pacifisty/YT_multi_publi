@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">Contas / foco e alvo</title>
+<desc id="desc">Ícone FOCO em estilo PMP, com fundo transparente.</desc>
+
+<defs>
+  <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#0736B3"/>
+    <stop offset="55%" stop-color="#0A68E8"/>
+    <stop offset="100%" stop-color="#17DEE9"/>
+  </linearGradient>
+  <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#43F5FF"/>
+    <stop offset="100%" stop-color="#00B3FF"/>
+  </linearGradient>
+  <linearGradient id="white" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#FFFFFF"/>
+    <stop offset="100%" stop-color="#DDEEFF"/>
+  </linearGradient>
+  <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+    <feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#00194F" flood-opacity=".34"/>
+  </filter>
+</defs>
+
+<g filter="url(#shadow)">
+  <circle cx="256" cy="210" r="154" fill="url(#blue)" stroke="url(#cyan)" stroke-width="12"/>
+  <circle cx="256" cy="210" r="108" fill="none" stroke="#FFFFFF" stroke-width="18"/>
+  <circle cx="256" cy="210" r="70" fill="none" stroke="#FFFFFF" stroke-width="18"/>
+  <circle cx="256" cy="210" r="30" fill="url(#cyan)" stroke="#FFFFFF" stroke-width="8"/>
+  <path d="M318 150l63-63" stroke="#EAF7FF" stroke-width="12" stroke-linecap="round"/>
+  <path d="M349 88l39-10-10 39z" fill="url(#cyan)" stroke="#FFFFFF" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M353 113l28 28-29 28-28-28z" fill="url(#cyan)" stroke="#FFFFFF" stroke-width="5"/>
+  <path d="M108 116v-24c0-14 12-26 26-26h24M404 116v-24c0-14-12-26-26-26h-24M108 304v24c0 14 12 26 26 26h24M404 304v24c0 14-12 26-26 26h-24"
+        fill="none" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round"/>
+</g>
+
+<g filter="url(#shadow)">
+  <rect x="96.0" y="390" width="320" height="82" rx="41" fill="#073A9F" stroke="url(#cyan)" stroke-width="8"/>
+  <text x="256" y="446" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="46" font-weight="700" fill="#FFFFFF">FOCO</text>
+</g>
+</svg>

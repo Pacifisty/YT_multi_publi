@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">Tipo de mídia / automação playlist</title>
+<desc id="desc">Automação de playlist em estilo PMP, com fundo transparente.</desc>
+
+<defs>
+  <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#0636AE"/>
+    <stop offset="55%" stop-color="#0A68E8"/>
+    <stop offset="100%" stop-color="#18DEE9"/>
+  </linearGradient>
+  <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#44F4FF"/>
+    <stop offset="100%" stop-color="#00B4FF"/>
+  </linearGradient>
+  <linearGradient id="white" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#FFFFFF"/>
+    <stop offset="100%" stop-color="#DDEEFF"/>
+  </linearGradient>
+  <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+    <feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#00194F" flood-opacity=".34"/>
+  </filter>
+</defs>
+
+<g transform="translate(-72 -19) scale(1.28)" filter="url(#shadow)" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="120" y="100" width="272" height="230" rx="34" fill="url(#blue)" stroke="url(#cyan)" stroke-width="12"/>
+  <circle cx="176" cy="164" r="10" fill="#FFFFFF"/>
+  <circle cx="176" cy="220" r="10" fill="#FFFFFF"/>
+  <circle cx="176" cy="276" r="10" fill="#FFFFFF"/>
+  <path d="M206 164h108M206 220h108M206 276h82" stroke="#FFFFFF" stroke-width="16"/>
+  <path d="M312 158c25 7 44 27 52 52" fill="none" stroke="#18DEE9" stroke-width="14"/>
+  <path d="M354 202l17 16 5-23" fill="none" stroke="#18DEE9" stroke-width="12"/>
+  <path d="M312 282c-25-7-44-27-52-52" fill="none" stroke="#18DEE9" stroke-width="14"/>
+  <path d="M270 238l-17-16-5 23" fill="none" stroke="#18DEE9" stroke-width="12"/>
+  <circle cx="340" cy="220" r="38" fill="none" stroke="#FFFFFF" stroke-width="10"/>
+  <path d="M328 200v40l28-20z" fill="#FFFFFF"/>
+</g>
+</svg>

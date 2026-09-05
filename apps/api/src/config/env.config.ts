@@ -16,6 +16,7 @@ export interface EnvConfig {
   oauthTokenKey: string | undefined;
   adminEmail: string | undefined;
   adminPasswordHash: string | undefined;
+  mediaStorageRoot: string | undefined;
   port: number;
   nodeEnv: string;
 }
@@ -26,6 +27,32 @@ export interface EnvValidationError {
 }
 
 const VALID_NODE_ENVS = ['development', 'production', 'test'];
+
+function isPlaceholder(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase() ?? '';
+  return !normalized
+    || normalized === 'replace-me'
+    || normalized === 'changeme'
+    || normalized === 'change-me'
+    || normalized.includes('<set-')
+    || normalized.includes('example-secret');
+}
+
+function validatePublicHttpsUrl(field: string, value: string | undefined, errors: EnvValidationError[]): void {
+  if (!value) {
+    errors.push({ field, message: `${field} is required in production` });
+    return;
+  }
+
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(url.hostname)) {
+      errors.push({ field, message: `${field} must be a public HTTPS URL in production` });
+    }
+  } catch {
+    errors.push({ field, message: `${field} must be a valid URL` });
+  }
+}
 
 function parsePort(rawPort: string | undefined): number {
   if (rawPort === undefined) {
@@ -59,6 +86,7 @@ export function loadEnvConfig(env: Record<string, string | undefined>): EnvConfi
     oauthTokenKey: env.OAUTH_TOKEN_KEY,
     adminEmail: env.ADMIN_EMAIL,
     adminPasswordHash: env.ADMIN_PASSWORD_HASH,
+    mediaStorageRoot: env.MEDIA_STORAGE_ROOT,
     port,
     nodeEnv: env.NODE_ENV ?? 'development',
   };
@@ -87,6 +115,49 @@ export function validateEnvConfig(config: EnvConfig): EnvValidationError[] {
     errors.push({ field: 'OAUTH_TOKEN_KEY', message: 'OAUTH_TOKEN_KEY is required' });
   } else if (!isValidTokenKey(config.oauthTokenKey)) {
     errors.push({ field: 'OAUTH_TOKEN_KEY', message: 'OAUTH_TOKEN_KEY must resolve to exactly 32 bytes' });
+  }
+
+  if (!config.adminEmail) {
+    errors.push({ field: 'ADMIN_EMAIL', message: 'ADMIN_EMAIL is required' });
+  }
+
+  if (!config.adminPasswordHash) {
+    errors.push({ field: 'ADMIN_PASSWORD_HASH', message: 'ADMIN_PASSWORD_HASH is required' });
+  }
+
+  if (config.nodeEnv === 'production') {
+    validatePublicHttpsUrl('PUBLIC_APP_URL', config.publicAppUrl, errors);
+    validatePublicHttpsUrl('GOOGLE_REDIRECT_URI', config.googleRedirectUri, errors);
+    validatePublicHttpsUrl('GOOGLE_AUTH_REDIRECT_URI', config.googleAuthRedirectUri, errors);
+    validatePublicHttpsUrl('TIKTOK_REDIRECT_URI', config.tiktokRedirectUri, errors);
+    validatePublicHttpsUrl('INSTAGRAM_REDIRECT_URI', config.instagramRedirectUri, errors);
+
+    for (const [field, value] of [
+      ['DATABASE_URL', config.databaseUrl],
+      ['GOOGLE_CLIENT_ID', config.googleClientId],
+      ['GOOGLE_CLIENT_SECRET', config.googleClientSecret],
+      ['TIKTOK_CLIENT_KEY', config.tiktokClientKey],
+      ['TIKTOK_CLIENT_SECRET', config.tiktokClientSecret],
+      ['INSTAGRAM_CLIENT_ID', config.instagramClientId],
+      ['INSTAGRAM_CLIENT_SECRET', config.instagramClientSecret],
+    ] as const) {
+      if (isPlaceholder(value)) {
+        errors.push({ field, message: `${field} is required in production and cannot be a placeholder` });
+      }
+    }
+
+    if (!config.mediaStorageRoot) {
+      errors.push({ field: 'MEDIA_STORAGE_ROOT', message: 'MEDIA_STORAGE_ROOT must point to a persistent mounted volume in production' });
+    }
+
+    const passwordHash = config.adminPasswordHash ?? '';
+    if (passwordHash && !passwordHash.startsWith('scrypt:') && !passwordHash.startsWith('$argon2')) {
+      errors.push({ field: 'ADMIN_PASSWORD_HASH', message: 'ADMIN_PASSWORD_HASH must use scrypt or Argon2 in production' });
+    }
+
+    if (isPlaceholder(config.adminEmail) || config.adminEmail?.endsWith('@example.com')) {
+      errors.push({ field: 'ADMIN_EMAIL', message: 'ADMIN_EMAIL must be a real operational address in production' });
+    }
   }
 
   if (isNaN(config.port)) {

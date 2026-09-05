@@ -81,6 +81,7 @@ describe('Environment config — validateEnvConfig', () => {
     oauthTokenKey: 'a]3Fk9$2mP!xL7nQ&vR4wY6zA0cE8gI5',
     adminEmail: 'admin@example.com',
     adminPasswordHash: 'sha256:abc123',
+    mediaStorageRoot: 'storage',
     port: 3000,
     nodeEnv: 'development',
   };

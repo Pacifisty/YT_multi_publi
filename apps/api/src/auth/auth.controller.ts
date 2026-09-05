@@ -11,6 +11,8 @@ export interface AuthRequest extends SessionRequestLike {
   body?: Partial<LoginDto & RegisterDto> & {
     currentPassword?: string;
     confirmationCode?: string;
+    token?: string;
+    newPassword?: string;
   };
   query?: {
     code?: string;
@@ -82,6 +84,38 @@ export class AuthController {
 
     const result = await this.authService.register(request.body as RegisterDto, request.session);
     return this.toAuthResponse(result);
+  }
+
+  async requestPasswordReset(
+    request: AuthRequest,
+  ): Promise<ControllerResponse<{ message: string } | { error: string }>> {
+    const email = typeof request.body?.email === 'string' ? request.body.email.trim() : '';
+    if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return {
+        status: 400,
+        body: { error: 'Informe um email valido.' },
+        cookies: [],
+      };
+    }
+
+    const result = await this.authService.requestPasswordReset(email);
+    return {
+      status: 202,
+      body: { message: result.message },
+      cookies: [],
+    };
+  }
+
+  async resetPassword(
+    request: AuthRequest,
+  ): Promise<ControllerResponse<{ message?: string; error?: string }>> {
+    const token = typeof request.body?.token === 'string' ? request.body.token : '';
+    const newPassword = typeof request.body?.newPassword === 'string' ? request.body.newPassword : '';
+    const result = await this.authService.resetPassword(token, newPassword);
+    if (!result.ok) {
+      return { status: result.status, body: { error: result.message }, cookies: [] };
+    }
+    return { status: 200, body: { message: result.message }, cookies: [] };
   }
 
   async startGoogleOauth(

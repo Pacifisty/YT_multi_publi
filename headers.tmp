@@ -1,0 +1,15 @@
+HTTP/1.1 200 OK
+x-content-type-options: nosniff
+x-frame-options: DENY
+x-xss-protection: 1; mode=block
+strict-transport-security: max-age=31536000; includeSubDomains
+content-type: application/javascript; charset=utf-8
+cache-control: public, max-age=31536000, immutable
+etag: W/"1CH0P6xCsL-Ssm_WcmYuWFLf-br"
+vary: accept-encoding
+content-encoding: br
+content-length: 123881
+Date: Sat, 05 Sep 2026 02:56:40 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+

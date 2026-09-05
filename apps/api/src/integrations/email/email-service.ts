@@ -53,44 +53,19 @@ class MockEmailProvider implements IEmailProvider {
 /**
  * SendGridEmailProvider: SendGrid API driver
  *
- * Uses SendGrid API to send emails via HTTP request.
- * Can optionally use @sendgrid/mail library if installed.
+ * Uses the SendGrid HTTP API directly, without an optional runtime package.
  */
 class SendGridEmailProvider implements IEmailProvider {
   private apiKey: string;
+  private fromAddress: string;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, fromAddress = process.env.EMAIL_FROM_ADDRESS || 'noreply@example.com') {
     this.apiKey = apiKey;
+    this.fromAddress = fromAddress;
   }
 
   async send(notification: EmailNotification): Promise<EmailProviderResult> {
     try {
-      // Try to use @sendgrid/mail library if available
-      let sgMail;
-      try {
-        const sendgridModule = await import('@sendgrid/mail');
-        sgMail = sendgridModule.default;
-      } catch {
-        // Library not installed; fall back to HTTP
-      }
-
-      if (sgMail) {
-        sgMail.setApiKey(this.apiKey);
-        const msg = {
-          to: notification.to,
-          from: process.env.EMAIL_FROM_ADDRESS || 'noreply@example.com',
-          subject: notification.subject,
-          html: notification.htmlBody,
-          text: notification.textBody,
-        };
-        const response = await sgMail.send(msg);
-        return {
-          success: true,
-          messageId: response[0]?.headers?.['x-message-id'] || 'unknown',
-        };
-      }
-
-      // HTTP fallback
       const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
         method: 'POST',
         headers: {
@@ -99,7 +74,7 @@ class SendGridEmailProvider implements IEmailProvider {
         },
         body: JSON.stringify({
           personalizations: [{ to: [{ email: notification.to }] }],
-          from: { email: process.env.EMAIL_FROM_ADDRESS || 'noreply@example.com' },
+          from: { email: this.fromAddress },
           subject: notification.subject,
           content: [
             { type: 'text/html', value: notification.htmlBody },
@@ -137,16 +112,18 @@ class SendGridEmailProvider implements IEmailProvider {
 class MailgunEmailProvider implements IEmailProvider {
   private apiKey: string;
   private domain: string;
+  private fromAddress: string;
 
-  constructor(apiKey: string, domain?: string) {
+  constructor(apiKey: string, domain?: string, fromAddress?: string) {
     this.apiKey = apiKey;
     this.domain = domain || process.env.MAILGUN_DOMAIN || 'mg.example.com';
+    this.fromAddress = fromAddress || process.env.EMAIL_FROM_ADDRESS || `noreply@${this.domain}`;
   }
 
   async send(notification: EmailNotification): Promise<EmailProviderResult> {
     try {
       const formData = new URLSearchParams();
-      formData.append('from', process.env.EMAIL_FROM_ADDRESS || `noreply@${this.domain}`);
+      formData.append('from', this.fromAddress);
       formData.append('to', notification.to);
       formData.append('subject', notification.subject);
       formData.append('html', notification.htmlBody);
@@ -191,9 +168,11 @@ class MailgunEmailProvider implements IEmailProvider {
  */
 class ResendEmailProvider implements IEmailProvider {
   private apiKey: string;
+  private fromAddress: string;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, fromAddress = process.env.EMAIL_FROM_ADDRESS || 'noreply@example.com') {
     this.apiKey = apiKey;
+    this.fromAddress = fromAddress;
   }
 
   async send(notification: EmailNotification): Promise<EmailProviderResult> {
@@ -205,7 +184,7 @@ class ResendEmailProvider implements IEmailProvider {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          from: process.env.EMAIL_FROM_ADDRESS || 'noreply@example.com',
+          from: this.fromAddress,
           to: notification.to,
           subject: notification.subject,
           html: notification.htmlBody,
@@ -281,13 +260,25 @@ export class EmailService {
  * Reads EMAIL_PROVIDER and EMAIL_PROVIDER_API_KEY environment variables.
  * Falls back to MockEmailProvider if not configured.
  */
-export function selectEmailProvider(logger?: any): IEmailProvider {
-  const providerType = process.env.EMAIL_PROVIDER?.toLowerCase();
-  const apiKey = process.env.EMAIL_PROVIDER_API_KEY;
+export function selectEmailProvider(
+  logger?: any,
+  env: Record<string, string | undefined> = process.env,
+): IEmailProvider {
+  const providerType = env.EMAIL_PROVIDER?.trim().toLowerCase();
+  const apiKey = env.EMAIL_PROVIDER_API_KEY?.trim();
+  const fromAddress = env.EMAIL_FROM_ADDRESS?.trim();
+  const isProduction = env.NODE_ENV === 'production';
 
   if (!providerType) {
+    if (isProduction) {
+      throw new Error('EMAIL_PROVIDER is required in production; mock email delivery is disabled');
+    }
     logger?.info('EMAIL_PROVIDER not set; using MockEmailProvider');
     return new MockEmailProvider();
+  }
+
+  if (isProduction && !fromAddress) {
+    throw new Error('EMAIL_FROM_ADDRESS is required in production');
   }
 
   if (providerType === 'sendgrid') {
@@ -295,7 +286,7 @@ export function selectEmailProvider(logger?: any): IEmailProvider {
       throw new Error('EMAIL_PROVIDER set to sendgrid but EMAIL_PROVIDER_API_KEY not provided');
     }
     logger?.info('Email provider: SendGrid');
-    return new SendGridEmailProvider(apiKey);
+    return new SendGridEmailProvider(apiKey, fromAddress);
   }
 
   if (providerType === 'mailgun') {
@@ -303,7 +294,11 @@ export function selectEmailProvider(logger?: any): IEmailProvider {
       throw new Error('EMAIL_PROVIDER set to mailgun but EMAIL_PROVIDER_API_KEY not provided');
     }
     logger?.info('Email provider: Mailgun');
-    return new MailgunEmailProvider(apiKey, process.env.MAILGUN_DOMAIN);
+    const domain = env.MAILGUN_DOMAIN?.trim();
+    if (isProduction && !domain) {
+      throw new Error('EMAIL_PROVIDER set to mailgun but MAILGUN_DOMAIN not provided');
+    }
+    return new MailgunEmailProvider(apiKey, domain, fromAddress);
   }
 
   if (providerType === 'resend') {
@@ -311,9 +306,12 @@ export function selectEmailProvider(logger?: any): IEmailProvider {
       throw new Error('EMAIL_PROVIDER set to resend but EMAIL_PROVIDER_API_KEY not provided');
     }
     logger?.info('Email provider: Resend');
-    return new ResendEmailProvider(apiKey);
+    return new ResendEmailProvider(apiKey, fromAddress);
   }
 
+  if (isProduction) {
+    throw new Error(`Unsupported EMAIL_PROVIDER in production: ${providerType}`);
+  }
   logger?.warn(`Unknown EMAIL_PROVIDER: ${providerType}; using MockEmailProvider`);
   return new MockEmailProvider();
 }

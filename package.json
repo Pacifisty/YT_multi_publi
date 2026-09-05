@@ -46,10 +46,16 @@
     "c8": "^11.0.0",
     "esbuild": "^0.24.0",
     "prisma": "^6.17.1",
+    "sharp": "^0.34.3",
     "tsx": "^4.21.0",
     "vitest": "^4.1.2"
   },
   "scripts": {
+    "build:frontend": "node scripts/build-frontend-assets.mjs",
+    "preapi:dev": "npm run build:frontend",
+    "preapi:start": "npm run build:frontend",
+    "pretest": "npm run build:frontend",
+    "pretest:api": "npm run build:frontend",
     "api:dev": "node --env-file-if-exists=.env --import tsx apps/api/src/cli.ts",
     "api:start": "node --env-file-if-exists=.env --import tsx apps/api/src/cli.ts",
     "db:generate": "node_modules\\.bin\\prisma.cmd generate",
@@ -59,9 +65,12 @@
     "db:studio": "node_modules\\.bin\\prisma.cmd studio",
     "seed:dashboard-demo": "node --env-file-if-exists=.env scripts/seed-dashboard-demo.cjs",
     "verify:prisma-startup": "node --env-file-if-exists=.env scripts/verify-prisma-startup.cjs",
+    "verify:production": "node --env-file-if-exists=.env --env-file-if-exists=.env.production scripts/check-production-readiness.cjs",
+    "security:hash-admin": "node scripts/hash-admin-password.cjs",
     "build:hooks": "node scripts/build-hooks.js",
     "prepublishOnly": "npm run build:hooks",
     "test": "node scripts/run-tests.cjs",
+    "test:api": "vitest run --config apps/api/vitest.config.ts",
     "test:coverage": "c8 --check-coverage --lines 70 --reporter text --include 'get-shit-done/bin/lib/*.cjs' --exclude 'tests/**' --all node scripts/run-tests.cjs"
   },
   "dependencies": {

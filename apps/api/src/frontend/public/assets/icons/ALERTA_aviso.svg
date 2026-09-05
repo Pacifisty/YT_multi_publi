@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">Alerta</title>
+<desc id="desc">Ícone ALERTA em estilo PMP, com fundo transparente.</desc>
+
+<defs>
+  <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#0636AE"/>
+    <stop offset="55%" stop-color="#0A68E8"/>
+    <stop offset="100%" stop-color="#18DEE9"/>
+  </linearGradient>
+  <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#44F4FF"/>
+    <stop offset="100%" stop-color="#00B4FF"/>
+  </linearGradient>
+  <linearGradient id="white" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#FFFFFF"/>
+    <stop offset="100%" stop-color="#DDEEFF"/>
+  </linearGradient>
+  <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+    <feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#00194F" flood-opacity=".34"/>
+  </filter>
+</defs>
+
+
+<g filter="url(#shadow)" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="256" cy="210" r="132" fill="url(#blue)" stroke="url(#cyan)" stroke-width="12"/>
+  <path d="M256 116l102 176H154z" fill="url(#white)" stroke="#FFFFFF" stroke-width="10"/>
+  <path d="M256 166v62" stroke="#0A68E8" stroke-width="20"/>
+  <circle cx="256" cy="258" r="10" fill="#0A68E8"/>
+  <path d="M164 318h184" stroke="#18DEE9" stroke-width="10" opacity=".9"/>
+</g>
+
+<g filter="url(#shadow)">
+  <rect x="81.0" y="390" width="350" height="82" rx="41" fill="#073A9F" stroke="url(#cyan)" stroke-width="8"/>
+  <text x="256" y="446" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="42" font-weight="700" fill="#FFFFFF">ALERTA</text>
+</g>
+</svg>

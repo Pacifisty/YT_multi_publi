@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">Autorização / chave e reconectar</title>
+<desc id="desc">Ícone AU em estilo PMP, com fundo transparente.</desc>
+
+<defs>
+  <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#0636AE"/>
+    <stop offset="55%" stop-color="#0A68E8"/>
+    <stop offset="100%" stop-color="#18DEE9"/>
+  </linearGradient>
+  <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#44F4FF"/>
+    <stop offset="100%" stop-color="#00B4FF"/>
+  </linearGradient>
+  <linearGradient id="white" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#FFFFFF"/>
+    <stop offset="100%" stop-color="#DDEEFF"/>
+  </linearGradient>
+  <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+    <feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#00194F" flood-opacity=".34"/>
+  </filter>
+</defs>
+
+
+<g filter="url(#shadow)" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="214" cy="192" r="78" fill="url(#blue)" stroke="url(#cyan)" stroke-width="12"/>
+  <circle cx="214" cy="192" r="34" fill="none" stroke="#FFFFFF" stroke-width="14"/>
+  <path d="M268 246l92 92" stroke="#FFFFFF" stroke-width="24"/>
+  <path d="M320 298l28-28M342 320l28-28" stroke="#18DEE9" stroke-width="16"/>
+  <path d="M296 116c32 6 58 23 76 48" fill="none" stroke="#FFFFFF" stroke-width="14"/>
+  <path d="M370 144l11 34-35-3" fill="none" stroke="#FFFFFF" stroke-width="12"/>
+  <path d="M132 274c-28-10-49-29-62-55" fill="none" stroke="#18DEE9" stroke-width="14"/>
+  <path d="M70 246l-6-35 35 8" fill="none" stroke="#18DEE9" stroke-width="12"/>
+</g>
+
+<g filter="url(#shadow)">
+  <rect x="116.0" y="390" width="280" height="82" rx="41" fill="#073A9F" stroke="url(#cyan)" stroke-width="8"/>
+  <text x="256" y="446" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="700" fill="#FFFFFF">AU</text>
+</g>
+</svg>

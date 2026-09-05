@@ -41,6 +41,7 @@ export interface AccountDeletionFinalizationResult {
   mediaAssetsDeleted: number;
   playlistsDeleted: number;
   auditEventsDeleted: number;
+  serviceRequestsDeleted: number;
 }
 
 export interface AuthUserRepository {
@@ -182,6 +183,7 @@ export class InMemoryAuthUserRepository implements AuthUserRepository {
       mediaAssetsDeleted: 0,
       playlistsDeleted: 0,
       auditEventsDeleted: 0,
+      serviceRequestsDeleted: 0,
     };
   }
 }

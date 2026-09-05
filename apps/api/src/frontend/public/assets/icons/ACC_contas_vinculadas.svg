@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">Contas vinculadas</title>
+<desc id="desc">Ícone PMP ACC em azul-ciano.</desc>
+
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#063A9A"/>
+    <stop offset="55%" stop-color="#0968D8"/>
+    <stop offset="100%" stop-color="#08D8E8"/>
+  </linearGradient>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#1FE8F2"/>
+    <stop offset="100%" stop-color="#00A7F5"/>
+  </linearGradient>
+  <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+    <feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#001A49" flood-opacity=".35"/>
+  </filter>
+</defs>
+
+<circle cx="256" cy="220" r="164" fill="url(#bg)" stroke="url(#ring)" stroke-width="14" filter="url(#shadow)"/>
+
+<g fill="none" stroke-linecap="round" stroke-linejoin="round" filter="url(#shadow)">
+  <path d="M178 256l-24 24c-28 28-28 74 0 102s74 28 102 0l42-42" stroke="#18DDEA" stroke-width="34"/>
+  <path d="M334 184l24-24c28-28 74-28 102 0s28 74 0 102l-42 42" stroke="#FFFFFF" stroke-width="34" transform="translate(-52 0)"/>
+  <path d="M212 300l88-88" stroke="#FFFFFF" stroke-width="30"/>
+</g>
+
+<rect x="116" y="392" width="280" height="82" rx="41" fill="#063B96" stroke="#17DCEB" stroke-width="8"/>
+<text x="256" y="448" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="700" fill="#FFFFFF">ACC</text>
+</svg>

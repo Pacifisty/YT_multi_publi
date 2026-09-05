@@ -1,4 +1,4 @@
-import { createHash, randomInt, randomUUID, scrypt as nodeScrypt, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomInt, randomUUID, scrypt as nodeScrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 
 import { GoogleOauthService, GOOGLE_AUTH_SCOPES, type GoogleOauthSession, type GoogleTokenResult } from '../integrations/google/google-oauth.service';
@@ -8,6 +8,10 @@ import type { RegisterDto } from './dto/register.dto';
 import type { AdminSession, AdminSessionUser } from './session.guard';
 import type { AuthUser, AuthUserRepository } from './auth-user.repository';
 import { InMemoryAuthUserRepository } from './auth-user.repository';
+import {
+  InMemoryPasswordResetRepository,
+  type PasswordResetRepository,
+} from './password-reset.repository';
 
 const scrypt = promisify(nodeScrypt);
 
@@ -17,6 +21,7 @@ export interface AuthServiceOptions {
   userStore?: AuthUserRepository;
   googleOauthService?: GoogleOauthService;
   emailService?: AccountDeletionEmailService;
+  passwordResetStore?: PasswordResetRepository;
 }
 
 export interface AccountDeletionEmailService {
@@ -53,6 +58,8 @@ const DEV_GOOGLE_LOGIN_CODE = 'dev-google-login';
 const ACCOUNT_DEACTIVATION_DELAY_MS = 24 * 60 * 60 * 1000;
 const ACCOUNT_DELETION_DELAY_MS = 30 * 24 * 60 * 60 * 1000;
 const ACCOUNT_DELETION_CONFIRMATION_TTL_MS = 10 * 60 * 1000;
+const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000;
+const PASSWORD_RESET_GENERIC_MESSAGE = 'Se existir uma conta compativel, enviaremos as instrucoes de recuperacao para o email informado.';
 
 type AccountDeletionConfirmationMethod = 'password' | 'email_code';
 
@@ -85,6 +92,7 @@ export class AuthService {
   private readonly userStore: AuthUserRepository;
   private readonly googleOauthService: GoogleOauthService;
   private readonly emailService?: AccountDeletionEmailService;
+  private readonly passwordResetStore: PasswordResetRepository;
   private readonly failedAttempts = new Map<string, FailedAttemptState>();
   private readonly googleOauthStates = new Map<string, number>();
   private readonly accountDeletionChallenges = new Map<string, { codeHash: string; expiresAt: number }>();
@@ -95,6 +103,78 @@ export class AuthService {
     this.userStore = options.userStore ?? new InMemoryAuthUserRepository(buildSeedUsers(this.env));
     this.googleOauthService = options.googleOauthService ?? createAuthGoogleOauthService(this.env);
     this.emailService = options.emailService;
+    this.passwordResetStore = options.passwordResetStore ?? new InMemoryPasswordResetRepository();
+  }
+
+  async requestPasswordReset(emailInput: string): Promise<{ ok: true; message: string }> {
+    const email = normalizeEmail(emailInput);
+    const user = email ? await this.userStore.findByEmail(email) : null;
+
+    if (user?.isActive && user.passwordHash && !this.isAccountDeactivated(user)) {
+      const now = this.now();
+      const token = randomBytes(32).toString('base64url');
+      await this.passwordResetStore.invalidateForUser(user.id, now);
+      await this.passwordResetStore.create({
+        userId: user.id,
+        tokenHash: hashPasswordResetToken(token),
+        createdAt: now,
+        expiresAt: new Date(now.getTime() + PASSWORD_RESET_TTL_MS),
+      });
+
+      const resetUrl = buildPasswordResetUrl(this.env, token);
+      await this.emailService?.send({
+        to: user.email,
+        subject: 'Recuperacao de senha - Platform Multi Publisher',
+        htmlBody: buildPasswordResetEmailHtml(user.fullName, resetUrl),
+        textBody: buildPasswordResetEmailText(resetUrl),
+      });
+    }
+
+    return { ok: true, message: PASSWORD_RESET_GENERIC_MESSAGE };
+  }
+
+  async resetPassword(tokenInput: string, newPassword: string): Promise<
+    | { ok: true; message: string }
+    | { ok: false; status: 400; message: string }
+  > {
+    const token = tokenInput.trim();
+    if (!token || token.length > 512 || newPassword.length < 8 || newPassword.length > 128) {
+      return {
+        ok: false,
+        status: 400,
+        message: newPassword.length < 8 || newPassword.length > 128
+          ? 'A nova senha deve ter entre 8 e 128 caracteres.'
+          : 'O link de recuperacao e invalido ou expirou.',
+      };
+    }
+
+    const now = this.now();
+    const resetRecord = await this.passwordResetStore.consume(hashPasswordResetToken(token), now);
+    if (!resetRecord) {
+      return { ok: false, status: 400, message: 'O link de recuperacao e invalido ou expirou.' };
+    }
+
+    const user = await this.userStore.findById(resetRecord.userId);
+    if (!user?.isActive || !user.passwordHash || this.isAccountDeactivated(user)) {
+      return { ok: false, status: 400, message: 'O link de recuperacao e invalido ou expirou.' };
+    }
+
+    const passwordHash = await createPasswordHash(newPassword);
+    const updated = await this.userStore.update(user.id, { passwordHash, updatedAt: now });
+    if (!updated) {
+      return { ok: false, status: 400, message: 'Nao foi possivel atualizar a senha.' };
+    }
+    await this.passwordResetStore.invalidateForUser(user.id, now);
+    this.failedAttempts.delete(normalizeEmail(user.email));
+
+    await this.emailService?.send({
+      to: user.email,
+      subject: 'Senha alterada - Platform Multi Publisher',
+      htmlBody: '<h1>Senha alterada</h1><p>Sua senha foi atualizada com sucesso. Se voce nao realizou essa alteracao, entre em contato com o suporte imediatamente.</p>',
+      textBody: 'Sua senha foi atualizada com sucesso. Se voce nao realizou essa alteracao, entre em contato com o suporte imediatamente.',
+    });
+
+    return { ok: true, message: 'Senha atualizada. Voce ja pode entrar com a nova senha.' };
   }
 
   async login(credentials: LoginDto, session?: AdminSession | null): Promise<LoginResult> {
@@ -400,6 +480,7 @@ export class AuthService {
     const results = [];
 
     for (const user of dueUsers) {
+      await this.passwordResetStore.invalidateForUser(user.id, now);
       results.push(await this.userStore.finalizeAccountDeletion(user, now));
       this.accountDeletionChallenges.delete(normalizeEmail(user.email));
     }
@@ -596,6 +677,36 @@ export class AuthService {
       }
     }
   }
+}
+
+function hashPasswordResetToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+function buildPasswordResetUrl(env: Record<string, string | undefined>, token: string): string {
+  const base = env.PUBLIC_APP_URL?.trim() || 'http://127.0.0.1:3000';
+  const url = new URL('/login', base);
+  url.searchParams.set('reset_token', token);
+  url.hash = 'acesso';
+  return url.toString();
+}
+
+function buildPasswordResetEmailHtml(fullName: string | null, resetUrl: string): string {
+  const greeting = fullName ? `Ola, ${escapeEmailHtml(fullName)}.` : 'Ola.';
+  return `<h1>Recuperacao de senha</h1><p>${greeting}</p><p>Recebemos uma solicitacao para redefinir sua senha do PMP.</p><p><a href="${escapeEmailHtml(resetUrl)}">Criar nova senha</a></p><p>O link expira em 30 minutos e so pode ser usado uma vez. Se voce nao solicitou a recuperacao, ignore este email.</p>`;
+}
+
+function buildPasswordResetEmailText(resetUrl: string): string {
+  return `Recebemos uma solicitacao para redefinir sua senha do PMP. Acesse ${resetUrl}. O link expira em 30 minutos e so pode ser usado uma vez. Se voce nao solicitou, ignore este email.`;
+}
+
+function escapeEmailHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 function buildSeedUsers(env: Record<string, string | undefined>): AuthUser[] {

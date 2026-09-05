@@ -9,6 +9,8 @@ import type { MediaModuleOptions } from './media/media.module';
 import type { AuthServiceOptions } from './auth/auth.service';
 import type { AccountPlanStore } from './account-plan/account-plan.service';
 import type { WebhookDeduplicator } from './account-plan/webhook-deduplication';
+import type { PaymentRepository } from './account-plan/payment.service';
+import type { ServiceRequestRepository } from './service-requests/service-request.repository';
 
 export interface ServerConfig extends EnvConfig {}
 
@@ -21,6 +23,8 @@ export interface ServerOptions {
   mediaModuleOptions?: MediaModuleOptions;
   accountPlanStore?: AccountPlanStore;
   paymentWebhookDeduplicator?: WebhookDeduplicator | null;
+  paymentRepository?: PaymentRepository;
+  serviceRequestRepository?: ServiceRequestRepository;
 }
 
 export interface ServerInstance {
@@ -49,10 +53,12 @@ export function createServer(options: ServerOptions): ServerInstance {
       mediaModuleOptions: options.mediaModuleOptions,
       accountPlanStore: options.accountPlanStore,
       paymentWebhookDeduplicator: options.paymentWebhookDeduplicator,
+      paymentRepository: options.paymentRepository,
+      serviceRequestRepository: options.serviceRequestRepository,
     });
   } catch (error) {
     console.error('[startup] Fatal error:', error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw error;
   }
 
   const requestHandler = createRequestHandler({

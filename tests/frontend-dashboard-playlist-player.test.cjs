@@ -99,9 +99,9 @@ test('dashboard hero uses a selectable playlist video player instead of an ad sl
 });
 
 test('dashboard playlist player keeps the enlarged panel without automatic scrolling UI', () => {
-  assert.match(CSS, /\.od-command-hero-split[\s\S]*minmax\(390px, 1\.3fr\)/);
   assert.match(CSS, /\.od-hero-playlist-player[\s\S]*grid-template-columns: minmax\(0, 1fr\) auto/);
   assert.match(CSS, /\.od-playlist-player-video[\s\S]*height: clamp\(210px, 18vw, 280px\)/);
+  assert.match(CSS, /\.pmp-library-player \.od-playlist-player-video[\s\S]*height: clamp\(260px, 32vw, 440px\)/);
   assert.match(CSS, /\.od-playlist-player-controls/);
   assert.match(CSS, /\.od-playlist-player-auto/);
   assert.match(CSS, /\.od-playlist-player-list[\s\S]*max-height: 208px/);
@@ -116,48 +116,38 @@ test('dashboard playlist player keeps the enlarged panel without automatic scrol
   assert.doesNotMatch(CSS, /keyframes od-playlist/);
 });
 
-test('dashboard editorial pulse shows current time without resizing the panel layout', () => {
+test('dashboard header shows a compact live update timestamp without duplicating the clock', () => {
   assert.match(
     APP_JS,
-    /<div class="od-pulse-header">[\s\S]*?<span class="od-kpi-label od-mono">Pulso editorial<\/span>[\s\S]*?<span class="od-pulse-clock od-mono" aria-label="Hora atual">[\s\S]*?<span>Agora<\/span>[\s\S]*?<strong data-dashboard-clock>\$\{escapeHtml\(liveClock\)\}<\/strong>/
+    /<span class="pmp-updated od-mono"><span class="od-live-dot"><\/span> Atualizado <strong data-dashboard-clock>\$\{escapeHtml\(liveClock\)\}<\/strong><\/span>/
   );
-  assert.match(APP_JS, /<span class="od-live-dot"><\/span><span data-dashboard-clock>\$\{escapeHtml\(liveClock\)\}<\/span>/);
   assert.match(APP_JS, /function startDashboardClock\(root\)/);
   assert.match(APP_JS, /clearDashboardClockTimer\(\)/);
   assert.match(APP_JS, /setInterval\(updateClock, 1000\)/);
   assert.match(APP_JS, /startDashboardClock\(dashboardRoot\)/);
+  assert.doesNotMatch(APP_JS, /<div class="od-pulse-rotator"/);
 
-  const heroRule = extractCssRule(CSS, '.od-hero-copy {');
-  const headerRule = extractCssRule(CSS, '.od-pulse-header {');
-  const clockRule = extractCssRule(CSS, '.od-pulse-clock {');
-
-  assert.match(heroRule, /gap:\s*14px/);
-  assert.doesNotMatch(heroRule, /(^|\n)\s*(min-)?height:/);
-  assert.match(headerRule, /position:\s*relative/);
-  assert.match(headerRule, /display:\s*block/);
-  assert.match(clockRule, /position:\s*absolute/);
-  assert.match(clockRule, /box-sizing:\s*border-box/);
-  assert.match(clockRule, /height:\s*18px/);
-  assert.match(clockRule, /padding:\s*0 7px/);
-  assert.match(clockRule, /transform:\s*translateY\(-50%\)/);
-  assert.match(clockRule, /white-space:\s*nowrap/);
-  assert.doesNotMatch(clockRule, /min-height/);
+  const updatedRule = extractCssRule(CSS, '.pmp-updated {');
+  assert.match(updatedRule, /display:\s*inline-flex/);
+  assert.match(updatedRule, /min-height:\s*44px/);
+  assert.match(updatedRule, /white-space:\s*nowrap/);
 });
 
-test('dashboard prioritizes three operational decisions above the KPI grid', () => {
-  const actionMark = extractFunctionSource(APP_JS, 'renderDashboardActionMark');
+test('dashboard prioritizes one primary decision, two secondary decisions, and four essential metrics', () => {
   const channelIcon = extractFunctionSource(APP_JS, 'renderChannelKpiIcon');
   const rankBadge = extractFunctionSource(APP_JS, 'renderRankBadge');
   const deltaArrow = extractFunctionSource(APP_JS, 'renderDeltaArrow');
 
-  assert.match(APP_JS, /od-decision-strip/);
+  assert.match(APP_JS, /pmp-priority-panel/);
+  assert.match(APP_JS, /pmp-secondary-actions/);
+  assert.match(APP_JS, /pmp-metric-board/);
   assert.match(APP_JS, /Proxima melhor acao/);
   assert.match(APP_JS, /O que publicar/);
   assert.match(APP_JS, /O que corrigir/);
   assert.match(APP_JS, /O que esta performando/);
-  assert.match(APP_JS, /Painel editorial/);
+  assert.match(APP_JS, /Central de operacao/);
   assert.match(APP_JS, /Contas conectadas/);
-  assert.match(actionMark, /renderCampaignMark\(meta\.label, meta\.tone, 'od-hero-action-mark'\)/);
+  assert.doesNotMatch(APP_JS, /function renderDashboardActionMark/);
   assert.match(channelIcon, /renderCampaignPlatformMark\(provider, 'od-channel-platform-mark'\)/);
   assert.match(rankBadge, /renderCampaignMark\(rank === 1 \? 'TOP'/);
   assert.match(deltaArrow, /renderCampaignMark\('DN', 'danger', 'od-delta-mark'\)/);
@@ -167,10 +157,11 @@ test('dashboard prioritizes three operational decisions above the KPI grid', () 
   assert.doesNotMatch(APP_JS, /function renderEditorialPulseIcon/);
   assert.doesNotMatch(APP_JS, /renderPlatformLogo3d\('youtube', 42, 'od-channel-platform-logo'\)/);
 
-  assert.match(CSS, /\.od-decision-strip/);
-  assert.match(CSS, /\.od-decision-grid/);
-  assert.match(CSS, /\.od-decision-card/);
-  assert.match(CSS, /\.od-hero-action-mark/);
+  assert.match(CSS, /\.pmp-priority-panel/);
+  assert.match(CSS, /\.pmp-secondary-actions/);
+  assert.match(CSS, /\.pmp-secondary-action/);
+  assert.match(CSS, /\.pmp-metric-board/);
+  assert.doesNotMatch(CSS, /\.od-hero-action-mark/);
   assert.match(CSS, /\.od-channel-platform-mark/);
   assert.match(CSS, /\.od-rank-mark/);
   assert.match(CSS, /\.od-delta-mark/);
@@ -372,33 +363,29 @@ test('dashboard playlist now-playing caption stays outside native video controls
 });
 
 test('dashboard panels keep labels and large metrics inside their cards', () => {
-  const legacyGridRule = extractCssRule(CSS, '.dash-hero {');
-  const legacyCardRule = extractCssRule(CSS, '.dash-hero-card {');
-  const legacyValueRule = extractCssRule(CSS, '.dash-hero-value {');
-  const modeGridRule = extractCssRule(CSS, '.od-mode-switch {');
-  const actionRule = extractCssRule(CSS, '.od-hero-action-btn {');
-  const healthGridRule = extractCssRule(CSS, '.od-health-metrics {');
-  const healthCardRule = extractCssRule(CSS, '.od-health-metrics div {');
+  const commandRule = extractCssRule(CSS, '.pmp-command {');
+  const priorityRule = extractCssRule(CSS, '.pmp-priority-panel {');
+  const metricGridRule = extractCssRule(CSS, '.pmp-metric-board {');
+  const metricRule = extractCssRule(CSS, '.pmp-metric {');
+  const metricValueRule = extractCssRule(CSS, '.pmp-metric > strong {');
+  const healthGridRule = extractCssRule(CSS, '.pmp-health-meta {');
+  const actionGridRule = extractCssRule(CSS, '.pmp-secondary-actions {');
   const channelHeadRule = extractCssRule(CSS, '.od-channel-card-head {');
   const channelNameRule = extractCssRule(CSS, '.od-channel-name {');
   const channelValueRule = extractCssRule(CSS, '.od-channel-total {');
-  const kpiValueRule = extractCssRule(CSS, '.od-kpi-card strong {');
 
-  assert.match(legacyGridRule, /repeat\(4, minmax\(0, 1fr\)\)/);
-  assert.match(legacyCardRule, /min-width:\s*0/);
-  assert.match(legacyValueRule, /font-size:\s*clamp/);
-  assert.match(legacyValueRule, /overflow-wrap:\s*anywhere/);
-  assert.match(modeGridRule, /auto-fit/);
-  assert.match(modeGridRule, /minmax\(132px, 1fr\)/);
-  assert.match(actionRule, /white-space:\s*normal/);
-  assert.match(healthGridRule, /minmax\(124px, 1fr\)/);
-  assert.match(healthCardRule, /min-width:\s*0/);
+  assert.match(commandRule, /minmax\(0, 1\.55fr\) minmax\(330px, 0\.72fr\)/);
+  assert.match(priorityRule, /min-width:\s*0/);
+  assert.match(metricGridRule, /repeat\(4, minmax\(0, 1fr\)\)/);
+  assert.match(metricRule, /min-width:\s*0/);
+  assert.match(metricValueRule, /font-size:\s*clamp/);
+  assert.match(metricValueRule, /overflow-wrap:\s*anywhere/);
+  assert.match(healthGridRule, /repeat\(3, 1fr\)/);
+  assert.match(actionGridRule, /repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(channelHeadRule, /auto minmax\(0, 1fr\) auto/);
   assert.match(channelNameRule, /text-overflow:\s*ellipsis/);
   assert.match(channelNameRule, /white-space:\s*nowrap/);
   assert.match(channelValueRule, /font-size:\s*clamp\(1\.65rem/);
   assert.match(channelValueRule, /overflow-wrap:\s*anywhere/);
-  assert.match(CSS, /\.od-kpi-card \{\s*position:\s*relative;[\s\S]*?min-width:\s*0/);
-  assert.match(kpiValueRule, /overflow-wrap:\s*anywhere/);
-  assert.match(CSS, /@media \(max-width: 1440px\)[\s\S]*?\.od-kpi-grid[\s\S]*?repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(CSS, /@media \(max-width: 620px\)[\s\S]*?\.pmp-metric-board[\s\S]*?grid-template-columns:\s*1fr/);
 });

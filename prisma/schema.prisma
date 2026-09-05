@@ -24,6 +24,37 @@ model AdminUser {
   @@map("admin_users")
 }
 
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+model ServiceRequest {
+  id                String   @id @default(cuid())
+  protocol          String   @unique
+  ownerEmail        String   @map("owner_email")
+  requesterName     String?  @map("requester_name")
+  category          String
+  subject           String
+  description       String
+  status            String   @default("received")
+  trackingTokenHash String   @map("tracking_token_hash")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([ownerEmail])
+  @@index([status])
+  @@map("service_requests")
+}
+
 model AccountPlan {
   email               String    @id
   plan                String
@@ -293,4 +324,33 @@ model WebhookEvent {
   @@index([externalReference])
   @@index([createdAt])
   @@map("webhook_events")
+}
+
+/// Durable record of every payment attempt. The local id is sent to the
+/// payment provider as external_reference and is used to reconcile webhooks.
+model PaymentIntentRecord {
+  id                String    @id
+  provider          String
+  providerIntentId  String?   @unique @map("provider_intent_id")
+  email             String
+  purchase          Json
+  amountBrl         Decimal   @map("amount_brl") @db.Decimal(10, 2)
+  currency          String    @default("BRL")
+  status            String
+  checkoutUrl       String?   @map("checkout_url")
+  externalReference String?   @map("external_reference")
+  errorMessage      String?   @map("error_message")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  paidAt            DateTime? @map("paid_at")
+  fulfillmentStatus String    @default("pending") @map("fulfillment_status")
+  fulfillmentError  String?   @map("fulfillment_error")
+  fulfillmentStartedAt DateTime? @map("fulfillment_started_at")
+  fulfilledAt       DateTime? @map("fulfilled_at")
+
+  @@index([email, createdAt])
+  @@index([externalReference])
+  @@index([status, createdAt])
+  @@index([fulfillmentStatus, createdAt])
+  @@map("payment_intents")
 }

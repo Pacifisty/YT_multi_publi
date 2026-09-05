@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">Sem plataforma</title>
+<desc id="desc">Ícone SP em estilo PMP, com fundo transparente.</desc>
+
+<defs>
+  <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0636AE"/><stop offset="55%" stop-color="#0A68E8"/><stop offset="100%" stop-color="#18DEE9"/></linearGradient>
+  <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#44F4FF"/><stop offset="100%" stop-color="#00B4FF"/></linearGradient>
+  <linearGradient id="white" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFFFFF"/><stop offset="100%" stop-color="#DDEEFF"/></linearGradient>
+  <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#00194F" flood-opacity=".34"/></filter>
+</defs>
+
+<g filter="url(#shadow)" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="256" cy="210" r="132" fill="url(#blue)" stroke="url(#cyan)" stroke-width="12"/>
+  <path d="M188 164h136l-18 110c-3 20-20 34-40 34h-20c-20 0-37-14-40-34z" fill="url(#white)" stroke="#FFFFFF" stroke-width="8"/>
+  <path d="M196 150h120M230 128h52" stroke="#FFFFFF" stroke-width="14"/>
+  <path d="M172 130l168 168" stroke="#18DEE9" stroke-width="22"/>
+  <path d="M174 132l166 166" stroke="#FFFFFF" stroke-width="8"/>
+</g>
+
+<g filter="url(#shadow)">
+  <rect x="121.0" y="390" width="270" height="82" rx="41" fill="#073A9F" stroke="url(#cyan)" stroke-width="8"/>
+  <text x="256" y="446" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="700" fill="#FFFFFF">SP</text>
+</g>
+</svg>

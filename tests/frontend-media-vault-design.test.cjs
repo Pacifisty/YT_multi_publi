@@ -7,7 +7,9 @@ const test = require('node:test');
 
 const ROOT = path.join(__dirname, '..');
 const APP_JS = fs.readFileSync(path.join(ROOT, 'apps', 'api', 'src', 'frontend', 'public', 'app.js'), 'utf8');
-const APP_CSS = fs.readFileSync(path.join(ROOT, 'apps', 'api', 'src', 'frontend', 'public', 'app.css'), 'utf8');
+const APP_CSS = fs
+  .readFileSync(path.join(ROOT, 'apps', 'api', 'src', 'frontend', 'public', 'app.css'), 'utf8')
+  .replace(/\r\n/g, '\n');
 
 function extractFunctionSource(source, functionName) {
   const functionStart = source.indexOf(`function ${functionName}`);
@@ -85,7 +87,9 @@ test('media vault CSS is translucent and avoids the old harsh neon treatment', (
   const activeTab = extractCssRule('.videos-view-tab.is-active');
   const playlistOverrideStart = APP_CSS.lastIndexOf('.playlist-cockpit {');
   assert.notStrictEqual(playlistOverrideStart, -1, 'Missing playlist cockpit override');
-  const playlistOverride = APP_CSS.slice(playlistOverrideStart, APP_CSS.indexOf('/* ----- Form right side -----', playlistOverrideStart));
+  const playlistOverrideEnd = APP_CSS.indexOf('/* ----- Public SEO landing -----', playlistOverrideStart);
+  assert.notStrictEqual(playlistOverrideEnd, -1, 'Missing end of playlist cockpit override');
+  const playlistOverride = APP_CSS.slice(playlistOverrideStart, playlistOverrideEnd);
 
   assert.match(APP_CSS, /--media-display-font/);
   assert.match(APP_CSS, /\.playlist-media-preview/);

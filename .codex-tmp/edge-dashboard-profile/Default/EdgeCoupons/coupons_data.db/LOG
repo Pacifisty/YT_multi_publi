@@ -1,0 +1,5 @@
+2026/08/29-14:32:05.877 5434 Creating DB C:\Users\canab\Documents\GitHub\YT_multi_publi\.codex-tmp\edge-dashboard-profile\Default\EdgeCoupons/coupons_data.db since it was missing.
+2026/08/29-14:32:05.917 5434 Reusing MANIFEST C:\Users\canab\Documents\GitHub\YT_multi_publi\.codex-tmp\edge-dashboard-profile\Default\EdgeCoupons/coupons_data.db/MANIFEST-000001
+2026/08/29-14:32:06.855 6f2c Level-0 table #5: started
+2026/08/29-14:32:06.871 6f2c Level-0 table #5: 683273 bytes OK
+2026/08/29-14:32:06.877 6f2c Delete type=0 #3

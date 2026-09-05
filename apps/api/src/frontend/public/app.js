@@ -4,105 +4,6 @@ if (!root) {
   throw new Error('Missing app root container.');
 }
 
-/**
- * Logo Animation Functions (Injected from logo-renderers.js)
- * Renders animated SVG logos for YouTube, TikTok, Instagram
- */
-const LOGO_STYLES = `
-<style id="logo-animations-style">
-  @keyframes youtubeEntrance {
-    0% { opacity: 0; transform: scale(0.7) rotate(-10deg); }
-    60% { opacity: 1; transform: scale(1.15) rotate(5deg); }
-    100% { opacity: 1; transform: scale(1) rotate(0deg); }
-  }
-  @keyframes tiktokEntrance {
-    0% { opacity: 0; transform: scale(0.5) rotate(-180deg); }
-    50% { opacity: 0.8; transform: scale(0.9) rotate(-45deg); }
-    85% { opacity: 1; transform: scale(1.1) rotate(0deg); }
-    100% { opacity: 1; transform: scale(1) rotate(0deg); }
-  }
-  @keyframes instagramEntrance {
-    0% { opacity: 0; transform: scale(0.3) translateY(20px); filter: brightness(0.8); }
-    50% { opacity: 0.7; filter: brightness(0.9); }
-    85% { transform: scale(1.1) translateY(-2px); }
-    100% { opacity: 1; transform: scale(1) translateY(0); filter: brightness(1); }
-  }
-  @keyframes instagramShimmer {
-    0%, 100% { filter: brightness(1); }
-    50% { filter: brightness(1.2); }
-  }
-  .logo-animated { will-change: transform, opacity; transform-origin: center; display: inline-block; vertical-align: middle; }
-  .logo-youtube-animated { animation: youtubeEntrance 600ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
-  .logo-tiktok-animated { animation: tiktokEntrance 700ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
-  .logo-instagram-animated { animation: instagramEntrance 600ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards, instagramShimmer 1s ease-in-out 600ms forwards; }
-  @media (prefers-reduced-motion: reduce) {
-    .logo-youtube-animated, .logo-tiktok-animated, .logo-instagram-animated {
-      animation: none !important; opacity: 1 !important; transform: scale(1) !important; filter: brightness(1) !important;
-    }
-  }
-</style>
-`;
-
-function renderPlatformLogo3d(platform, size = 32, extraClass = '') {
-  const p = String(platform ?? '').toLowerCase().trim();
-  const safePlatform = p === 'instagram' || p === 'tiktok' || p === 'youtube' ? p : 'youtube';
-  const label = safePlatform === 'youtube' ? 'YouTube' : safePlatform === 'tiktok' ? 'TikTok' : 'Instagram';
-  const pixelSize = Math.max(16, Math.min(96, Number(size) || 32));
-  const className = ['platform-logo-3d', `platform-logo-3d-${safePlatform}`, extraClass].filter(Boolean).join(' ');
-  const symbolHtml = safePlatform === 'youtube'
-    ? '<span class="platform-logo-play"></span>'
-    : safePlatform === 'tiktok'
-      ? `
-        <span class="platform-logo-note note-cyan"></span>
-        <span class="platform-logo-note note-pink"></span>
-        <span class="platform-logo-note note-main"></span>
-      `
-      : `
-        <span class="platform-logo-lens"></span>
-        <span class="platform-logo-dot"></span>
-      `;
-  return `
-    <span class="${escapeAttribute(className)}" style="--platform-logo-size:${pixelSize}px" role="img" aria-label="${escapeAttribute(label)}">
-      <span class="platform-logo-depth"></span>
-      <span class="platform-logo-face">
-        <span class="platform-logo-gloss"></span>
-        <span class="platform-logo-symbol">${symbolHtml}</span>
-      </span>
-    </span>
-  `;
-}
-
-function renderYouTubeLogo(size = 32) {
-  return renderPlatformLogo3d('youtube', size, 'logo-animated logo-youtube-animated');
-}
-
-function renderTikTokLogo(size = 32) {
-  return renderPlatformLogo3d('tiktok', size, 'logo-animated logo-tiktok-animated');
-}
-
-function renderInstagramLogo(size = 32) {
-  return renderPlatformLogo3d('instagram', size, 'logo-animated logo-instagram-animated');
-}
-
-function renderAnimatedLogoByPlatform(platform, size = 32) {
-  const p = String(platform ?? '').toLowerCase().trim();
-  if (p === 'youtube') return renderYouTubeLogo(size);
-  if (p === 'tiktok') return renderTikTokLogo(size);
-  if (p === 'instagram') return renderInstagramLogo(size);
-  return '';
-}
-
-let logoStylesInjected = false;
-function injectLogoStyles() {
-  if (!root) return;
-  if (document.getElementById('logo-animations-style')) {
-    logoStylesInjected = true;
-    return;
-  }
-  root.insertAdjacentHTML('afterbegin', LOGO_STYLES);
-  logoStylesInjected = true;
-}
-
 function escapeHtml(value) {
   return String(value ?? '')
     .replaceAll('&', '&amp;')
@@ -229,17 +130,6 @@ function clampPercent(value) {
   return Math.min(100, Math.max(0, n));
 }
 
-function arrayBufferToBase64(buffer) {
-  const bytes = new Uint8Array(buffer);
-  const chunkSize = 0x8000;
-  let binary = '';
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    const chunk = bytes.subarray(offset, offset + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-  return btoa(binary);
-}
-
 function isProbablyVideoFile(file) {
   const type = String(file?.type ?? '').toLowerCase();
   const name = String(file?.name ?? '').toLowerCase();
@@ -345,7 +235,6 @@ async function uploadMediaFiles(videoFile, thumbnailFile) {
 }
 
 const BACKGROUND_THEME_STORAGE_KEY = 'ytmp-workspace-background-theme';
-const FONT_THEME_STORAGE_KEY = 'ytmp-font-theme';
 const OAUTH_PROVIDER_STORAGE_KEY = 'ytmp-pending-oauth-provider';
 const CAMPAIGN_REAUTH_RETURN_KEY = 'ytmp-campaign-reauth-return';
 const MEDIA_PREVIEW_SIZE_STORAGE_KEY = 'ytmp-media-preview-sizes';
@@ -591,828 +480,246 @@ function mergePlanDisplayOptions(apiPlans = []) {
 }
 const BACKGROUND_THEME_OPTIONS = [
   {
-    id: 'platform-neon-night',
-    label: 'Platform Neon',
-    type: 'dark',
+    id: 'pmp-essencial',
+    label: 'PMP Essencial',
+    eyebrow: 'Padrão gratuito',
+    type: 'brand',
     appearance: 'dark',
-    code: '#05020A -> #0F1722',
-    description: 'Neon cinematic TikTok.',
-    pageBackground: 'radial-gradient(circle at 72% 22%, rgba(38, 10, 45, 0.96) 0%, rgba(8, 4, 14, 0.98) 42%, #000000 100%)',
-    bg: '#07030b',
-    bgSoft: '#11081a',
-    surface: 'rgba(12, 8, 18, 0.9)',
-    surfaceMuted: 'rgba(20, 11, 30, 0.94)',
-    border: 'rgba(64, 224, 208, 0.22)',
-    primary: '#40e0d0',
-    primaryStrong: '#ff4fa3',
-    primarySoft: 'rgba(255, 79, 163, 0.18)',
-    danger: '#ff6b8a',
-    warning: '#f59e0b',
-    success: '#2dd4bf',
-    info: '#f472b6',
-    shadow: '0 20px 48px rgba(0, 0, 0, 0.5)',
-    headerBackground: 'linear-gradient(135deg, rgba(7, 3, 11, 0.98) 0%, rgba(29, 9, 32, 0.96) 54%, rgba(8, 20, 27, 0.92) 100%)',
+    code: '#06111F · #12D6E4',
+    description: 'A identidade PMP em sua forma mais direta, estável e legível.',
+    pageBackground: 'radial-gradient(circle at 82% 8%, rgba(18, 214, 228, 0.10) 0%, transparent 30%), linear-gradient(155deg, #06111F 0%, #020914 100%)',
+    bg: '#06111f',
+    bgSoft: '#091827',
+    surface: 'rgba(9, 24, 39, 0.96)',
+    surfaceMuted: 'rgba(12, 31, 50, 0.97)',
+    border: 'rgba(112, 170, 205, 0.22)',
+    primary: '#12d6e4',
+    primaryStrong: '#1683ff',
+    primarySoft: 'rgba(18, 214, 228, 0.16)',
+    iconFilter: 'saturate(1.04) brightness(1.02)',
+    text: '#f4fbff',
+    textSubtle: '#c4d5e5',
+    textMuted: '#91a8bc',
+    onAccent: '#02131b',
+    danger: '#ff718f',
+    warning: '#ffc45c',
+    success: '#43deb3',
+    info: '#65c9ff',
+    shadow: '0 22px 52px rgba(0, 4, 12, 0.46)',
+    headerBackground: 'linear-gradient(135deg, rgba(6, 17, 31, 0.98) 0%, rgba(8, 31, 52, 0.97) 64%, rgba(6, 50, 68, 0.96) 100%)',
   },
   {
-    id: 'platform-youtube-redline',
-    label: 'Platform Redline',
-    type: 'dark',
+    id: 'orbita-ciano',
+    label: 'Órbita Ciano',
+    eyebrow: 'Assinatura PMP',
+    type: 'cosmic',
     appearance: 'dark',
-    code: '#050505 -> #FF0033',
-    description: 'Hot red broadcast.',
-    pageBackground: 'radial-gradient(circle at 74% 18%, rgba(96, 7, 22, 0.78) 0%, rgba(20, 4, 8, 0.98) 34%, #000000 100%)',
-    bg: '#070404',
-    bgSoft: '#16080a',
-    surface: 'rgba(14, 8, 10, 0.9)',
-    surfaceMuted: 'rgba(24, 10, 12, 0.94)',
-    border: 'rgba(255, 0, 51, 0.22)',
-    primary: '#FF0033',
-    primaryStrong: '#ffffff',
-    primarySoft: 'rgba(255, 0, 51, 0.18)',
-    danger: '#fb7185',
-    warning: '#fbbf24',
-    success: '#ffffff',
-    info: '#fca5a5',
-    shadow: '0 20px 48px rgba(0, 0, 0, 0.56)',
-    headerBackground: 'linear-gradient(135deg, rgba(5, 5, 5, 0.98) 0%, rgba(38, 8, 12, 0.96) 60%, rgba(255, 0, 51, 0.78) 100%)',
+    code: '#020B18 · #08E2EF',
+    description: 'Profundidade espacial com o ciano luminoso da marca em primeiro plano.',
+    pageBackground: 'radial-gradient(circle at 78% 12%, rgba(8, 226, 239, 0.18) 0%, transparent 31%), radial-gradient(circle at 12% 88%, rgba(22, 131, 255, 0.12) 0%, transparent 34%), linear-gradient(150deg, #020B18 0%, #06182B 100%)',
+    bg: '#020b18',
+    bgSoft: '#061426',
+    surface: 'rgba(7, 26, 45, 0.95)',
+    surfaceMuted: 'rgba(9, 34, 57, 0.97)',
+    border: 'rgba(83, 198, 228, 0.24)',
+    primary: '#08e2ef',
+    primaryStrong: '#1683ff',
+    primarySoft: 'rgba(8, 226, 239, 0.17)',
+    iconFilter: 'saturate(1.18) brightness(1.04)',
+    text: '#f6fcff',
+    textSubtle: '#c9ddec',
+    textMuted: '#92aec3',
+    onAccent: '#00151c',
+    danger: '#ff6f91',
+    warning: '#ffc857',
+    success: '#38ddb2',
+    info: '#6ecbff',
+    shadow: '0 24px 56px rgba(0, 4, 14, 0.52)',
+    headerBackground: 'linear-gradient(135deg, rgba(2, 11, 24, 0.98) 0%, rgba(6, 30, 52, 0.97) 65%, rgba(5, 67, 84, 0.94) 100%)',
   },
   {
-    id: 'platform-instagram-gradient',
-    label: 'Platform Instagram',
-    type: 'gradient',
+    id: 'eclipse-cobalto',
+    label: 'Eclipse Cobalto',
+    eyebrow: 'Precisão técnica',
+    type: 'cosmic',
     appearance: 'dark',
-    code: '#F58529 -> #8134AF',
-    description: 'Social gradient with warmer contrast.',
-    pageBackground: 'radial-gradient(circle at 18% 20%, rgba(245, 133, 41, 0.44) 0%, transparent 32%), radial-gradient(circle at 82% 18%, rgba(221, 42, 123, 0.46) 0%, transparent 34%), radial-gradient(circle at 54% 86%, rgba(81, 91, 212, 0.4) 0%, transparent 38%), linear-gradient(145deg, #35113f 0%, #140b22 100%)',
-    bg: '#171022',
-    bgSoft: '#24132f',
-    surface: 'rgba(23, 16, 34, 0.88)',
-    surfaceMuted: 'rgba(36, 19, 47, 0.92)',
-    border: 'rgba(245, 133, 41, 0.24)',
-    primary: '#f58529',
-    primaryStrong: '#dd2a7b',
-    primarySoft: 'rgba(245, 133, 41, 0.18)',
-    danger: '#fb7185',
-    warning: '#fbbf24',
-    success: '#86efac',
-    info: '#c4b5fd',
-    shadow: '0 20px 48px rgba(20, 8, 34, 0.52)',
-    headerBackground: 'linear-gradient(135deg, rgba(245, 133, 41, 0.78) 0%, rgba(221, 42, 123, 0.72) 52%, rgba(81, 91, 212, 0.72) 100%)',
+    code: '#050A1D · #3478FF',
+    description: 'Um ambiente analítico de alto foco, guiado por azul elétrico e gelo.',
+    pageBackground: 'radial-gradient(circle at 86% 16%, rgba(52, 120, 255, 0.22) 0%, transparent 34%), linear-gradient(145deg, #050A1D 0%, #09142E 58%, #060B1D 100%)',
+    bg: '#050a1d',
+    bgSoft: '#0a1228',
+    surface: 'rgba(12, 21, 49, 0.95)',
+    surfaceMuted: 'rgba(16, 29, 62, 0.97)',
+    border: 'rgba(126, 173, 255, 0.24)',
+    primary: '#5d91ff',
+    primaryStrong: '#7ec8ff',
+    primarySoft: 'rgba(93, 145, 255, 0.17)',
+    iconFilter: 'hue-rotate(18deg) saturate(0.92) brightness(1.08)',
+    text: '#f7f9ff',
+    textSubtle: '#cdd8f4',
+    textMuted: '#9caacc',
+    onAccent: '#04112c',
+    danger: '#ff7596',
+    warning: '#ffd166',
+    success: '#49d9b0',
+    info: '#7ec8ff',
+    shadow: '0 24px 58px rgba(1, 4, 18, 0.54)',
+    headerBackground: 'linear-gradient(135deg, rgba(5, 10, 29, 0.99) 0%, rgba(13, 28, 65, 0.97) 70%, rgba(30, 73, 157, 0.92) 100%)',
   },
   {
-    id: 'deep-black-blue',
-    label: 'Deep Black Blue',
-    type: 'dark',
+    id: 'aurora-polar',
+    label: 'Aurora Polar',
+    eyebrow: 'Fluxo e crescimento',
+    type: 'aurora',
     appearance: 'dark',
-    code: '#0B0F1A -> #111827',
-    description: 'Premium analytics dark.',
-    pageBackground: 'linear-gradient(160deg, #0B0F1A 0%, #111827 100%)',
-    bg: '#0f1624',
-    bgSoft: '#172234',
-    surface: 'rgba(15, 23, 42, 0.88)',
-    surfaceMuted: 'rgba(22, 34, 52, 0.94)',
-    border: 'rgba(148, 163, 184, 0.2)',
-    primary: '#60a5fa',
-    primaryStrong: '#3b82f6',
-    primarySoft: 'rgba(96, 165, 250, 0.18)',
-    danger: '#fb7185',
-    warning: '#fbbf24',
-    success: '#4ade80',
-    info: '#67e8f9',
-    shadow: '0 18px 42px rgba(0, 0, 0, 0.4)',
-    headerBackground: 'linear-gradient(135deg, rgba(11, 15, 26, 0.96) 0%, rgba(17, 24, 39, 0.96) 100%)',
+    code: '#031A1C · #32E6C1',
+    description: 'Verde-água e azul polar criam energia sem disputar atenção com os dados.',
+    pageBackground: 'radial-gradient(circle at 22% 14%, rgba(50, 230, 193, 0.18) 0%, transparent 34%), radial-gradient(circle at 84% 82%, rgba(83, 191, 255, 0.14) 0%, transparent 35%), linear-gradient(150deg, #031A1C 0%, #08252B 100%)',
+    bg: '#031a1c',
+    bgSoft: '#072326',
+    surface: 'rgba(9, 41, 43, 0.95)',
+    surfaceMuted: 'rgba(12, 50, 53, 0.97)',
+    border: 'rgba(87, 218, 198, 0.24)',
+    primary: '#32e6c1',
+    primaryStrong: '#53bfff',
+    primarySoft: 'rgba(50, 230, 193, 0.16)',
+    iconFilter: 'hue-rotate(-18deg) saturate(0.94) brightness(1.06)',
+    text: '#f2fffd',
+    textSubtle: '#c6e9e4',
+    textMuted: '#8fbab4',
+    onAccent: '#01201b',
+    danger: '#ff7890',
+    warning: '#ffd06b',
+    success: '#55e6a5',
+    info: '#75d4ff',
+    shadow: '0 24px 54px rgba(0, 12, 14, 0.48)',
+    headerBackground: 'linear-gradient(135deg, rgba(3, 26, 28, 0.98) 0%, rgba(8, 45, 51, 0.97) 66%, rgba(10, 78, 78, 0.94) 100%)',
   },
   {
-    id: 'dark-purple-tech',
-    label: 'Dark Purple Tech',
-    type: 'dark',
+    id: 'horizonte-solar',
+    label: 'Horizonte Solar',
+    eyebrow: 'Calor editorial',
+    type: 'editorial',
     appearance: 'dark',
-    code: '#0F0F0F -> #2A0E61',
-    description: 'Futuristic SaaS dark.',
-    pageBackground: 'linear-gradient(145deg, #0F0F0F 0%, #2A0E61 100%)',
-    bg: '#151126',
-    bgSoft: '#22183a',
-    surface: 'rgba(24, 18, 41, 0.88)',
-    surfaceMuted: 'rgba(33, 23, 59, 0.94)',
-    border: 'rgba(196, 181, 253, 0.22)',
-    primary: '#a78bfa',
-    primaryStrong: '#8b5cf6',
-    primarySoft: 'rgba(167, 139, 250, 0.18)',
-    danger: '#fb7185',
-    warning: '#fbbf24',
-    success: '#34d399',
-    info: '#c084fc',
-    shadow: '0 18px 42px rgba(7, 4, 20, 0.45)',
-    headerBackground: 'linear-gradient(135deg, rgba(15, 15, 15, 0.95) 0%, rgba(42, 14, 97, 0.95) 100%)',
+    code: '#17120B · #FFB547',
+    description: 'Dourado controlado sobre azul-carvão para campanhas com presença editorial.',
+    pageBackground: 'radial-gradient(circle at 80% 10%, rgba(255, 181, 71, 0.19) 0%, transparent 32%), radial-gradient(circle at 10% 90%, rgba(57, 207, 228, 0.10) 0%, transparent 34%), linear-gradient(150deg, #17120B 0%, #101722 100%)',
+    bg: '#17120b',
+    bgSoft: '#20180e',
+    surface: 'rgba(37, 27, 16, 0.95)',
+    surfaceMuted: 'rgba(47, 35, 21, 0.97)',
+    border: 'rgba(232, 190, 119, 0.24)',
+    primary: '#ffb547',
+    primaryStrong: '#39cfe4',
+    primarySoft: 'rgba(255, 181, 71, 0.17)',
+    iconFilter: 'sepia(0.84) saturate(1.9) hue-rotate(350deg) brightness(1.06)',
+    text: '#fff9ec',
+    textSubtle: '#e8d6b9',
+    textMuted: '#bda888',
+    onAccent: '#281600',
+    danger: '#ff7c83',
+    warning: '#ffc75c',
+    success: '#62d9a6',
+    info: '#72d6e6',
+    shadow: '0 24px 56px rgba(12, 7, 2, 0.5)',
+    headerBackground: 'linear-gradient(135deg, rgba(23, 18, 11, 0.99) 0%, rgba(47, 32, 16, 0.97) 68%, rgba(97, 61, 19, 0.92) 100%)',
   },
   {
-    id: 'graphite-gray',
-    label: 'Graphite Gray',
-    type: 'dark',
+    id: 'nebulosa-indigo',
+    label: 'Nebulosa Índigo',
+    eyebrow: 'Expressão criativa',
+    type: 'nebula',
     appearance: 'dark',
-    code: '#1F2937',
-    description: 'Neutral internal UI.',
-    pageBackground: 'linear-gradient(160deg, #1F2937 0%, #111827 100%)',
-    bg: '#1f2937',
-    bgSoft: '#273244',
-    surface: 'rgba(31, 41, 55, 0.9)',
-    surfaceMuted: 'rgba(39, 50, 68, 0.94)',
-    border: 'rgba(148, 163, 184, 0.22)',
-    primary: '#38bdf8',
-    primaryStrong: '#0ea5e9',
-    primarySoft: 'rgba(56, 189, 248, 0.18)',
-    danger: '#fb7185',
-    warning: '#f59e0b',
-    success: '#4ade80',
-    info: '#7dd3fc',
-    shadow: '0 18px 40px rgba(10, 15, 25, 0.42)',
-    headerBackground: 'linear-gradient(135deg, rgba(31, 41, 55, 0.95) 0%, rgba(17, 24, 39, 0.95) 100%)',
+    code: '#100D24 · #8B8CFF',
+    description: 'Índigo profundo e lavanda fria para um visual autoral, sem excesso de neon.',
+    pageBackground: 'radial-gradient(circle at 18% 20%, rgba(139, 140, 255, 0.20) 0%, transparent 35%), radial-gradient(circle at 82% 76%, rgba(38, 216, 229, 0.12) 0%, transparent 34%), linear-gradient(150deg, #100D24 0%, #181331 100%)',
+    bg: '#100d24',
+    bgSoft: '#17112f',
+    surface: 'rgba(26, 21, 53, 0.95)',
+    surfaceMuted: 'rgba(34, 28, 68, 0.97)',
+    border: 'rgba(170, 162, 235, 0.24)',
+    primary: '#a5a6ff',
+    primaryStrong: '#26d8e5',
+    primarySoft: 'rgba(165, 166, 255, 0.17)',
+    iconFilter: 'hue-rotate(34deg) saturate(0.88) brightness(1.08)',
+    text: '#faf8ff',
+    textSubtle: '#d7d1ed',
+    textMuted: '#a59dbf',
+    onAccent: '#15133e',
+    danger: '#ff7fa3',
+    warning: '#ffd372',
+    success: '#5ee0b1',
+    info: '#70d9ed',
+    shadow: '0 24px 58px rgba(7, 4, 24, 0.52)',
+    headerBackground: 'linear-gradient(135deg, rgba(16, 13, 36, 0.99) 0%, rgba(35, 28, 76, 0.97) 68%, rgba(48, 45, 105, 0.92) 100%)',
   },
   {
-    id: 'midnight-blue',
-    label: 'Midnight Blue',
-    type: 'dark',
-    appearance: 'dark',
-    code: '#020617 -> #0EA5E9',
-    description: 'Data-first dashboard.',
-    pageBackground: 'linear-gradient(150deg, #020617 0%, #0b3551 55%, #0EA5E9 100%)',
-    bg: '#08111d',
-    bgSoft: '#0d1d2f',
-    surface: 'rgba(8, 17, 29, 0.88)',
-    surfaceMuted: 'rgba(13, 29, 47, 0.94)',
-    border: 'rgba(103, 232, 249, 0.22)',
-    primary: '#38bdf8',
-    primaryStrong: '#0ea5e9',
-    primarySoft: 'rgba(14, 165, 233, 0.2)',
-    danger: '#fb7185',
-    warning: '#fbbf24',
-    success: '#34d399',
-    info: '#67e8f9',
-    shadow: '0 20px 46px rgba(1, 5, 12, 0.5)',
-    headerBackground: 'linear-gradient(135deg, rgba(2, 6, 23, 0.94) 0%, rgba(14, 165, 233, 0.88) 100%)',
-  },
-  {
-    id: 'dark-cyan-glow',
-    label: 'Dark Cyan Glow',
-    type: 'dark',
-    appearance: 'dark',
-    code: '#001F2F -> #0EA5E9',
-    description: 'Technical cyan energy.',
-    pageBackground: 'linear-gradient(150deg, #001F2F 0%, #073b5a 50%, #0EA5E9 100%)',
-    bg: '#062032',
-    bgSoft: '#0a3048',
-    surface: 'rgba(6, 32, 50, 0.88)',
-    surfaceMuted: 'rgba(10, 48, 72, 0.94)',
-    border: 'rgba(103, 232, 249, 0.24)',
-    primary: '#22d3ee',
-    primaryStrong: '#06b6d4',
-    primarySoft: 'rgba(34, 211, 238, 0.2)',
-    danger: '#fb7185',
-    warning: '#fbbf24',
-    success: '#34d399',
-    info: '#67e8f9',
-    shadow: '0 20px 46px rgba(0, 18, 28, 0.46)',
-    headerBackground: 'linear-gradient(135deg, rgba(0, 31, 47, 0.95) 0%, rgba(14, 165, 233, 0.88) 100%)',
-  },
-  {
-    id: 'carbon-black',
-    label: 'Carbon Black',
-    type: 'dark',
-    appearance: 'dark',
-    code: '#0A0A0A',
-    description: 'Minimal content dark.',
-    pageBackground: 'linear-gradient(180deg, #0A0A0A 0%, #171717 100%)',
-    bg: '#101010',
-    bgSoft: '#191919',
-    surface: 'rgba(24, 24, 27, 0.9)',
-    surfaceMuted: 'rgba(33, 33, 36, 0.94)',
-    border: 'rgba(212, 212, 216, 0.14)',
-    primary: '#a3e635',
-    primaryStrong: '#84cc16',
-    primarySoft: 'rgba(163, 230, 53, 0.18)',
-    danger: '#fb7185',
-    warning: '#facc15',
-    success: '#4ade80',
-    info: '#67e8f9',
-    shadow: '0 20px 46px rgba(0, 0, 0, 0.48)',
-    headerBackground: 'linear-gradient(135deg, rgba(10, 10, 10, 0.96) 0%, rgba(34, 34, 34, 0.96) 100%)',
-  },
-  {
-    id: 'clean-white',
-    label: 'Clean White',
+    id: 'lunar-claro',
+    label: 'Lunar Claro',
+    eyebrow: 'Clareza luminosa',
     type: 'light',
     appearance: 'light',
-    code: '#FFFFFF',
-    description: 'Classic light admin.',
-    pageBackground: 'linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)',
-    bg: '#ffffff',
-    bgSoft: '#f8fafc',
-    surface: '#ffffff',
-    surfaceMuted: '#f8fafc',
-    border: '#dbe4f0',
-    primary: '#0f766e',
-    primaryStrong: '#0b5f59',
-    primarySoft: '#ccfbf1',
-    danger: '#be123c',
-    warning: '#a16207',
-    success: '#166534',
-    info: '#0e7490',
-    shadow: '0 12px 34px rgba(15, 23, 42, 0.1)',
-    headerBackground: 'linear-gradient(140deg, #e2f5f3 0%, #c7f0ea 52%, #d7f7ea 100%)',
-  },
-  {
-    id: 'soft-gray',
-    label: 'Soft Gray',
-    type: 'light',
-    appearance: 'light',
-    code: '#F3F4F6',
-    description: 'Balanced dense dashboards.',
-    pageBackground: 'linear-gradient(180deg, #F3F4F6 0%, #E5E7EB 100%)',
-    bg: '#f3f4f6',
-    bgSoft: '#e5e7eb',
-    surface: '#ffffff',
-    surfaceMuted: '#f8fafc',
-    border: '#d1d5db',
-    primary: '#0f766e',
-    primaryStrong: '#0b5f59',
-    primarySoft: '#ccfbf1',
-    danger: '#be123c',
-    warning: '#a16207',
-    success: '#166534',
-    info: '#0369a1',
-    shadow: '0 12px 30px rgba(31, 41, 55, 0.1)',
-    headerBackground: 'linear-gradient(140deg, #e5e7eb 0%, #d1d5db 100%)',
-  },
-  {
-    id: 'ice-blue',
-    label: 'Ice Blue',
-    type: 'light',
-    appearance: 'light',
-    code: '#F0F9FF',
-    description: 'Fresh technical workspace.',
-    pageBackground: 'linear-gradient(180deg, #F0F9FF 0%, #E0F2FE 100%)',
-    bg: '#f0f9ff',
-    bgSoft: '#e0f2fe',
-    surface: '#ffffff',
-    surfaceMuted: '#f4fbff',
-    border: '#bfdbfe',
-    primary: '#0284c7',
-    primaryStrong: '#0369a1',
-    primarySoft: '#dbeafe',
-    danger: '#be123c',
-    warning: '#a16207',
-    success: '#15803d',
-    info: '#0ea5e9',
-    shadow: '0 12px 32px rgba(3, 105, 161, 0.1)',
-    headerBackground: 'linear-gradient(140deg, #e0f2fe 0%, #bae6fd 100%)',
-  },
-  {
-    id: 'warm-beige',
-    label: 'Warm Beige',
-    type: 'light',
-    appearance: 'light',
-    code: '#FAF7F2',
-    description: 'Editorial warm product.',
-    pageBackground: 'linear-gradient(180deg, #FAF7F2 0%, #F5EEDD 100%)',
-    bg: '#faf7f2',
-    bgSoft: '#f5eedd',
-    surface: '#fffdfa',
-    surfaceMuted: '#f8f1e7',
-    border: '#e7d9c5',
-    primary: '#b45309',
-    primaryStrong: '#92400e',
-    primarySoft: '#ffedd5',
-    danger: '#b91c1c',
-    warning: '#a16207',
-    success: '#166534',
-    info: '#0f766e',
-    shadow: '0 12px 30px rgba(120, 53, 15, 0.09)',
-    headerBackground: 'linear-gradient(140deg, #f5eedd 0%, #ecdcc2 100%)',
-  },
-  {
-    id: 'light-lavender',
-    label: 'Light Lavender',
-    type: 'light',
-    appearance: 'light',
-    code: '#F5F3FF',
-    description: 'Soft creative interface.',
-    pageBackground: 'linear-gradient(180deg, #F5F3FF 0%, #EDE9FE 100%)',
-    bg: '#f5f3ff',
-    bgSoft: '#ede9fe',
-    surface: '#ffffff',
-    surfaceMuted: '#f6f4ff',
-    border: '#ddd6fe',
-    primary: '#7c3aed',
-    primaryStrong: '#6d28d9',
-    primarySoft: '#ede9fe',
-    danger: '#be123c',
-    warning: '#a16207',
-    success: '#15803d',
-    info: '#8b5cf6',
-    shadow: '0 12px 32px rgba(124, 58, 237, 0.11)',
-    headerBackground: 'linear-gradient(140deg, #ede9fe 0%, #ddd6fe 100%)',
-  },
-  {
-    id: 'minimal-off-white',
-    label: 'Minimal Off White',
-    type: 'light',
-    appearance: 'light',
-    code: '#F9FAFB',
-    description: 'Clean productivity UI.',
-    pageBackground: 'linear-gradient(180deg, #F9FAFB 0%, #F3F4F6 100%)',
-    bg: '#f9fafb',
-    bgSoft: '#f3f4f6',
-    surface: '#ffffff',
-    surfaceMuted: '#f7f8fa',
-    border: '#e5e7eb',
-    primary: '#0f766e',
-    primaryStrong: '#115e59',
-    primarySoft: '#ccfbf1',
-    danger: '#be123c',
-    warning: '#a16207',
-    success: '#166534',
-    info: '#0369a1',
-    shadow: '0 12px 28px rgba(15, 23, 42, 0.08)',
-    headerBackground: 'linear-gradient(140deg, #f3f4f6 0%, #e5e7eb 100%)',
-  },
-  {
-    id: 'blue-to-purple',
-    label: 'Blue to Purple',
-    type: 'gradient',
-    appearance: 'dark',
-    code: 'linear-gradient(#3B82F6, #9333EA)',
-    description: 'Hero gradient contrast.',
-    pageBackground: 'linear-gradient(145deg, #3B82F6 0%, #9333EA 100%)',
-    bg: '#2f3f9b',
-    bgSoft: '#472aa2',
-    surface: 'rgba(20, 24, 48, 0.78)',
-    surfaceMuted: 'rgba(35, 28, 74, 0.82)',
-    border: 'rgba(216, 180, 254, 0.24)',
-    primary: '#f8fafc',
-    primaryStrong: '#e9d5ff',
-    primarySoft: 'rgba(255, 255, 255, 0.16)',
-    danger: '#fecdd3',
-    warning: '#fde68a',
-    success: '#bbf7d0',
-    info: '#dbeafe',
-    shadow: '0 20px 46px rgba(59, 35, 124, 0.34)',
-    headerBackground: 'linear-gradient(135deg, rgba(59, 130, 246, 0.84) 0%, rgba(147, 51, 234, 0.84) 100%)',
-  },
-  {
-    id: 'pink-to-orange',
-    label: 'Pink to Orange',
-    type: 'gradient',
-    appearance: 'light',
-    code: 'linear-gradient(#FB7185, #F59E0B)',
-    description: 'Creative marketing energy.',
-    pageBackground: 'linear-gradient(145deg, #FB7185 0%, #F59E0B 100%)',
-    bg: '#fff1f2',
-    bgSoft: '#ffedd5',
-    surface: 'rgba(255, 255, 255, 0.8)',
-    surfaceMuted: 'rgba(255, 247, 237, 0.88)',
-    border: 'rgba(251, 113, 133, 0.24)',
-    primary: '#c2410c',
-    primaryStrong: '#9a3412',
-    primarySoft: 'rgba(251, 146, 60, 0.18)',
-    danger: '#be123c',
-    warning: '#b45309',
-    success: '#15803d',
-    info: '#be185d',
-    shadow: '0 16px 38px rgba(245, 116, 62, 0.2)',
-    headerBackground: 'linear-gradient(135deg, rgba(251, 113, 133, 0.82) 0%, rgba(245, 158, 11, 0.82) 100%)',
-  },
-  {
-    id: 'green-to-blue',
-    label: 'Green to Blue',
-    type: 'gradient',
-    appearance: 'light',
-    code: 'linear-gradient(#10B981, #3B82F6)',
-    description: 'Growth and health.',
-    pageBackground: 'linear-gradient(145deg, #10B981 0%, #3B82F6 100%)',
-    bg: '#ecfeff',
-    bgSoft: '#dbeafe',
-    surface: 'rgba(255, 255, 255, 0.82)',
-    surfaceMuted: 'rgba(240, 249, 255, 0.88)',
-    border: 'rgba(59, 130, 246, 0.2)',
-    primary: '#0f766e',
-    primaryStrong: '#0369a1',
-    primarySoft: 'rgba(14, 165, 233, 0.16)',
-    danger: '#be123c',
-    warning: '#a16207',
-    success: '#166534',
-    info: '#0369a1',
-    shadow: '0 16px 38px rgba(16, 185, 129, 0.18)',
-    headerBackground: 'linear-gradient(135deg, rgba(16, 185, 129, 0.82) 0%, rgba(59, 130, 246, 0.82) 100%)',
-  },
-  {
-    id: 'purple-to-indigo',
-    label: 'Purple to Indigo',
-    type: 'gradient',
-    appearance: 'dark',
-    code: 'linear-gradient(#7C3AED, #4338CA)',
-    description: 'Deep premium gradient.',
-    pageBackground: 'linear-gradient(145deg, #7C3AED 0%, #4338CA 100%)',
-    bg: '#231942',
-    bgSoft: '#312e81',
-    surface: 'rgba(29, 25, 61, 0.8)',
-    surfaceMuted: 'rgba(49, 46, 129, 0.82)',
-    border: 'rgba(196, 181, 253, 0.24)',
-    primary: '#ddd6fe',
-    primaryStrong: '#c4b5fd',
-    primarySoft: 'rgba(221, 214, 254, 0.16)',
-    danger: '#fecdd3',
-    warning: '#fde68a',
-    success: '#bbf7d0',
-    info: '#e0e7ff',
-    shadow: '0 20px 46px rgba(59, 34, 130, 0.34)',
-    headerBackground: 'linear-gradient(135deg, rgba(124, 58, 237, 0.84) 0%, rgba(67, 56, 202, 0.84) 100%)',
-  },
-  {
-    id: 'sunset',
-    label: 'Sunset',
-    type: 'gradient',
-    appearance: 'light',
-    code: 'linear-gradient(#F97316, #EF4444)',
-    description: 'Bold campaign warmth.',
-    pageBackground: 'linear-gradient(145deg, #F97316 0%, #EF4444 100%)',
-    bg: '#fff7ed',
-    bgSoft: '#fee2e2',
-    surface: 'rgba(255, 255, 255, 0.82)',
-    surfaceMuted: 'rgba(255, 247, 237, 0.9)',
-    border: 'rgba(249, 115, 22, 0.22)',
-    primary: '#c2410c',
-    primaryStrong: '#b91c1c',
-    primarySoft: 'rgba(251, 146, 60, 0.16)',
-    danger: '#be123c',
-    warning: '#9a3412',
-    success: '#166534',
-    info: '#c2410c',
-    shadow: '0 16px 38px rgba(239, 68, 68, 0.2)',
-    headerBackground: 'linear-gradient(135deg, rgba(249, 115, 22, 0.84) 0%, rgba(239, 68, 68, 0.84) 100%)',
-  },
-  {
-    id: 'ocean',
-    label: 'Ocean',
-    type: 'gradient',
-    appearance: 'light',
-    code: 'linear-gradient(#0EA5E9, #06B6D4)',
-    description: 'Light analytics hub.',
-    pageBackground: 'linear-gradient(145deg, #0EA5E9 0%, #06B6D4 100%)',
-    bg: '#ecfeff',
-    bgSoft: '#cffafe',
-    surface: 'rgba(255, 255, 255, 0.82)',
-    surfaceMuted: 'rgba(240, 253, 250, 0.88)',
-    border: 'rgba(6, 182, 212, 0.22)',
-    primary: '#0f766e',
-    primaryStrong: '#0369a1',
-    primarySoft: 'rgba(14, 165, 233, 0.16)',
-    danger: '#be123c',
-    warning: '#a16207',
-    success: '#166534',
-    info: '#0891b2',
-    shadow: '0 16px 38px rgba(6, 182, 212, 0.18)',
-    headerBackground: 'linear-gradient(135deg, rgba(14, 165, 233, 0.84) 0%, rgba(6, 182, 212, 0.84) 100%)',
-  },
-  {
-    id: 'dark-noise',
-    label: 'Dark Noise',
-    type: 'texture',
-    appearance: 'dark',
-    code: '#0B0F1A + grain',
-    description: 'Textured premium dark.',
-    pageBackground: 'radial-gradient(circle at 20% 20%, rgba(255,255,255,0.04) 0%, transparent 30%), radial-gradient(circle at 80% 0%, rgba(255,255,255,0.03) 0%, transparent 24%), linear-gradient(160deg, #0B0F1A 0%, #111827 100%)',
-    bg: '#0f1624',
-    bgSoft: '#162133',
-    surface: 'rgba(15, 23, 42, 0.88)',
-    surfaceMuted: 'rgba(22, 34, 52, 0.94)',
-    border: 'rgba(148, 163, 184, 0.18)',
-    primary: '#7dd3fc',
-    primaryStrong: '#38bdf8',
-    primarySoft: 'rgba(125, 211, 252, 0.16)',
-    danger: '#fb7185',
-    warning: '#fbbf24',
-    success: '#4ade80',
-    info: '#67e8f9',
-    shadow: '0 18px 42px rgba(0, 0, 0, 0.42)',
-    headerBackground: 'linear-gradient(135deg, rgba(11, 15, 26, 0.96) 0%, rgba(17, 24, 39, 0.96) 100%)',
-  },
-  {
-    id: 'soft-grid-light',
-    label: 'Soft Grid Light',
-    type: 'texture',
-    appearance: 'light',
-    code: '#FFFFFF + subtle grid',
-    description: 'Organized grid reading.',
-    pageBackground: 'linear-gradient(rgba(15,23,42,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(15,23,42,0.04) 1px, transparent 1px), linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)',
-    bg: '#ffffff',
-    bgSoft: '#f8fafc',
-    surface: 'rgba(255, 255, 255, 0.94)',
-    surfaceMuted: 'rgba(248, 250, 252, 0.96)',
-    border: '#dbe4f0',
-    primary: '#0f766e',
-    primaryStrong: '#0b5f59',
-    primarySoft: '#ccfbf1',
-    danger: '#be123c',
-    warning: '#a16207',
-    success: '#166534',
-    info: '#0e7490',
-    shadow: '0 12px 34px rgba(15, 23, 42, 0.08)',
-    headerBackground: 'linear-gradient(140deg, rgba(255,255,255,0.94) 0%, rgba(241,245,249,0.94) 100%)',
-  },
-  {
-    id: 'mesh-gradient',
-    label: 'Mesh Gradient',
-    type: 'texture',
-    appearance: 'dark',
-    code: '#3B82F6 + #9333EA',
-    description: 'Modern artistic premium.',
-    pageBackground: 'radial-gradient(circle at 20% 25%, rgba(59,130,246,0.6) 0%, transparent 32%), radial-gradient(circle at 80% 15%, rgba(147,51,234,0.55) 0%, transparent 28%), radial-gradient(circle at 60% 80%, rgba(14,165,233,0.35) 0%, transparent 26%), linear-gradient(150deg, #0f172a 0%, #111827 100%)',
-    bg: '#111827',
-    bgSoft: '#1f2940',
-    surface: 'rgba(17, 24, 39, 0.8)',
-    surfaceMuted: 'rgba(31, 41, 64, 0.84)',
-    border: 'rgba(191, 219, 254, 0.22)',
-    primary: '#bfdbfe',
-    primaryStrong: '#93c5fd',
-    primarySoft: 'rgba(147, 197, 253, 0.16)',
-    danger: '#fecdd3',
-    warning: '#fde68a',
-    success: '#bbf7d0',
-    info: '#c4b5fd',
-    shadow: '0 20px 46px rgba(15, 23, 42, 0.4)',
-    headerBackground: 'linear-gradient(135deg, rgba(59,130,246,0.75) 0%, rgba(147,51,234,0.75) 100%)',
-  },
-  {
-    id: 'frosted-glass',
-    label: 'Frosted Glass',
-    type: 'texture',
-    appearance: 'light',
-    code: 'white + transparency + blur',
-    description: 'Light premium glass.',
-    pageBackground: 'linear-gradient(145deg, #eef6ff 0%, #fdf2f8 50%, #f8fafc 100%)',
-    bg: '#eef6ff',
-    bgSoft: '#f8fafc',
-    surface: 'rgba(255, 255, 255, 0.68)',
-    surfaceMuted: 'rgba(255, 255, 255, 0.56)',
-    border: 'rgba(255, 255, 255, 0.52)',
-    primary: '#2563eb',
-    primaryStrong: '#7c3aed',
-    primarySoft: 'rgba(147, 51, 234, 0.14)',
-    danger: '#be123c',
-    warning: '#a16207',
-    success: '#166534',
-    info: '#0e7490',
-    shadow: '0 16px 40px rgba(148, 163, 184, 0.18)',
-    headerBackground: 'linear-gradient(135deg, rgba(255,255,255,0.62) 0%, rgba(255,255,255,0.38) 100%)',
-  },
-  {
-    id: 'abstract-waves',
-    label: 'Abstract Waves',
-    type: 'texture',
-    appearance: 'dark',
-    code: 'organic gradient waves',
-    description: 'Creative nonstandard dark.',
-    pageBackground: 'radial-gradient(120% 60% at 0% 100%, rgba(249,115,22,0.28) 0%, transparent 55%), radial-gradient(100% 60% at 100% 0%, rgba(59,130,246,0.28) 0%, transparent 48%), radial-gradient(120% 60% at 50% 50%, rgba(168,85,247,0.22) 0%, transparent 50%), linear-gradient(160deg, #0f172a 0%, #172554 100%)',
-    bg: '#16213d',
-    bgSoft: '#1f2f57',
-    surface: 'rgba(15, 23, 42, 0.78)',
-    surfaceMuted: 'rgba(31, 47, 87, 0.82)',
-    border: 'rgba(191, 219, 254, 0.22)',
-    primary: '#f9a8d4',
-    primaryStrong: '#a78bfa',
-    primarySoft: 'rgba(244, 114, 182, 0.14)',
-    danger: '#fecdd3',
-    warning: '#fde68a',
-    success: '#bbf7d0',
-    info: '#93c5fd',
-    shadow: '0 20px 46px rgba(10, 15, 42, 0.42)',
-    headerBackground: 'linear-gradient(135deg, rgba(30,41,59,0.84) 0%, rgba(30,64,175,0.7) 100%)',
-  },
-  {
-    id: 'premium-gray-noise',
-    label: 'Premium Gray Noise',
-    type: 'texture',
-    appearance: 'dark',
-    code: '#1F2937 + texture',
-    description: 'Serious corporate dark.',
-    pageBackground: 'radial-gradient(circle at 20% 20%, rgba(255,255,255,0.03) 0%, transparent 28%), radial-gradient(circle at 80% 80%, rgba(255,255,255,0.02) 0%, transparent 24%), linear-gradient(160deg, #1F2937 0%, #111827 100%)',
-    bg: '#1f2937',
-    bgSoft: '#273244',
-    surface: 'rgba(31, 41, 55, 0.88)',
-    surfaceMuted: 'rgba(39, 50, 68, 0.94)',
-    border: 'rgba(148, 163, 184, 0.2)',
-    primary: '#93c5fd',
-    primaryStrong: '#60a5fa',
-    primarySoft: 'rgba(147, 197, 253, 0.15)',
-    danger: '#fb7185',
-    warning: '#fbbf24',
-    success: '#4ade80',
-    info: '#67e8f9',
-    shadow: '0 18px 42px rgba(10, 15, 25, 0.42)',
-    headerBackground: 'linear-gradient(135deg, rgba(31, 41, 55, 0.95) 0%, rgba(17, 24, 39, 0.95) 100%)',
+    code: '#EAF4FA · #006DCC',
+    description: 'Uma opção clara e serena, com azul profundo para preservar hierarquia e contraste.',
+    pageBackground: 'radial-gradient(circle at 82% 8%, rgba(0, 158, 172, 0.12) 0%, transparent 30%), linear-gradient(150deg, #EAF4FA 0%, #F7FBFD 58%, #DFEDF5 100%)',
+    bg: '#eaf4fa',
+    bgSoft: '#dfeef6',
+    surface: 'rgba(255, 255, 255, 0.96)',
+    surfaceMuted: 'rgba(241, 248, 252, 0.98)',
+    border: 'rgba(35, 83, 118, 0.20)',
+    primary: '#006dcc',
+    primaryStrong: '#007f8d',
+    primarySoft: 'rgba(0, 109, 204, 0.12)',
+    iconFilter: 'saturate(1.12) brightness(0.82) contrast(1.14)',
+    text: '#071c33',
+    textSubtle: '#263f57',
+    textMuted: '#506a80',
+    onAccent: '#ffffff',
+    danger: '#a82346',
+    warning: '#865100',
+    success: '#126743',
+    info: '#005e9f',
+    shadow: '0 20px 44px rgba(24, 57, 81, 0.14)',
+    headerBackground: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(226, 241, 249, 0.98) 68%, rgba(207, 233, 244, 0.96) 100%)',
   },
 ];
-const FONT_THEME_OPTIONS = [
-  { id: 'black', label: 'Black', color: '#000000' },
-  { id: 'grey11', label: 'grey11', color: '#1C1C1C' },
-  { id: 'grey21', label: 'grey21', color: '#363636' },
-  { id: 'grey31', label: 'grey31', color: '#4F4F4F' },
-  { id: 'dimgray', label: 'DimGray', color: '#696969' },
-  { id: 'gray', label: 'Gray', color: '#808080' },
-  { id: 'darkgray', label: 'DarkGray', color: '#A9A9A9' },
-  { id: 'silver', label: 'Silver', color: '#C0C0C0' },
-  { id: 'lightgrey', label: 'LightGrey', color: '#D3D3D3' },
-  { id: 'gainsboro', label: 'Gainsboro', color: '#DCDCDC' },
-  { id: 'slateblue', label: 'SlateBlue', color: '#6A5ACD' },
-  { id: 'slateblue1', label: 'SlateBlue1', color: '#836FFF' },
-  { id: 'slateblue3', label: 'SlateBlue3', color: '#6959CD' },
-  { id: 'darkslateblue', label: 'DarkSlateBlue', color: '#483D8B' },
-  { id: 'midnightblue', label: 'MidnightBlue', color: '#191970' },
-  { id: 'navy', label: 'Navy', color: '#000080' },
-  { id: 'darkblue', label: 'DarkBlue', color: '#00008B' },
-  { id: 'mediumblue', label: 'MediumBlue', color: '#0000CD' },
-  { id: 'blue', label: 'Blue', color: '#0000FF' },
-  { id: 'cornflowerblue', label: 'CornflowerBlue', color: '#6495ED' },
-  { id: 'royalblue', label: 'RoyalBlue', color: '#4169E1' },
-  { id: 'dodgerblue', label: 'DodgerBlue', color: '#1E90FF' },
-  { id: 'deepskyblue', label: 'DeepSkyBlue', color: '#00BFFF' },
-  { id: 'lightskyblue', label: 'LightSkyBlue', color: '#87CEFA' },
-  { id: 'skyblue', label: 'SkyBlue', color: '#87CEEB' },
-  { id: 'lightblue', label: 'LightBlue', color: '#ADD8E6' },
-  { id: 'steelblue', label: 'SteelBlue', color: '#4682B4' },
-  { id: 'lightsteelblue', label: 'LightSteelBlue', color: '#B0C4DE' },
-  { id: 'slategray', label: 'SlateGray', color: '#708090' },
-  { id: 'lightslategray', label: 'LightSlateGray', color: '#778899' },
-  { id: 'aqua-cyan', label: 'Aqua / Cyan', color: '#00FFFF' },
-  { id: 'darkturquoise', label: 'DarkTurquoise', color: '#00CED1' },
-  { id: 'turquoise', label: 'Turquoise', color: '#40E0D0' },
-  { id: 'mediumturquoise', label: 'MediumTurquoise', color: '#48D1CC' },
-  { id: 'lightseagreen', label: 'LightSeaGreen', color: '#20B2AA' },
-  { id: 'darkcyan', label: 'DarkCyan', color: '#008B8B' },
-  { id: 'teal', label: 'Teal', color: '#008080' },
-  { id: 'aquamarine', label: 'Aquamarine', color: '#7FFFD4' },
-  { id: 'mediumaquamarine', label: 'MediumAquamarine', color: '#66CDAA' },
-  { id: 'cadetblue', label: 'CadetBlue', color: '#5F9EA0' },
-  { id: 'darkslategray', label: 'DarkSlateGray', color: '#2F4F4F' },
-  { id: 'mediumspringgreen', label: 'MediumSpringGreen', color: '#00FA9A' },
-  { id: 'springgreen', label: 'SpringGreen', color: '#00FF7F' },
-  { id: 'palegreen', label: 'PaleGreen', color: '#98FB98' },
-  { id: 'lightgreen', label: 'LightGreen', color: '#90EE90' },
-  { id: 'darkseagreen', label: 'DarkSeaGreen', color: '#8FBC8F' },
-  { id: 'mediumseagreen', label: 'MediumSeaGreen', color: '#3CB371' },
-  { id: 'seagreen', label: 'SeaGreen', color: '#2E8B57' },
-  { id: 'darkgreen', label: 'DarkGreen', color: '#006400' },
-  { id: 'green', label: 'Green', color: '#008000' },
-  { id: 'forestgreen', label: 'ForestGreen', color: '#228B22' },
-  { id: 'limegreen', label: 'LimeGreen', color: '#32CD32' },
-  { id: 'lime', label: 'Lime', color: '#00FF00' },
-  { id: 'lawngreen', label: 'LawnGreen', color: '#7CFC00' },
-  { id: 'chartreuse', label: 'Chartreuse', color: '#7FFF00' },
-  { id: 'greenyellow', label: 'GreenYellow', color: '#ADFF2F' },
-  { id: 'yellowgreen', label: 'YellowGreen', color: '#9ACD32' },
-  { id: 'olivedrab', label: 'OliveDrab', color: '#6B8E23' },
-  { id: 'darkolivegreen', label: 'DarkOliveGreen', color: '#556B2F' },
-  { id: 'olive', label: 'Olive', color: '#808000' },
-  { id: 'darkkhaki', label: 'DarkKhaki', color: '#BDB76B' },
-  { id: 'goldenrod', label: 'Goldenrod', color: '#DAA520' },
-  { id: 'darkgoldenrod', label: 'DarkGoldenrod', color: '#B8860B' },
-  { id: 'saddlebrown', label: 'SaddleBrown', color: '#8B4513' },
-  { id: 'sienna', label: 'Sienna', color: '#A0522D' },
-  { id: 'rosybrown', label: 'RosyBrown', color: '#BC8F8F' },
-  { id: 'peru', label: 'Peru', color: '#CD853F' },
-  { id: 'chocolate', label: 'Chocolate', color: '#D2691E' },
-  { id: 'sandybrown', label: 'SandyBrown', color: '#F4A460' },
-  { id: 'navajowhite', label: 'NavajoWhite', color: '#FFDEAD' },
-  { id: 'wheat', label: 'Wheat', color: '#F5DEB3' },
-  { id: 'burlywood', label: 'BurlyWood', color: '#DEB887' },
-  { id: 'tan', label: 'Tan', color: '#D2B48C' },
-  { id: 'mediumslateblue', label: 'MediumSlateBlue', color: '#7B68EE' },
-  { id: 'mediumpurple', label: 'MediumPurple', color: '#9370DB' },
-  { id: 'blueviolet', label: 'BlueViolet', color: '#8A2BE2' },
-  { id: 'indigo', label: 'Indigo', color: '#4B0082' },
-  { id: 'darkviolet', label: 'DarkViolet', color: '#9400D3' },
-  { id: 'darkorchid', label: 'DarkOrchid', color: '#9932CC' },
-  { id: 'mediumorchid', label: 'MediumOrchid', color: '#BA55D3' },
-  { id: 'purple', label: 'Purple', color: '#A020F0' },
-  { id: 'darkmagenta', label: 'DarkMagenta', color: '#8B008B' },
-  { id: 'fuchsia-magenta', label: 'Fuchsia / Magenta', color: '#FF00FF' },
-  { id: 'violet', label: 'Violet', color: '#EE82EE' },
-  { id: 'orchid', label: 'Orchid', color: '#DA70D6' },
-  { id: 'plum', label: 'Plum', color: '#DDA0DD' },
-  { id: 'mediumvioletred', label: 'MediumVioletRed', color: '#C71585' },
-  { id: 'deeppink', label: 'DeepPink', color: '#FF1493' },
-  { id: 'hotpink', label: 'HotPink', color: '#FF69B4' },
-  { id: 'palevioletred', label: 'PaleVioletRed', color: '#DB7093' },
-  { id: 'lightpink', label: 'LightPink', color: '#FFB6C1' },
-  { id: 'pink', label: 'Pink', color: '#FFC0CB' },
-  { id: 'lightcoral', label: 'LightCoral', color: '#F08080' },
-  { id: 'indianred', label: 'IndianRed', color: '#CD5C5C' },
-  { id: 'crimson', label: 'Crimson', color: '#DC143C' },
-  { id: 'maroon', label: 'Maroon', color: '#800000' },
-  { id: 'darkred', label: 'DarkRed', color: '#8B0000' },
-  { id: 'firebrick', label: 'FireBrick', color: '#B22222' },
-  { id: 'brown', label: 'Brown', color: '#A52A2A' },
-  { id: 'salmon', label: 'Salmon', color: '#FA8072' },
-  { id: 'darksalmon', label: 'DarkSalmon', color: '#E9967A' },
-  { id: 'lightsalmon', label: 'LightSalmon', color: '#FFA07A' },
-  { id: 'coral', label: 'Coral', color: '#FF7F50' },
-  { id: 'tomato', label: 'Tomato', color: '#FF6347' },
-  { id: 'red', label: 'Red', color: '#FF0000' },
-  { id: 'orangered', label: 'OrangeRed', color: '#FF4500' },
-  { id: 'darkorange', label: 'DarkOrange', color: '#FF8C00' },
-  { id: 'orange', label: 'Orange', color: '#FFA500' },
-  { id: 'gold', label: 'Gold', color: '#FFD700' },
-  { id: 'yellow', label: 'Yellow', color: '#FFFF00' },
-  { id: 'khaki', label: 'Khaki', color: '#F0E68C' },
-  { id: 'aliceblue', label: 'AliceBlue', color: '#F0F8FF' },
-  { id: 'ghostwhite', label: 'GhostWhite', color: '#F8F8FF' },
-  { id: 'snow', label: 'Snow', color: '#FFFAFA' },
-  { id: 'seashell', label: 'Seashell', color: '#FFF5EE' },
-  { id: 'floralwhite', label: 'FloralWhite', color: '#FFFAF0' },
-  { id: 'whitesmoke', label: 'WhiteSmoke', color: '#F5F5F5' },
-  { id: 'beige', label: 'Beige', color: '#F5F5DC' },
-  { id: 'oldlace', label: 'OldLace', color: '#FDF5E6' },
-  { id: 'ivory', label: 'Ivory', color: '#FFFFF0' },
-  { id: 'linen', label: 'Linen', color: '#FAF0E6' },
-  { id: 'cornsilk', label: 'Cornsilk', color: '#FFF8DC' },
-  { id: 'antiquewhite', label: 'AntiqueWhite', color: '#FAEBD7' },
-  { id: 'blanchedalmond', label: 'BlanchedAlmond', color: '#FFEBCD' },
-  { id: 'bisque', label: 'Bisque', color: '#FFE4C4' },
-  { id: 'lightyellow', label: 'LightYellow', color: '#FFFFE0' },
-  { id: 'lemonchiffon', label: 'LemonChiffon', color: '#FFFACD' },
-  { id: 'lightgoldenrodyellow', label: 'LightGoldenrodYellow', color: '#FAFAD2' },
-  { id: 'papayawhip', label: 'PapayaWhip', color: '#FFEFD5' },
-  { id: 'peachpuff', label: 'PeachPuff', color: '#FFDAB9' },
-  { id: 'moccasin', label: 'Moccasin', color: '#FFE4B5' },
-  { id: 'palegoldenrod', label: 'PaleGoldenrod', color: '#EEE8AA' },
-  { id: 'mistyrose', label: 'MistyRose', color: '#FFE4E1' },
-  { id: 'lavenderblush', label: 'LavenderBlush', color: '#FFF0F5' },
-  { id: 'lavender', label: 'Lavender', color: '#E6E6FA' },
-  { id: 'thistle', label: 'Thistle', color: '#D8BFD8' },
-  { id: 'azure', label: 'Azure', color: '#F0FFFF' },
-  { id: 'lightcyan', label: 'LightCyan', color: '#E0FFFF' },
-  { id: 'powderblue', label: 'PowderBlue', color: '#B0E0E6' },
-  { id: 'paleturquoise', label: 'PaleTurquoise', color: '#AFEEEE' },
-  { id: 'honeydew', label: 'Honeydew', color: '#F0FFF0' },
-  { id: 'mintcream', label: 'MintCream', color: '#F5FFFA' },
-];
-
-const PLATFORM_THEME_OPTIONS = [
-  {
-    id: 'platform-neon-night',
-    platform: 'tiktok',
-    label: 'Neon Night',
-    detail: 'TikTok mode',
-  },
-  {
-    id: 'platform-youtube-redline',
-    platform: 'youtube',
-    label: 'Redline',
-    detail: 'YouTube mode',
-  },
-  {
-    id: 'platform-instagram-gradient',
-    platform: 'instagram',
-    label: 'Gradient Dusk',
-    detail: 'Instagram mode',
-  },
-];
+// Text colors are intentionally not user-selectable. Every visual set owns its
+// accessible text hierarchy, preventing combinations that compromise reading.
 
 const PLAN_BACKGROUND_THEME_MAP = {
   FREE: {
     label: 'Free',
     shortLabel: 'Free',
     tone: 'info',
-    defaultTheme: 'minimal-off-white',
-    themeIds: ['minimal-off-white', 'ice-blue', 'green-to-blue', 'sunset'],
-    summary: 'Visual simples, variado e direto para comecar sem confusao.',
+    defaultTheme: 'pmp-essencial',
+    themeIds: ['pmp-essencial'],
+    summary: 'Identidade PMP fixa, legível e consistente para começar.',
   },
   BASIC: {
     label: 'Básico',
     shortLabel: 'Basic',
     tone: 'success',
-    defaultTheme: 'soft-grid-light',
-    themeIds: ['soft-grid-light', 'warm-beige', 'graphite-gray', 'ocean'],
-    summary: 'Mais presenca visual, mantendo leitura limpa para operacao recorrente.',
+    defaultTheme: 'orbita-ciano',
+    themeIds: ['orbita-ciano', 'eclipse-cobalto', 'aurora-polar', 'horizonte-solar', 'nebulosa-indigo', 'lunar-claro'],
+    summary: 'Os seis ambientes PMP completos, com contraste e tipografia coordenados.',
   },
   PRO: {
     label: 'Pro',
     shortLabel: 'Pro',
     tone: 'warning',
-    defaultTheme: 'platform-neon-night',
-    themeIds: ['platform-neon-night', 'platform-youtube-redline', 'platform-instagram-gradient', 'dark-cyan-glow'],
-    summary: 'Energia multicanal com contraste claro para fluxos YouTube, TikTok e Instagram.',
+    defaultTheme: 'orbita-ciano',
+    themeIds: ['orbita-ciano', 'eclipse-cobalto', 'aurora-polar', 'horizonte-solar', 'nebulosa-indigo', 'lunar-claro'],
+    summary: 'Os seis ambientes PMP completos, com contraste e tipografia coordenados.',
   },
   PREMIUM: {
     label: 'Premium',
     shortLabel: 'Premium',
     tone: 'warning',
-    defaultTheme: 'mesh-gradient',
-    themeIds: ['mesh-gradient', 'frosted-glass', 'abstract-waves', 'premium-gray-noise'],
-    summary: 'Backgrounds mais ricos, com camadas e acabamento premium para operacao avancada.',
+    defaultTheme: 'orbita-ciano',
+    themeIds: ['orbita-ciano', 'eclipse-cobalto', 'aurora-polar', 'horizonte-solar', 'nebulosa-indigo', 'lunar-claro'],
+    summary: 'Os seis ambientes PMP completos, com contraste e tipografia coordenados.',
   },
 };
-const PLAN_BACKGROUND_TIER_ORDER = ['FREE', 'BASIC', 'PRO', 'PREMIUM'];
 
 function readStoredBackgroundTheme() {
   try {
@@ -1424,16 +731,7 @@ function readStoredBackgroundTheme() {
 }
 
 function getSystemBackgroundTheme() {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'deep-black-blue' : 'clean-white';
-}
-
-function readStoredFontTheme() {
-  try {
-    const value = localStorage.getItem(FONT_THEME_STORAGE_KEY);
-    return FONT_THEME_OPTIONS.some((option) => option.id === value) ? value : 'black';
-  } catch {
-    return 'black';
-  }
+  return PLAN_BACKGROUND_THEME_MAP.FREE.defaultTheme;
 }
 
 function getDefaultGrowthPreferences() {
@@ -1573,11 +871,17 @@ const api = {
   me: () => apiRequest('GET', '/auth/me'),
   login: (credentials) => apiRequest('POST', '/auth/login', credentials),
   register: (payload) => apiRequest('POST', '/auth/register', payload),
+  requestPasswordReset: (email) => apiRequest('POST', '/auth/password-reset/request', { email }),
+  confirmPasswordReset: (token, newPassword) => apiRequest('POST', '/auth/password-reset/confirm', { token, newPassword }),
   startAuthGoogleOauth: () => apiRequest('GET', '/auth/google/start'),
   authGoogleCallback: (code, stateParam) => apiRequest('GET', buildUrl('/auth/google/callback', { code, state: stateParam })),
   logout: () => apiRequest('POST', '/auth/logout'),
   sendAccountDeletionConfirmation: () => apiRequest('POST', '/auth/account-deletion/challenge'),
   requestAccountDeletion: (confirmation = {}) => apiRequest('POST', '/auth/account-deletion/request', confirmation),
+  createServiceRequest: (payload) => apiRequest('POST', '/support/requests', payload),
+  trackServiceRequest: (protocol, key) => apiRequest('GET', `/support/requests/${encodeURIComponent(protocol)}?key=${encodeURIComponent(key)}`),
+  serviceRequests: () => apiRequest('GET', '/api/service-requests'),
+  createAuthenticatedServiceRequest: (payload) => apiRequest('POST', '/api/service-requests', payload),
   accountPlanSummary: () => apiRequest('GET', '/api/account/plan'),
   listPlans: () => apiRequest('GET', '/api/account/plans'),
   selectAccountPlan: (plan) => apiRequest('POST', '/api/account/plan/select', { plan }),
@@ -1648,7 +952,6 @@ const state = {
   rerenderQueued: false,
   backgroundTheme: readStoredBackgroundTheme() ?? getSystemBackgroundTheme(),
   theme: 'light',
-  fontTheme: readStoredFontTheme(),
   mediaPreviewSizes: readStoredMediaPreviewSizes(),
   growthPreferences: readStoredGrowthPreferences(),
   growthConnectedAccounts: [],
@@ -1674,10 +977,13 @@ function applyBackgroundTheme(backgroundThemeId) {
   document.body.style.setProperty('--bg-soft', selectedTheme.bgSoft);
   document.body.style.setProperty('--surface', selectedTheme.surface);
   document.body.style.setProperty('--surface-muted', selectedTheme.surfaceMuted);
+  document.body.style.setProperty('--surface-alt', selectedTheme.surfaceMuted);
   document.body.style.setProperty('--border', selectedTheme.border);
+  document.body.style.setProperty('--border-strong', hexToRgba(selectedTheme.primary, selectedTheme.appearance === 'dark' ? 0.38 : 0.30));
   document.body.style.setProperty('--primary', selectedTheme.primary);
   document.body.style.setProperty('--primary-strong', selectedTheme.primaryStrong);
   document.body.style.setProperty('--primary-soft', selectedTheme.primarySoft);
+  document.body.style.setProperty('--theme-icon-filter', selectedTheme.iconFilter ?? 'saturate(1)');
   document.body.style.setProperty('--danger', selectedTheme.danger);
   document.body.style.setProperty('--danger-soft', hexToRgba(selectedTheme.danger, selectedTheme.appearance === 'dark' ? 0.16 : 0.12));
   document.body.style.setProperty('--warning', selectedTheme.warning);
@@ -1688,7 +994,11 @@ function applyBackgroundTheme(backgroundThemeId) {
   document.body.style.setProperty('--info-soft', hexToRgba(selectedTheme.info, selectedTheme.appearance === 'dark' ? 0.16 : 0.12));
   document.body.style.setProperty('--shadow', selectedTheme.shadow);
   document.body.style.setProperty('--header-background', selectedTheme.headerBackground);
-  document.body.style.setProperty('--header-text', selectedTheme.appearance === 'dark' ? '#f8fafc' : '#0f172a');
+  document.body.style.setProperty('--text', selectedTheme.text);
+  document.body.style.setProperty('--text-subtle', selectedTheme.textSubtle);
+  document.body.style.setProperty('--text-muted', selectedTheme.textMuted);
+  document.body.style.setProperty('--text-on-accent', selectedTheme.onAccent);
+  document.body.style.setProperty('--header-text', selectedTheme.text);
   try {
     localStorage.setItem(BACKGROUND_THEME_STORAGE_KEY, selectedTheme.id);
   } catch {
@@ -1713,33 +1023,10 @@ function getBackgroundThemeOption(themeId) {
   return BACKGROUND_THEME_OPTIONS.find((option) => option.id === themeId) ?? null;
 }
 
-function getPlanBackgroundTierIds(planId = getCurrentAccountPlanId()) {
-  const normalizedPlanId = normalizeAccountPlanId(planId);
-  const planIndex = PLAN_BACKGROUND_TIER_ORDER.indexOf(normalizedPlanId);
-  return PLAN_BACKGROUND_TIER_ORDER.slice(0, Math.max(planIndex, 0) + 1);
-}
-
 function getPlanBackgroundThemeIds(planId = getCurrentAccountPlanId(), options = {}) {
   const normalizedPlanId = normalizeAccountPlanId(planId);
-  const tierIds = options.cumulative === false ? [normalizedPlanId] : getPlanBackgroundTierIds(normalizedPlanId);
-  const seenThemeIds = new Set();
-
-  return tierIds.flatMap((tierId) => {
-    const themeIds = PLAN_BACKGROUND_THEME_MAP[tierId]?.themeIds ?? [];
-    return themeIds.filter((themeId) => {
-      if (seenThemeIds.has(themeId)) {
-        return false;
-      }
-      seenThemeIds.add(themeId);
-      return Boolean(getBackgroundThemeOption(themeId));
-    });
-  });
-}
-
-function getThemeUnlockPlanId(themeId) {
-  return PLAN_BACKGROUND_TIER_ORDER.find((tierId) => (
-    PLAN_BACKGROUND_THEME_MAP[tierId]?.themeIds.includes(themeId)
-  )) ?? null;
+  return (PLAN_BACKGROUND_THEME_MAP[normalizedPlanId]?.themeIds ?? [])
+    .filter((themeId) => Boolean(getBackgroundThemeOption(themeId)));
 }
 
 function isBackgroundThemeAvailableForPlan(themeId, planId = getCurrentAccountPlanId()) {
@@ -1855,58 +1142,27 @@ function renderLanguageOptionButtons(extraClass = '') {
   `).join('');
 }
 
-function renderFontThemeButtons(themeIds = ['black', 'lightgrey', 'turquoise', 'deeppink']) {
-  const selectedFont = FONT_THEME_OPTIONS.find((option) => option.id === state.fontTheme) ?? FONT_THEME_OPTIONS[0];
-  const fontPresets = themeIds
-    .map((id) => FONT_THEME_OPTIONS.find((option) => option.id === id))
-    .filter(Boolean);
-  if (!fontPresets.some((option) => option.id === selectedFont.id)) {
-    fontPresets.unshift(selectedFont);
-  }
-  return fontPresets.map((option) => {
-    const isSelected = option.id === state.fontTheme ? ' active' : '';
-    return `
-      <button
-        type="button"
-        class="font-theme-button${isSelected}"
-        data-font-theme-id="${option.id}"
-        aria-pressed="${option.id === state.fontTheme ? 'true' : 'false'}"
-        title="${escapeHtml(option.label)}"
-        style="--color: ${escapeAttribute(option.color)}"
-      >
-        <span class="color-swatch"></span>
-        <span class="color-label">${escapeHtml(option.label)}</span>
-      </button>
-    `;
-  }).join('');
+function isPaidVisualPlan(planId = getCurrentAccountPlanId()) {
+  return normalizeAccountPlanId(planId) !== 'FREE';
+}
+
+function renderThemePalette(option) {
+  return `
+    <span class="theme-palette" aria-label="Paleta coordenada do tema">
+      <i style="--swatch:${escapeAttribute(option.bg)}"></i>
+      <i style="--swatch:${escapeAttribute(option.surfaceMuted)}"></i>
+      <i style="--swatch:${escapeAttribute(option.primary)}"></i>
+      <i style="--swatch:${escapeAttribute(option.text)}"></i>
+    </span>
+  `;
 }
 
 function renderCompactPlanThemeButtons(planId = getCurrentAccountPlanId(), limit = Number.POSITIVE_INFINITY) {
   const normalizedPlanId = normalizeAccountPlanId(planId);
-  const ownThemeIds = getPlanBackgroundThemeIds(normalizedPlanId, { cumulative: false });
-  const ownThemes = ownThemeIds
-    .map((id) => getBackgroundThemeOption(id))
-    .filter(Boolean);
-  const inheritedThemes = getPlanBackgroundThemes(normalizedPlanId)
-    .filter((option) => !ownThemeIds.includes(option.id));
-  const selectedTheme = getSelectedBackgroundTheme();
-  const themes = [
-    ...ownThemes,
-    ...inheritedThemes,
-  ];
-
-  if (
-    selectedTheme
-    && isBackgroundThemeAvailableForPlan(selectedTheme.id, normalizedPlanId)
-    && !themes.some((option) => option.id === selectedTheme.id)
-  ) {
-    themes.unshift(selectedTheme);
-  }
+  const themes = getPlanBackgroundThemes(normalizedPlanId);
 
   const maxItems = Number.isFinite(limit) ? limit : themes.length;
   return themes.slice(0, maxItems).map((option) => {
-    const unlockPlanId = getThemeUnlockPlanId(option.id) ?? normalizedPlanId;
-    const unlockPlanConfig = getPlanVisualConfig(unlockPlanId);
     const selectedClass = option.id === state.backgroundTheme ? ' selected' : '';
     return `
       <button
@@ -1914,12 +1170,12 @@ function renderCompactPlanThemeButtons(planId = getCurrentAccountPlanId(), limit
         class="style-preset-button${selectedClass}"
         data-background-theme-option="${option.id}"
         aria-pressed="${option.id === state.backgroundTheme ? 'true' : 'false'}"
-        style="--background-preview:${escapeAttribute(option.pageBackground)}; --preset-accent:${escapeAttribute(option.primary)};"
+        style="--background-preview:${escapeAttribute(option.pageBackground)}; --preset-accent:${escapeAttribute(option.primary)}; --preview-text:${escapeAttribute(option.text)};"
       >
         <span class="style-preset-preview" aria-hidden="true"></span>
         <span class="style-preset-body">
           <strong>${escapeHtml(option.label)}</strong>
-          <small>${escapeHtml(unlockPlanConfig.shortLabel)} · ${escapeHtml(option.description)}</small>
+          <small>${escapeHtml(option.eyebrow)} · contraste automático</small>
         </span>
       </button>
     `;
@@ -1927,38 +1183,111 @@ function renderCompactPlanThemeButtons(planId = getCurrentAccountPlanId(), limit
 }
 
 function renderPlanBackgroundCards(planId = getCurrentAccountPlanId()) {
-  return getPlanBackgroundThemes(planId).map((option) => {
-    const unlockPlanId = getThemeUnlockPlanId(option.id) ?? normalizeAccountPlanId(planId);
-    const unlockPlanConfig = getPlanVisualConfig(unlockPlanId);
+  const normalizedPlanId = normalizeAccountPlanId(planId);
+  const paid = isPaidVisualPlan(normalizedPlanId);
+  const freeTheme = getBackgroundThemeOption(PLAN_BACKGROUND_THEME_MAP.FREE.defaultTheme);
+  const premiumThemes = PLAN_BACKGROUND_THEME_MAP.BASIC.themeIds
+    .map((themeId) => getBackgroundThemeOption(themeId))
+    .filter(Boolean);
+  const themes = paid ? premiumThemes : [freeTheme, ...premiumThemes].filter(Boolean);
+
+  return themes.map((option) => {
+    const locked = !paid && option.id !== PLAN_BACKGROUND_THEME_MAP.FREE.defaultTheme;
     const selectedClass = option.id === state.backgroundTheme ? ' selected' : '';
+    const lockedClass = locked ? ' locked' : '';
     return `
       <button
         type="button"
-        class="background-card plan-background-card${selectedClass}"
-        data-background-theme-option="${option.id}"
+        class="background-card plan-background-card${selectedClass}${lockedClass}"
+        ${locked ? `data-theme-locked="${option.id}" aria-disabled="true"` : `data-background-theme-option="${option.id}"`}
         aria-pressed="${option.id === state.backgroundTheme ? 'true' : 'false'}"
-        style="--background-preview:${escapeAttribute(option.pageBackground)}; --preset-accent:${escapeAttribute(option.primary)};"
+        style="--background-preview:${escapeAttribute(option.pageBackground)}; --preset-accent:${escapeAttribute(option.primary)}; --preview-text:${escapeAttribute(option.text)};"
       >
-        <span class="background-card-preview" aria-hidden="true"></span>
+        <span class="background-card-preview" aria-hidden="true">
+          <span class="theme-preview-window"><i></i><i></i><i></i></span>
+          ${locked ? '<span class="theme-lock-badge">Plano pago</span>' : ''}
+        </span>
         <span class="background-card-body">
           <span class="settings-card-title-row">
             <strong>${escapeHtml(option.label)}</strong>
-            <span class="pill ${escapeHtml(unlockPlanConfig.tone)}">${escapeHtml(unlockPlanConfig.label)}</span>
+            <span class="pill ${locked ? 'warning' : 'info'}">${locked ? 'Bloqueado' : (paid ? 'Incluído' : 'Padrão')}</span>
           </span>
-          <span class="background-card-type">${escapeHtml(option.type)} · ${escapeHtml(option.code)}</span>
+          <span class="background-card-type">${escapeHtml(option.eyebrow)} · ${escapeHtml(option.code)}</span>
           <small>${escapeHtml(option.description)}</small>
+          ${renderThemePalette(option)}
         </span>
       </button>
     `;
   }).join('');
 }
 
+const SETTINGS_MARK_ARTWORK = {
+  ACC: '/assets/icons/ACC_contas_vinculadas.svg',
+  BG: '/assets/icons/PMP_BG_Aparencia.svg',
+  CFG: '/assets/icons/CFG_configuracoes.svg',
+  CTA: '/assets/icons/CTA_atalhos_conta.svg',
+  EU: '/assets/icons/EU_usuario.svg',
+  IDI: '/assets/icons/IDI_idioma.svg',
+  OK: '/assets/icons/OK_check.svg',
+  PRO: '/assets/icons/PRO_cadeado_coroa.svg',
+  RES: '/assets/icons/PMP_RES_Preferencias_Salvas.svg',
+  RISCO: '/assets/icons/RISCO_lixeira_alerta.svg',
+  TOK: '/assets/icons/TOK_token_raio.svg',
+  VIS: '/assets/icons/PMP_VIS_Visibilidade.svg',
+};
+
+const CAMPAIGN_MARK_ARTWORK = {
+  ACC: '/assets/icons/ACC_contas_vinculadas.svg',
+  AT: '/assets/icons/AT_atividade.svg',
+  AUTO: '/assets/icons/AUTO_automacao_playlist.svg',
+  AU: '/assets/icons/AU_chave_reconectar.svg',
+  AUTH: '/assets/icons/AUTH_escudo_autenticacao.svg',
+  CAN: '/assets/icons/CAN_canais_ativos.svg',
+  COTA: '/assets/icons/COTA_medidor_api.svg',
+  CP: '/assets/icons/CP_campanhas.svg',
+  'D+': '/assets/icons/D+_calendario_futuro.svg',
+  DN: '/assets/icons/DN_queda.svg',
+  ER: '/assets/icons/ER_erro.svg',
+  FILA: '/assets/icons/FILA_fila_campanhas.svg',
+  FOCO: '/assets/icons/FOCO_alvo.svg',
+  HJ: '/assets/icons/HJ_hoje.svg',
+  MID: '/assets/icons/MID_arquivo_video.svg',
+  NEW: '/assets/icons/NEW_adicionar.svg',
+  NOVO: '/assets/icons/NOVO_nova_campanha.svg',
+  OK: '/assets/icons/OK_sucesso.svg',
+  PE: '/assets/icons/PE_pendente.svg',
+  PR: '/assets/icons/PR_pronta.svg',
+  PUB: '/assets/icons/PUB_publicacao.svg',
+  RA: '/assets/icons/RA_rascunho.svg',
+  SP: '/assets/icons/SP_sem_plataforma.svg',
+  ST: '/assets/icons/ST_estado_generico.svg',
+  SYNC: '/assets/icons/SYNC_sincronizacao.svg',
+  UP: '/assets/icons/UP_crescimento.svg',
+  VIS: '/assets/icons/VIS_olho.svg',
+  FL: '/assets/icons/FL_enviando.svg',
+};
+
+const CAMPAIGN_PLATFORM_ARTWORK = {
+  instagram: '/assets/icons/IG_instagram.svg',
+  tiktok: '/assets/icons/TT_tiktok.svg',
+  youtube: '/assets/icons/YT_youtube.svg',
+};
+
 function renderSettingsMark(label = 'PMP', tone = 'info', className = '') {
-  const safeLabel = String(label ?? 'PMP').trim().slice(0, 4).toUpperCase() || 'PMP';
-  const classes = ['settings-mark', safeLabel === 'PMP' ? 'settings-mark-pmp-logo' : '', className].filter(Boolean).join(' ');
+  const fullLabel = String(label ?? 'PMP').trim().toUpperCase() || 'PMP';
+  const safeLabel = fullLabel.slice(0, 4);
+  const artworkSrc = SETTINGS_MARK_ARTWORK[fullLabel] ?? SETTINGS_MARK_ARTWORK[safeLabel] ?? '';
+  const classes = [
+    'settings-mark',
+    safeLabel === 'PMP' ? 'settings-mark-pmp-logo' : '',
+    artworkSrc ? 'settings-mark-artwork' : '',
+    className,
+  ].filter(Boolean).join(' ');
   return `
     <span class="${escapeAttribute(classes)}" data-tone="${escapeAttribute(tone)}" aria-hidden="true">
-      ${escapeHtml(safeLabel)}
+      ${artworkSrc
+        ? `<img class="settings-mark-artwork-image" src="${escapeAttribute(artworkSrc)}" alt="" decoding="async" draggable="false" />`
+        : escapeHtml(safeLabel)}
     </span>
   `;
 }
@@ -2172,12 +1501,10 @@ function renderAccountDeletionModalBody(message = '') {
 
 function settingsPickerHtml(prefix) {
   const selectedTheme = getSelectedBackgroundTheme();
-  const selectedFont = FONT_THEME_OPTIONS.find((option) => option.id === state.fontTheme) ?? FONT_THEME_OPTIONS[0];
   const planId = getCurrentAccountPlanId();
   const planConfig = getPlanVisualConfig(planId);
   const unlockedBackgroundCount = getPlanBackgroundThemeIds(planId).length;
   const cardsHtml = renderCompactPlanThemeButtons(planId);
-  const fontOptionsHtml = renderFontThemeButtons();
   const languageOptionsHtml = renderLanguageOptionButtons();
 
   return `
@@ -2192,11 +1519,11 @@ function settingsPickerHtml(prefix) {
       <div class="settings-panel settings-panel-compact">
         <div
           class="settings-preview-card settings-preview-card-plan"
-          style="--background-preview:${escapeAttribute(selectedTheme.pageBackground)}; --preset-accent:${escapeAttribute(selectedTheme.primary)}; --text-preview:${escapeAttribute(selectedFont.color)};"
+          style="--background-preview:${escapeAttribute(selectedTheme.pageBackground)}; --preset-accent:${escapeAttribute(selectedTheme.primary)}; --text-preview:${escapeAttribute(selectedTheme.text)};"
         >
-          <span>Visual do workspace</span>
+          <span>Ambiente visual coordenado</span>
           <strong>${escapeHtml(selectedTheme.label)}</strong>
-          <small>${escapeHtml(planConfig.label)} · ${escapeHtml(selectedFont.label)}</small>
+          <small>${escapeHtml(planConfig.label)} · texto e contraste automáticos</small>
         </div>
         <div class="settings-panel-actions">
           <a class="settings-panel-action" data-link href="/workspace/configuracoes">
@@ -2216,20 +1543,11 @@ function settingsPickerHtml(prefix) {
         </div>
         <div class="settings-section">
           <div class="settings-section-header">
-            <strong>Backgrounds desbloqueados</strong>
-            <span class="muted">${unlockedBackgroundCount} sets</span>
+            <strong>${isPaidVisualPlan(planId) ? 'Seus ambientes visuais' : 'Tema do plano gratuito'}</strong>
+            <span class="muted">${unlockedBackgroundCount} ${unlockedBackgroundCount === 1 ? 'set' : 'sets'}</span>
           </div>
           <div class="style-preset-grid style-preset-grid-plan">
             ${cardsHtml}
-          </div>
-        </div>
-        <div class="settings-section">
-          <div class="settings-section-header">
-            <strong>Cor do texto</strong>
-            <span class="muted">4 opções</span>
-          </div>
-          <div class="font-theme-grid font-theme-grid-compact">
-            ${fontOptionsHtml}
           </div>
         </div>
         <div class="settings-section">
@@ -2244,58 +1562,6 @@ function settingsPickerHtml(prefix) {
       </div>
     </details>
   `;
-}
-
-function renderPlatformThemeSelector(options = {}) {
-  const compactClass = options.compact ? ' compact' : '';
-  const buttonsHtml = PLATFORM_THEME_OPTIONS.map((option) => {
-    const selectedClass = option.id === state.backgroundTheme ? ' active' : '';
-    return `
-      <button
-        type="button"
-        class="platform-theme-button${selectedClass}"
-        data-platform-theme-option="${option.id}"
-        title="${escapeHtml(option.detail)}"
-      >
-        <span class="platform-theme-icon ${escapeHtml(option.platform)}">${renderPlatformGlyph(option.platform, 'small')}</span>
-        <span class="platform-theme-copy">
-          <strong>${escapeHtml(option.label)}</strong>
-          <small>${escapeHtml(option.detail)}</small>
-        </span>
-      </button>
-    `;
-  }).join('');
-
-  return `
-    <div class="platform-theme-strip${compactClass}">
-      ${buttonsHtml}
-    </div>
-  `;
-}
-
-function bindPlatformThemePicker(onSelected) {
-  document.querySelectorAll('[data-platform-theme-option]').forEach((element) => {
-    element.addEventListener('click', (event) => {
-      const selectedThemeId = event.currentTarget?.getAttribute('data-platform-theme-option');
-      if (!selectedThemeId) return;
-      applyBackgroundTheme(selectedThemeId);
-      onSelected();
-    });
-  });
-}
-
-function applyFontTheme(fontTheme) {
-  const nextFontTheme = FONT_THEME_OPTIONS.some((option) => option.id === fontTheme) ? fontTheme : 'black';
-  const selectedTheme = FONT_THEME_OPTIONS.find((option) => option.id === nextFontTheme) ?? FONT_THEME_OPTIONS[0];
-  state.fontTheme = nextFontTheme;
-  document.body.setAttribute('data-font-theme', nextFontTheme);
-  document.body.style.setProperty('--text', selectedTheme.color);
-  document.body.style.setProperty('--text-subtle', hexToRgba(selectedTheme.color, 0.72));
-  try {
-    localStorage.setItem(FONT_THEME_STORAGE_KEY, nextFontTheme);
-  } catch {
-    // noop: storage can be unavailable in hardened browser contexts
-  }
 }
 
 function hexToRgba(hex, alpha) {
@@ -2772,7 +2038,14 @@ function renderWorkspaceShell(options) {
                 ${planLabel ? `<span class="header-plan-badge">Plano ${escapeHtml(planLabel)}</span>` : ''}
               </div>
             </a>
-            <button id="logout-btn" class="logout-btn" type="button">Logout</button>
+            <button id="logout-btn" class="logout-btn" type="button" aria-label="Sair da conta">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M10 17l5-5-5-5" />
+                <path d="M15 12H3" />
+                <path d="M14 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+              </svg>
+              <span>Sair</span>
+            </button>
           </div>
         </div>
       </header>
@@ -2817,16 +2090,6 @@ function renderWorkspaceShell(options) {
     });
   }
 
-  document.querySelectorAll('[data-font-theme-id]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const themeId = button.getAttribute('data-font-theme-id');
-      if (themeId) {
-        applyFontTheme(themeId);
-        void renderRoute();
-      }
-    });
-  });
-
   document.querySelectorAll('[data-locale-option]').forEach((button) => {
     button.addEventListener('click', () => {
       const locale = button.getAttribute('data-locale-option');
@@ -2849,10 +2112,23 @@ function formatClockLabel(date = new Date()) {
   });
 }
 
+function renderPlatformArtwork(platform, size = 32, extraClass = '') {
+  const requestedPlatform = String(platform ?? '').toLowerCase().trim();
+  const platformKey = CAMPAIGN_PLATFORM_ARTWORK[requestedPlatform] ? requestedPlatform : 'youtube';
+  const label = platformKey === 'youtube' ? 'YouTube' : platformKey === 'tiktok' ? 'TikTok' : 'Instagram';
+  const pixelSize = Math.max(16, Math.min(96, Number(size) || 32));
+  const className = ['platform-artwork', `platform-artwork-${platformKey}`, extraClass].filter(Boolean).join(' ');
+  return `
+    <span class="${escapeAttribute(className)}" style="--platform-artwork-size:${pixelSize}px" role="img" aria-label="${escapeAttribute(label)}" data-platform="${escapeAttribute(platformKey)}">
+      <img class="platform-artwork-image" src="${escapeAttribute(CAMPAIGN_PLATFORM_ARTWORK[platformKey])}" alt="" decoding="async" draggable="false" />
+    </span>
+  `;
+}
+
 function renderPlatformGlyph(platform, extraClass = '') {
-  const className = ['platform-glyph', extraClass].filter(Boolean).join(' ');
-  const size = String(extraClass).split(/\s+/).includes('small') ? 22 : 32;
-  return renderPlatformLogo3d(platform, size, className);
+  const classNames = String(extraClass ?? '').split(/\s+/).filter(Boolean);
+  const size = classNames.includes('small') ? 22 : 32;
+  return renderPlatformArtwork(platform, size, ['platform-glyph', ...classNames].join(' '));
 }
 
 function renderGoogleGlyph(extraClass = '') {
@@ -2866,99 +2142,6 @@ function renderGoogleGlyph(extraClass = '') {
         <path fill="#34a853" d="M24 48c6.5 0 12-2.1 15.9-5.8l-7.7-6c-2.2 1.5-5 2.3-8.2 2.3-6.3 0-11.6-4.2-13.5-9.9l-8 6.2C6.5 42.6 14.6 48 24 48z" />
       </svg>
     </span>
-  `;
-}
-
-function renderPmpBrandMark(idPrefix = 'pmp') {
-  const safePrefix = String(idPrefix ?? 'pmp').replace(/[^a-zA-Z0-9_-]/g, '') || 'pmp';
-  return `
-    <div class="pmp-logo-mark" aria-hidden="true">
-      <svg class="pmp-logo-svg" viewBox="0 0 100 100" role="img">
-        <defs>
-          <linearGradient id="${safePrefix}Ring" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#67e8f9" />
-            <stop offset="52%" stop-color="#22d3ee" />
-            <stop offset="100%" stop-color="#3b82f6" />
-          </linearGradient>
-          <linearGradient id="${safePrefix}Symbol" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#f8fafc" />
-            <stop offset="42%" stop-color="#67e8f9" />
-            <stop offset="100%" stop-color="#22d3ee" />
-          </linearGradient>
-          <linearGradient id="${safePrefix}Publish" x1="24%" y1="20%" x2="78%" y2="82%">
-            <stop offset="0%" stop-color="#22d3ee" />
-            <stop offset="55%" stop-color="#6366f1" />
-            <stop offset="100%" stop-color="#c084fc" />
-          </linearGradient>
-          <radialGradient id="${safePrefix}InnerGlow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="rgba(34,211,238,0.28)" />
-            <stop offset="62%" stop-color="rgba(59,130,246,0.05)" />
-            <stop offset="100%" stop-color="transparent" />
-          </radialGradient>
-          <filter id="${safePrefix}Glow" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="1.6" result="b" />
-            <feMerge>
-              <feMergeNode in="b" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-        <rect x="6" y="6" width="88" height="88" rx="24" fill="url(#${safePrefix}InnerGlow)" />
-        <rect class="pmp-logo-ring" x="8" y="8" width="84" height="84" rx="22" fill="none" stroke="url(#${safePrefix}Ring)" stroke-width="2.8" />
-        <g class="pmp-logo-network" stroke="url(#${safePrefix}Symbol)" stroke-width="2" fill="none" stroke-linecap="round">
-          <line x1="31" y1="29" x2="43" y2="42" />
-          <line x1="31" y1="71" x2="43" y2="58" />
-          <line x1="68" y1="50" x2="58" y2="50" />
-          <circle class="pmp-logo-node pmp-logo-node-youtube" cx="29" cy="27" r="4.2" fill="#ff1744" stroke="rgba(255,255,255,0.72)" stroke-width="1.2" />
-          <circle class="pmp-logo-node pmp-logo-node-tiktok" cx="72" cy="50" r="4.2" fill="#22d3ee" stroke="rgba(255,255,255,0.72)" stroke-width="1.2" />
-          <circle class="pmp-logo-node pmp-logo-node-instagram" cx="29" cy="73" r="4.2" fill="#d946ef" stroke="rgba(255,255,255,0.72)" stroke-width="1.2" />
-        </g>
-        <g class="pmp-logo-publish" filter="url(#${safePrefix}Glow)">
-          <circle cx="50" cy="50" r="17" fill="rgba(15,23,42,0.68)" stroke="url(#${safePrefix}Publish)" stroke-width="2.4" />
-          <path class="pmp-logo-play" d="M45 40.5L63 50L45 59.5Z" fill="url(#${safePrefix}Publish)" />
-          <path class="pmp-logo-upload" d="M50 68V77M44.5 72.5L50 77.5L55.5 72.5" stroke="url(#${safePrefix}Symbol)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-        </g>
-        <g class="pmp-logo-queue" stroke="url(#${safePrefix}Symbol)" stroke-width="1.7" stroke-linecap="round" opacity="0.82">
-          <line x1="39" y1="79" x2="44" y2="79" />
-          <line x1="48" y1="82" x2="53" y2="82" />
-          <line x1="57" y1="79" x2="62" y2="79" />
-        </g>
-      </svg>
-      <span class="pmp-logo-pulse" aria-hidden="true"></span>
-    </div>
-  `;
-}
-
-function renderPublicSaasNav(options = {}) {
-  const context = options.context === 'login' ? 'login' : 'landing';
-  const idPrefix = options.idPrefix ?? (context === 'login' ? 'loginPmp' : 'publicSaasPmp');
-  const base = context === 'login' ? '/' : '';
-  const loginActive = options.active === 'login';
-  const registerActive = options.active === 'register';
-  const registerLabel = 'Get started';
-
-  return `
-    <header class="public-nav public-saas-nav ${context === 'login' ? 'login-modern-site-nav' : ''}">
-      <a class="public-brand pmp-brand" href="/" data-link aria-label="Platform Multi Publisher">
-        ${renderPmpBrandMark(idPrefix)}
-        <div class="pmp-brand-text">
-          <span class="pmp-brand-kicker">PLATFORM</span>
-          <span class="pmp-brand-name">Multi Publisher</span>
-        </div>
-      </a>
-      <nav class="public-nav-links" aria-label="Menu principal">
-        <a href="${base}#recursos">Recursos</a>
-        <a href="${base}#como-funciona">Como funciona</a>
-        <a href="${base}#integracoes">Integrações</a>
-        <a href="${base}#seguranca">Segurança</a>
-        <a href="${base}#planos">Preços</a>
-        <a href="${base}#contato">Contato</a>
-      </nav>
-      <div class="public-nav-actions" data-no-i18n>
-        <a class="public-link" href="/login" data-link data-no-i18n ${loginActive ? 'aria-current="page"' : ''}>Login</a>
-        <a class="public-button" href="/login?mode=register" data-link data-no-i18n ${registerActive ? 'aria-current="page"' : ''}>${escapeHtml(registerLabel)}</a>
-      </div>
-    </header>
   `;
 }
 
@@ -3101,12 +2284,6 @@ function renderLoginPage(options = {}) {
     window.location.assign(result.body.redirectUrl);
   });
 
-  const loginFontThemeSelect = document.getElementById('login-font-theme-select');
-  loginFontThemeSelect?.addEventListener('change', (event) => {
-    applyFontTheme(event.target.value);
-    renderLoginPage({ ...options, mode });
-  });
-
   bindBackgroundPicker(() => {
     renderLoginPage({ ...options, mode });
   });
@@ -3150,6 +2327,10 @@ function renderMerchantLoginPage(options = {}) {
   const mode = options.mode === 'register' ? 'register' : 'login';
   const verifying = options.verifying === true;
   const initialSection = String(options.initialSection ?? '').replace(/[^a-z0-9_-]/gi, '');
+  if (!ensureMerchantLegalDocumentsForLogin(mode, initialSection)) {
+    return;
+  }
+  const accessFirst = initialSection === 'acesso' && options.accessFirst !== false;
   const draft = {
     fullName: String(options.draft?.fullName ?? ''),
     email: String(options.draft?.email ?? ''),
@@ -3158,10 +2339,54 @@ function renderMerchantLoginPage(options = {}) {
   const publicPlanOptions = mergePlanDisplayOptions();
   const planCardsHtml = publicPlanOptions.map((plan) => renderPublicPlanCard(plan)).join('');
   const errorHtml = options.error ? `<div class="merchant-alert" role="alert">${escapeHtml(options.error)}</div>` : '';
+  const query = parseCurrentQuery();
+  const resetToken = String(query.get('reset_token') ?? '').trim();
+  const authView = resetToken ? 'reset' : query.get('view') === 'forgot' ? 'forgot' : 'credentials';
+  const recoveryMessage = options.recoveryMessage
+    || (query.get('reset') === 'success' ? 'Senha atualizada com sucesso. Entre com sua nova senha.' : '');
+  const recoveryMessageHtml = recoveryMessage
+    ? `<div class="merchant-success" role="status">${escapeHtml(recoveryMessage)}</div>`
+    : '';
+  const authFormHtml = authView === 'forgot'
+    ? `
+      <form id="password-reset-request-form" class="merchant-form" novalidate>
+        <label><span>Email da conta</span><input name="email" type="email" required autocomplete="email" value="${escapeHtml(draft.email)}" placeholder="voce@empresa.com" /></label>
+        <button type="submit" class="merchant-primary">Enviar link seguro</button>
+        <button type="button" class="merchant-text-button" data-action="back-to-login">Voltar para o login</button>
+      </form>`
+    : authView === 'reset'
+      ? `
+        <form id="password-reset-confirm-form" class="merchant-form" novalidate>
+          <label><span>Nova senha</span><input name="newPassword" type="password" required autocomplete="new-password" placeholder="8 a 128 caracteres" minlength="8" maxlength="128" /></label>
+          <label><span>Confirmar nova senha</span><input name="confirmPassword" type="password" required autocomplete="new-password" placeholder="Repita a nova senha" minlength="8" maxlength="128" /></label>
+          <button type="submit" class="merchant-primary">Atualizar senha</button>
+          <button type="button" class="merchant-text-button" data-action="back-to-login">Cancelar e voltar</button>
+        </form>`
+      : `
+        <form id="login-modern-form" class="merchant-form" novalidate>
+          ${mode === 'register' ? `<label><span>Nome completo</span><input name="fullName" type="text" autocomplete="name" value="${escapeHtml(draft.fullName)}" placeholder="Seu nome" /></label>` : ''}
+          <label><span>Email</span><input name="email" type="email" required autocomplete="username" value="${escapeHtml(draft.email)}" placeholder="voce@empresa.com" /></label>
+          <label>
+            <span>Senha</span>
+            <div class="merchant-password-wrap">
+              <input name="password" type="password" required autocomplete="${mode === 'register' ? 'new-password' : 'current-password'}" value="${escapeHtml(draft.password)}" placeholder="${mode === 'register' ? 'minimo 6 caracteres' : 'sua senha'}" minlength="6" />
+              <button type="button" data-action="toggle-password" aria-label="Mostrar ou ocultar senha">ver</button>
+            </div>
+          </label>
+          ${mode === 'login' ? '<div class="merchant-form-meta"><button type="button" class="merchant-text-button" data-action="forgot-password">Esqueci minha senha</button></div>' : ''}
+          <button type="submit" class="merchant-primary">${mode === 'register' ? 'Criar conta' : 'Entrar no workspace'}</button>
+        </form>`;
+  const authFootnote = authView === 'forgot'
+    ? 'Por seguranca, a resposta sera a mesma mesmo que o email nao esteja cadastrado. O link expira em 30 minutos.'
+    : authView === 'reset'
+      ? 'Este link e individual, expira em 30 minutos e deixa de funcionar depois da alteracao.'
+      : mode === 'register'
+        ? 'Ao criar uma conta, voce concorda com os termos e politica de privacidade abaixo.'
+        : 'Se sua conta comecou pelo Google, use Google para restaurar o workspace correto.';
   const noticeHtml = renderUiNotice();
 
   root.innerHTML = `
-    <div class="merchant-login" data-initial-section="${escapeAttribute(initialSection)}" data-mode="${escapeAttribute(mode)}">
+    <div class="merchant-login" data-initial-section="${escapeAttribute(initialSection)}" data-access-first="${accessFirst ? 'true' : 'false'}" data-mode="${escapeAttribute(mode)}" data-auth-view="${escapeAttribute(authView)}">
       <header class="merchant-nav">
         <a class="merchant-brand" href="/" data-link aria-label="Platform Multi Publisher">
           <span class="merchant-brand-mark merchant-brand-mark-animated" aria-hidden="true">
@@ -3178,6 +2403,7 @@ function renderMerchantLoginPage(options = {}) {
           <a href="#terms">Termos</a>
           <a href="#privacy">Privacidade</a>
           <a href="#data-deletion">Exclusao</a>
+          <a href="#atendimento">Atendimento</a>
         </nav>
         <div class="merchant-nav-actions" aria-label="Acesso à conta">
           <button class="merchant-nav-cta merchant-nav-cta-secondary" type="button" data-auth-mode="login">
@@ -3212,9 +2438,9 @@ function renderMerchantLoginPage(options = {}) {
             </div>
             <div class="merchant-water"></div>
             <div class="merchant-copy">
-              <span>primeiro painel</span>
-              <h1>Publique videos em tres canais sem reconstruir a operacao.</h1>
-              <p>Campanhas, midia, destinos OAuth, fila, logs e revisao em um unico workspace.</p>
+              <span>publica&ccedil;&atilde;o multiplataforma</span>
+              <h1>Transforme cada v&iacute;deo em uma campanha pronta para crescer.</h1>
+              <p>O PMP centraliza m&iacute;dia, contas conectadas, agendamentos e desempenho em um s&oacute; lugar. Planeje, revise e publique no YouTube, TikTok e Instagram com uma opera&ccedil;&atilde;o clara, consistente e preparada para escalar.</p>
             </div>
           </div>
 
@@ -3261,11 +2487,13 @@ function renderMerchantLoginPage(options = {}) {
           <div class="merchant-login-card">
             ${noticeHtml}
             ${errorHtml}
+            ${recoveryMessageHtml}
             <header class="merchant-login-card-head">
-              <div>
+              <div class="merchant-login-default-heading">
                 <span>Conta PMP</span>
                 <h3>${mode === 'register' ? 'Comece sua operação' : 'Bem-vindo de volta'}</h3>
               </div>
+              ${authView !== 'credentials' ? `<div class="merchant-recovery-heading"><span>Recuperacao segura</span><h3>${authView === 'reset' ? 'Crie uma nova senha' : 'Recupere seu acesso'}</h3></div>` : ''}
               <span class="merchant-secure-badge"><i aria-hidden="true"></i> Ambiente seguro</span>
             </header>
             <div class="merchant-tabs" role="tablist">
@@ -3277,36 +2505,71 @@ function renderMerchantLoginPage(options = {}) {
               <span>Continuar com Google</span>
             </button>
             <div class="merchant-divider"><span>ou por email</span></div>
-            <form id="login-modern-form" class="merchant-form" novalidate>
-              ${mode === 'register' ? `
-                <label>
-                  <span>Nome completo</span>
-                  <input name="fullName" type="text" autocomplete="name" value="${escapeHtml(draft.fullName)}" placeholder="Seu nome" />
-                </label>
-              ` : ''}
-              <label>
-                <span>Email</span>
-                <input name="email" type="email" required autocomplete="username" value="${escapeHtml(draft.email)}" placeholder="voce@empresa.com" />
-              </label>
-              <label>
-                <span>Senha</span>
-                <div class="merchant-password-wrap">
-                  <input name="password" type="password" required autocomplete="${mode === 'register' ? 'new-password' : 'current-password'}" value="${escapeHtml(draft.password)}" placeholder="${mode === 'register' ? 'minimo 6 caracteres' : 'sua senha'}" minlength="6" />
-                  <button type="button" data-action="toggle-password" aria-label="Mostrar ou ocultar senha">ver</button>
-                </div>
-              </label>
-              <button type="submit" class="merchant-primary">${mode === 'register' ? 'Criar conta' : 'Entrar no workspace'}</button>
-            </form>
-            <p class="merchant-footnote">
-              ${mode === 'register'
-                ? 'Ao criar uma conta, voce concorda com os termos e politica de privacidade abaixo.'
-                : 'Se sua conta comecou pelo Google, use Google para restaurar o workspace correto.'}
-            </p>
+            ${authFormHtml}
+            <p class="merchant-footnote">${escapeHtml(authFootnote)}</p>
             <div class="merchant-auth-notes" aria-label="Informações de segurança">
               <span>Sessão protegida</span>
               <span>Google OAuth</span>
               <span>Controle de acesso</span>
             </div>
+          </div>
+        </section>
+
+        <section id="atendimento" class="merchant-section merchant-support-section">
+          <div class="merchant-section-head">
+            <div class="merchant-section-kicker">atendimento com protocolo</div>
+            <h2>Registre e acompanhe sua solicitacao.</h2>
+            <p>Use este canal para acesso, problemas tecnicos, cobranca, privacidade ou conta. Ao enviar, voce recebe um protocolo e uma chave privada de acompanhamento.</p>
+            <div class="merchant-support-promises" aria-label="Compromissos de atendimento">
+              <span>Protocolo imediato</span>
+              <span>Confirmacao por email</span>
+              <span>Acompanhamento protegido</span>
+            </div>
+          </div>
+          <div class="merchant-support-grid">
+            <article class="merchant-support-card">
+              <h3>Nova solicitacao</h3>
+              ${options.serviceRequestResult ? `
+                <div class="merchant-protocol-result" role="status">
+                  <span>Solicitacao registrada</span>
+                  <strong>${escapeHtml(options.serviceRequestResult.protocol)}</strong>
+                  <p>Guarde o protocolo. O link privado de acompanhamento tambem foi enviado para seu email.</p>
+                  <a href="${escapeAttribute(options.serviceRequestResult.trackingUrl)}">Acompanhar agora</a>
+                </div>
+              ` : `
+                <form id="merchant-support-form" class="merchant-form" novalidate>
+                  <div class="merchant-form-columns">
+                    <label><span>Nome</span><input name="requesterName" type="text" autocomplete="name" maxlength="120" placeholder="Seu nome" /></label>
+                    <label><span>Email</span><input name="email" type="email" autocomplete="email" required placeholder="voce@empresa.com" /></label>
+                  </div>
+                  <label>
+                    <span>Categoria</span>
+                    <select name="category" required>
+                      <option value="access">Acesso e senha</option>
+                      <option value="technical">Problema tecnico</option>
+                      <option value="billing">Cobranca e pagamentos</option>
+                      <option value="privacy">Privacidade e dados</option>
+                      <option value="account">Conta e plano</option>
+                      <option value="other">Outro assunto</option>
+                    </select>
+                  </label>
+                  <label><span>Assunto</span><input name="subject" type="text" required minlength="5" maxlength="140" placeholder="Resuma o que voce precisa" /></label>
+                  <label><span>Descricao</span><textarea name="description" required minlength="20" maxlength="4000" rows="5" placeholder="Explique o ocorrido, o resultado esperado e quando aconteceu."></textarea></label>
+                  <div class="merchant-form-feedback" data-support-feedback aria-live="polite"></div>
+                  <button type="submit" class="merchant-primary">Gerar protocolo</button>
+                </form>
+              `}
+            </article>
+            <article class="merchant-support-card merchant-tracking-card">
+              <h3>Acompanhar protocolo</h3>
+              <p>Informe o protocolo e a chave privada recebida por email.</p>
+              <form id="merchant-tracking-form" class="merchant-form" novalidate>
+                <label><span>Protocolo</span><input name="protocol" type="text" required value="${escapeHtml(query.get('protocol') ?? '')}" placeholder="PMP-AAAAMMDD-XXXXXXXXXXXX" /></label>
+                <label><span>Chave de acompanhamento</span><input name="key" type="password" required value="${escapeHtml(query.get('tracking_key') ?? '')}" placeholder="Chave privada" /></label>
+                <button type="submit" class="merchant-secondary-action">Consultar status</button>
+              </form>
+              <div class="merchant-tracking-result" data-tracking-result aria-live="polite"></div>
+            </article>
           </div>
         </section>
 
@@ -3342,6 +2605,7 @@ function renderMerchantLoginPage(options = {}) {
           <a href="/terms" data-link>Termos</a>
           <a href="/privacy" data-link>Privacidade</a>
           <a href="/data-deletion" data-link>Exclusao de dados</a>
+          <a href="/login#atendimento" data-link>Atendimento</a>
           <a href="/onboarding/plan" data-link>Planos</a>
         </nav>
       </footer>
@@ -3393,6 +2657,126 @@ function renderMerchantLoginPage(options = {}) {
     handleAuthenticatedNavigation(result.body?.user);
   });
 
+  document.querySelector('[data-action="forgot-password"]')?.addEventListener('click', () => {
+    navigate('/login?view=forgot#acesso', true);
+  });
+
+  document.querySelector('[data-action="back-to-login"]')?.addEventListener('click', () => {
+    navigate('/login#acesso', true);
+  });
+
+  const passwordResetRequestForm = document.getElementById('password-reset-request-form');
+  passwordResetRequestForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const data = new FormData(passwordResetRequestForm);
+    const email = String(data.get('email') ?? '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      renderMerchantLoginPage({ error: 'Informe um email valido.', mode: 'login', draft: { email }, initialSection: 'acesso' });
+      return;
+    }
+    const result = await api.requestPasswordReset(email);
+    if (!result.ok) {
+      renderMerchantLoginPage({ error: result.error, mode: 'login', draft: { email }, initialSection: 'acesso' });
+      return;
+    }
+    renderMerchantLoginPage({
+      mode: 'login',
+      draft: { email },
+      initialSection: 'acesso',
+      recoveryMessage: result.body?.message || 'Se a conta existir, o link sera enviado por email.',
+    });
+  });
+
+  const passwordResetConfirmForm = document.getElementById('password-reset-confirm-form');
+  passwordResetConfirmForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const data = new FormData(passwordResetConfirmForm);
+    const newPassword = String(data.get('newPassword') ?? '');
+    const confirmPassword = String(data.get('confirmPassword') ?? '');
+    if (newPassword.length < 8 || newPassword.length > 128) {
+      renderMerchantLoginPage({ error: 'A nova senha deve ter entre 8 e 128 caracteres.', mode: 'login', initialSection: 'acesso' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      renderMerchantLoginPage({ error: 'As senhas nao coincidem.', mode: 'login', initialSection: 'acesso' });
+      return;
+    }
+    const result = await api.confirmPasswordReset(resetToken, newPassword);
+    if (!result.ok) {
+      renderMerchantLoginPage({ error: result.error, mode: 'login', initialSection: 'acesso' });
+      return;
+    }
+    navigate('/login?reset=success#acesso', true);
+  });
+
+  const supportForm = document.getElementById('merchant-support-form');
+  supportForm?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const data = new FormData(supportForm);
+    const payload = {
+      requesterName: String(data.get('requesterName') ?? '').trim(),
+      email: String(data.get('email') ?? '').trim(),
+      category: String(data.get('category') ?? ''),
+      subject: String(data.get('subject') ?? '').trim(),
+      description: String(data.get('description') ?? '').trim(),
+    };
+    const feedback = supportForm.querySelector('[data-support-feedback]');
+    if (feedback) feedback.textContent = 'Registrando solicitacao...';
+    const result = await api.createServiceRequest(payload);
+    if (!result.ok) {
+      if (feedback) {
+        feedback.dataset.tone = 'error';
+        feedback.textContent = result.error;
+      }
+      return;
+    }
+    renderMerchantLoginPage({
+      mode,
+      initialSection: 'atendimento',
+      serviceRequestResult: {
+        ...result.body?.request,
+        trackingUrl: result.body?.trackingUrl,
+      },
+    });
+  });
+
+  const trackingForm = document.getElementById('merchant-tracking-form');
+  const submitTrackingForm = async () => {
+    if (!trackingForm) return;
+    const data = new FormData(trackingForm);
+    const protocol = String(data.get('protocol') ?? '').trim();
+    const key = String(data.get('key') ?? '').trim();
+    const output = document.querySelector('[data-tracking-result]');
+    if (!protocol || !key) {
+      if (output) output.innerHTML = '<div class="merchant-alert">Informe o protocolo e a chave privada.</div>';
+      return;
+    }
+    if (output) output.textContent = 'Consultando...';
+    const result = await api.trackServiceRequest(protocol, key);
+    if (!result.ok) {
+      if (output) output.innerHTML = `<div class="merchant-alert">${escapeHtml(result.error)}</div>`;
+      return;
+    }
+    const item = result.body?.request;
+    if (output && item) {
+      const statusLabels = { received: 'Recebida', in_review: 'Em analise', waiting_user: 'Aguardando voce', resolved: 'Resolvida', closed: 'Encerrada' };
+      output.innerHTML = `
+        <div class="merchant-protocol-result">
+          <span>${escapeHtml(statusLabels[item.status] || item.status)}</span>
+          <strong>${escapeHtml(item.protocol)}</strong>
+          <p>${escapeHtml(item.subject)}</p>
+          <small>Atualizada em ${escapeHtml(formatDate(item.updatedAt))}</small>
+        </div>`;
+    }
+  };
+  trackingForm?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    void submitTrackingForm();
+  });
+  if (query.get('protocol') && query.get('tracking_key')) {
+    void submitTrackingForm();
+  }
+
   document.querySelectorAll('[data-auth-mode]').forEach((button) => {
     button.addEventListener('click', () => {
       const nextMode = button.getAttribute('data-auth-mode') === 'register' ? 'register' : 'login';
@@ -3418,636 +2802,24 @@ function renderMerchantLoginPage(options = {}) {
     event.currentTarget.textContent = input.type === 'password' ? 'ver' : 'ocultar';
   });
 
-  if (initialSection) {
+  if (initialSection && initialSection !== 'acesso') {
     window.requestAnimationFrame(() => {
-      document.getElementById(initialSection)?.scrollIntoView({ block: 'start' });
+      const target = document.getElementById(initialSection);
+      if (!target) {
+        window.scrollTo(0, 0);
+        return;
+      }
+      const navHeight = document.querySelector('.merchant-nav')?.getBoundingClientRect().height ?? 0;
+      const targetTop = target.getBoundingClientRect().top + window.scrollY - navHeight;
+      window.scrollTo({ top: Math.max(0, targetTop), left: 0, behavior: 'auto' });
     });
+  } else {
+    window.scrollTo(0, 0);
   }
 
   bindUiNoticeDismiss();
 }
 
-function renderModernLoginPage(options = {}) {
-  const mode = options.mode === 'register' ? 'register' : 'login';
-  const verifying = options.verifying === true;
-  const draft = {
-    fullName: String(options.draft?.fullName ?? ''),
-    email: String(options.draft?.email ?? ''),
-    password: String(options.draft?.password ?? ''),
-  };
-  const neonNightTheme = BACKGROUND_THEME_OPTIONS.find((option) => option.id === 'platform-neon-night') ?? BACKGROUND_THEME_OPTIONS[0];
-  if (state.backgroundTheme !== neonNightTheme.id) {
-    applyBackgroundTheme(neonNightTheme.id);
-  }
-  const errorHtml = options.error ? `<div class="login-modern-alert" role="alert">⚠ ${escapeHtml(options.error)}</div>` : '';
-  const noticeHtml = renderUiNotice();
-  const loginNavHtml = renderPublicSaasNav({
-    context: 'login',
-    active: mode === 'register' ? 'register' : 'login',
-    idPrefix: 'loginHeaderPmp',
-  });
-
-  root.innerHTML = `
-    <div class="login-modern public-product-page public-saas-page login-with-public-nav" data-mode="${mode}">
-      <div class="login-modern-bg public-neon-bg" aria-hidden="true">
-        <div class="login-modern-orb login-modern-orb-1"></div>
-        <div class="login-modern-orb login-modern-orb-2"></div>
-        <div class="login-modern-orb login-modern-orb-3"></div>
-        <div class="login-modern-grid"></div>
-      </div>
-
-      ${loginNavHtml}
-
-      <aside class="login-modern-hero">
-        <div class="login-modern-hero-inner">
-          <div class="login-modern-brand login-modern-brand-compact">
-            <span class="login-modern-brand-orb" aria-hidden="true"></span>
-            <div class="login-modern-brand-text">
-              <span class="login-modern-kicker">ACESSO OPERACIONAL</span>
-              <span class="login-modern-name">Painel centralizado</span>
-            </div>
-          </div>
-
-          <h1 class="login-modern-headline">
-            One control room.<br/>
-            <span class="login-modern-headline-accent">Every platform.</span>
-          </h1>
-          <p class="login-modern-tagline">
-            Schedule, automate and publish to YouTube, TikTok and Instagram from a single dashboard built for creators who scale.
-          </p>
-
-          <div class="login-pmp-stack" id="login-pmp-stack" aria-hidden="false">
-            <div class="login-pmp-card" data-pmp-card="0">
-              <div class="login-pmp-letter">
-                <span class="login-pmp-char">P</span>
-                <span class="login-pmp-rest">latform</span>
-              </div>
-              <div class="login-pmp-body">
-                <strong>Publish anywhere</strong>
-                <small>YouTube, TikTok and Instagram from one cockpit</small>
-              </div>
-              <div class="login-pmp-glow" aria-hidden="true"></div>
-            </div>
-            <div class="login-pmp-card" data-pmp-card="1">
-              <div class="login-pmp-letter">
-                <span class="login-pmp-char">M</span>
-                <span class="login-pmp-rest">ulti</span>
-              </div>
-              <div class="login-pmp-body">
-                <strong>Multi-channel power</strong>
-                <small>Schedule patterns, playlists, smart auto-pick</small>
-              </div>
-              <div class="login-pmp-glow" aria-hidden="true"></div>
-            </div>
-            <div class="login-pmp-card" data-pmp-card="2">
-              <div class="login-pmp-letter">
-                <span class="login-pmp-char">P</span>
-                <span class="login-pmp-rest">ublisher</span>
-              </div>
-              <div class="login-pmp-body">
-                <strong>Pro-grade security</strong>
-                <small>OAuth tokens encrypted, HMAC sessions</small>
-              </div>
-              <div class="login-pmp-glow" aria-hidden="true"></div>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      <main class="login-modern-form-wrap">
-        <div class="login-modern-form-card">
-          ${noticeHtml}
-
-          <header class="login-modern-form-header">
-            <h2>${mode === 'register' ? 'Create your account' : 'Welcome back'}</h2>
-            <p>${mode === 'register' ? 'Start publishing in minutes — free forever for personal use.' : 'Sign in to manage your campaigns and connected accounts.'}</p>
-          </header>
-
-          <div class="login-modern-tabs" role="tablist">
-            <button type="button" role="tab" aria-selected="${mode === 'login'}" data-auth-mode="login" class="login-modern-tab ${mode === 'login' ? 'active' : ''}">Sign in</button>
-            <button type="button" role="tab" aria-selected="${mode === 'register'}" data-auth-mode="register" class="login-modern-tab ${mode === 'register' ? 'active' : ''}">Sign up</button>
-            <span class="login-modern-tab-indicator" data-side="${mode}"></span>
-          </div>
-
-          ${errorHtml}
-
-          <button id="google-auth-btn" type="button" class="login-modern-google">
-            <svg viewBox="0 0 18 18" width="18" height="18" aria-hidden="true">
-              <path fill="#EA4335" d="M9 3.48c1.69 0 2.85.73 3.5 1.34l2.56-2.5C13.46.89 11.43 0 9 0 5.48 0 2.44 2.02 1.96 4.96l2.95 2.3C5.6 5.04 7.13 3.48 9 3.48z"/>
-              <path fill="#34A853" d="M17.64 9.2c0-.74-.06-1.28-.19-1.84H9v3.34h4.96c-.1.83-.64 2.08-1.84 2.92l2.86 2.22c1.71-1.58 2.66-3.92 2.66-6.64z"/>
-              <path fill="#4A90E2" d="M4.91 10.74A5.43 5.43 0 0 1 4.61 9c0-.6.1-1.18.27-1.74L1.93 4.96A8.87 8.87 0 0 0 0 9c0 1.45.34 2.82.96 4.04l2.95-2.3z"/>
-              <path fill="#FBBC05" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.86-2.22c-.79.55-1.83.93-3.1.93-1.86 0-3.4-1.56-3.94-3.78L1.95 13.04C2.41 15.99 5.49 18 9 18z"/>
-            </svg>
-            <span>Continue with Google</span>
-          </button>
-
-          <div class="login-modern-divider">
-            <span>or with email</span>
-          </div>
-
-          <form id="login-modern-form" class="login-modern-form" novalidate>
-            ${mode === 'register' ? `
-              <label class="login-modern-field">
-                <span class="login-modern-label">Full name</span>
-                <input name="fullName" type="text" autocomplete="name" value="${escapeHtml(draft.fullName)}" placeholder="Your name" />
-              </label>
-            ` : ''}
-            <label class="login-modern-field">
-              <span class="login-modern-label">Email address</span>
-              <input name="email" type="email" required autocomplete="username" value="${escapeHtml(draft.email)}" placeholder="you@workspace.com" />
-            </label>
-            <label class="login-modern-field">
-              <span class="login-modern-label">
-                Password
-                ${mode === 'login' ? '<a href="#" class="login-modern-forgot" tabindex="-1">Forgot?</a>' : ''}
-              </span>
-              <div class="login-modern-password-wrap">
-                <input name="password" type="password" required autocomplete="${mode === 'register' ? 'new-password' : 'current-password'}" value="${escapeHtml(draft.password)}" placeholder="${mode === 'register' ? 'Min. 6 characters' : 'Your password'}" minlength="6" />
-                <button type="button" class="login-modern-password-toggle" data-action="toggle-password" aria-label="Toggle password visibility">
-                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                </button>
-              </div>
-            </label>
-
-            <button type="submit" class="login-modern-submit">
-              <span>${mode === 'register' ? 'Create account' : 'Sign in to workspace'}</span>
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <line x1="5" y1="12" x2="19" y2="12"/>
-                <polyline points="12 5 19 12 12 19"/>
-              </svg>
-            </button>
-          </form>
-
-          <p class="login-modern-footnote">
-            ${mode === 'register'
-              ? 'Ao criar uma conta, voce concorda com nossos <a href="/terms" data-link>Termos de Servico</a> e <a href="/privacy" data-link>Politica de Privacidade</a>.'
-              : 'Use Google sign-in if you started with Google to restore your workspace correctly.'}
-          </p>
-        </div>
-
-        <footer class="login-modern-trust">
-          <span><span class="login-modern-trust-dot"></span> Secure session · HMAC encrypted</span>
-        </footer>
-      </main>
-
-      ${verifying ? `
-        <div class="login-modern-loading" role="status" aria-live="polite">
-          <div class="login-modern-loading-card">
-            <div class="login-modern-loading-spinner"></div>
-            <strong>Authenticating</strong>
-            <span>Hydrating your operator session…</span>
-          </div>
-        </div>
-      ` : ''}
-    </div>
-  `;
-
-  const form = document.getElementById('login-modern-form');
-  form?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const data = new FormData(form);
-    const fullName = String(data.get('fullName') ?? '').trim();
-    const email = String(data.get('email') ?? '').trim();
-    const password = String(data.get('password') ?? '');
-
-    if (!email || !email.includes('@')) {
-      renderModernLoginPage({ error: 'Email must be valid.', mode, draft: { fullName, email, password } });
-      return;
-    }
-    if (!password) {
-      renderModernLoginPage({ error: 'Password is required.', mode, draft: { fullName, email, password } });
-      return;
-    }
-    if (mode === 'register' && password.length < 6) {
-      renderModernLoginPage({ error: 'Password must be at least 6 characters.', mode, draft: { fullName, email, password } });
-      return;
-    }
-
-    renderModernLoginPage({ mode, draft: { fullName, email, password }, verifying: true });
-    await new Promise((resolve) => window.requestAnimationFrame(() => window.setTimeout(resolve, 90)));
-
-    const result = mode === 'register'
-      ? await api.register({ email, password, fullName: fullName || undefined })
-      : await api.login({ email, password });
-
-    if (!result.ok) {
-      renderModernLoginPage({ error: result.error, mode, draft: { fullName, email, password } });
-      return;
-    }
-    handleAuthenticatedNavigation(result.body?.user);
-  });
-
-  document.querySelectorAll('[data-auth-mode]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const nextMode = button.getAttribute('data-auth-mode') === 'register' ? 'register' : 'login';
-      navigate(buildUrl('/login', nextMode === 'register' ? { mode: 'register' } : {}), true);
-    });
-  });
-
-  document.getElementById('google-auth-btn')?.addEventListener('click', async () => {
-    const result = await api.startAuthGoogleOauth();
-    if (!result.ok || !result.body?.redirectUrl) {
-      renderModernLoginPage({ error: result.error || 'Unable to start Google sign-in.', mode, draft });
-      return;
-    }
-    window.location.assign(result.body.redirectUrl);
-  });
-
-  document.querySelector('[data-action="toggle-password"]')?.addEventListener('click', (event) => {
-    const wrapper = event.currentTarget.closest('.login-modern-password-wrap');
-    const input = wrapper?.querySelector('input');
-    if (!input) return;
-    input.type = input.type === 'password' ? 'text' : 'password';
-    event.currentTarget.classList.toggle('active', input.type === 'text');
-  });
-
-  bindUiNoticeDismiss();
-  startLoginPmpRotation();
-  return;
-
-  // ===== Legacy code below kept for compatibility but unreachable =====
-  const oldStep = options.step === 2 ? 2 : 1;
-  const oldVerifying = options.verifying === true;
-  const selectedBackgroundTheme = neonNightTheme;
-  const title = verifying
-    ? 'Sync your secure workspace access'
-    : step === 1
-    ? (mode === 'register' ? 'Create your operator profile' : 'Identify your workspace access')
-    : (mode === 'register' ? 'Choose your secure access key' : 'Enter your secure access key');
-  const subtitle = verifying
-    ? 'We are validating session integrity, platform credentials and the operational cockpit before entry.'
-    : step === 1
-    ? (mode === 'register'
-      ? 'Start with your name and email, then finish the account setup with a password or Google.'
-      : 'Use your email or Google to enter the publishing workspace for YouTube and TikTok.')
-    : (mode === 'register'
-      ? 'Passwords need at least 6 characters. After registration, we take you to plan selection.'
-      : 'This keeps the internal dashboard and publishing tools locked to your operator session.');
-  const submitLabel = step === 1 ? 'Continue' : (mode === 'register' ? 'Create account' : 'Authenticate');
-  const helperNote = mode === 'register'
-    ? 'Already have an operator account?'
-    : 'Need to create an operator account?';
-  const helperAction = mode === 'register' ? 'Switch to sign in' : 'Create account';
-  const settingsPicker = settingsPickerHtml('login');
-  const combinedNoticeHtml = `${renderUiNotice()}${options.error ? `<div class="notice error">${escapeHtml(options.error)}</div>` : ''}`;
-  const liveClock = formatClockLabel();
-  const platformThemeStripHtml = renderPlatformThemeSelector({ compact: true });
-  const securitySignals = [
-    { label: 'Secure relay', value: 'Online' },
-    { label: 'Platforms ready', value: '3 nodes' },
-    { label: 'Scene', value: selectedBackgroundTheme.label },
-  ];
-  const signalCardsHtml = securitySignals.map((signal) => `
-    <article class="platform-login-signal-card">
-      <span class="platform-login-signal-label">${escapeHtml(signal.label)}</span>
-      <strong>${escapeHtml(signal.value)}</strong>
-    </article>
-  `).join('');
-  const credentialSummaryHtml = step === 2 ? `
-    <div class="platform-login-summary">
-      <span class="platform-login-summary-label">Operator</span>
-      <strong>${escapeHtml(draft.fullName || draft.email || 'Workspace access')}</strong>
-      ${draft.email ? `<span class="platform-login-summary-email">${escapeHtml(draft.email)}</span>` : ''}
-    </div>
-  ` : '';
-  const stepperHtml = [
-    { label: mode === 'register' ? 'Profile' : 'Identity', active: step === 1 && !verifying, done: step > 1 || verifying },
-    { label: mode === 'register' ? 'Password' : 'Cipher', active: step === 2 && !verifying, done: verifying },
-    { label: 'Workspace', active: verifying, done: false },
-  ].map((item, index) => `
-    <div class="platform-step ${item.active ? 'active' : ''} ${item.done ? 'done' : ''}">
-      <span class="platform-step-index">${String(index + 1).padStart(2, '0')}</span>
-      <span class="platform-step-label">${escapeHtml(item.label)}</span>
-    </div>
-  `).join('');
-  const verificationRows = [
-    ['Cipher integrity', 'Scanning secure envelope'],
-    ['Session token', 'Hydrating operator session'],
-    ['Channel tokens', 'Checking platform permissions'],
-    ['Workspace telemetry', 'Opening dashboard context'],
-  ].map(([label, detail], index) => `
-    <div class="platform-login-verify-item" style="animation-delay:${index * 120}ms;">
-      <span class="platform-login-verify-dot"></span>
-      <div>
-        <strong>${escapeHtml(label)}</strong>
-        <span>${escapeHtml(detail)}</span>
-      </div>
-    </div>
-  `).join('');
-  const verifyingHtml = `
-    <div class="platform-login-verify-panel">
-      <div class="platform-login-verify-beam" aria-hidden="true"></div>
-      <div class="platform-login-verify-copy">
-        <span class="platform-login-kicker">Step 3 of 3</span>
-        <h3>Syncing the platform workspace</h3>
-        <p>Hold on while we validate auth, load channel state and prepare the dashboard surfaces.</p>
-      </div>
-      <div class="platform-login-verify-list">
-        ${verificationRows}
-      </div>
-      <div class="platform-login-verify-progress">
-        <div class="platform-login-verify-progress-fill"></div>
-      </div>
-      <div class="platform-login-verify-meta">
-        <span>Secure relay online</span>
-        <strong>${escapeHtml(selectedBackgroundTheme.label)}</strong>
-      </div>
-    </div>
-  `;
-  const loginBackgroundGlobeHtml = `
-    <div class="platform-login-globe-field" aria-hidden="true">
-      <div class="platform-login-globe platform-login-globe-secondary">${buildOdGlobe()}</div>
-      <div class="platform-login-globe platform-login-globe-primary">${buildOdGlobe()}</div>
-      <div class="platform-login-globe-beam"></div>
-    </div>
-  `;
-
-  root.innerHTML = `
-    <div class="platform-login">
-      ${loginBackgroundGlobeHtml}
-      <section class="platform-login-stage">
-        <div class="platform-stage-frame" aria-hidden="true">
-          <span class="platform-stage-corner top-left"></span>
-          <span class="platform-stage-corner top-right"></span>
-          <span class="platform-stage-corner bottom-left"></span>
-          <span class="platform-stage-corner bottom-right"></span>
-        </div>
-        <div class="platform-login-stage-top">
-          <div>
-            <h1 class="platform-login-title">PLATFORM MULTI PUBLISHER</h1>
-            <p>One secure control room for YouTube and TikTok publishing.</p>
-          </div>
-          <div class="platform-login-stage-meta">
-            <div class="platform-login-live">
-              <span class="platform-login-live-dot"></span>
-              Secure relay online ${escapeHtml(liveClock)}
-            </div>
-            <div class="orbit-nodes-badge" aria-label="Platform sync nodes online">
-              <span class="orbit-nodes-badge-status">
-                <span class="orbit-status-dot"></span>
-                LIVE SYNC
-              </span>
-              <strong class="orbit-nodes-badge-count">02</strong>
-              <span class="orbit-nodes-badge-label">NODES ONLINE</span>
-              <div class="orbit-nodes-badge-bars" aria-hidden="true">
-                <span></span><span></span><span></span><span></span><span></span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="pmp-stage-wrapper">
-          <div class="pmp-badge-panel pmp-badge-stage" aria-label="Platform Multi Publisher" id="pmp-stage-badge">
-            <div class="pmp-badge-scan"></div>
-            <div class="pmp-badge-letter" data-expand="latform" data-pmp-index="0">
-              <span class="pmp-badge-char">P</span>
-              <span class="pmp-badge-rest">latform</span>
-            </div>
-            <div class="pmp-badge-letter" data-expand="ulti" data-pmp-index="1">
-              <span class="pmp-badge-char">M</span>
-              <span class="pmp-badge-rest">ulti</span>
-            </div>
-            <div class="pmp-badge-letter" data-expand="ublisher" data-pmp-index="2">
-              <span class="pmp-badge-char">P</span>
-              <span class="pmp-badge-rest">ublisher</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="platform-login-panel">
-        <div class="login-panel-v2">
-          <div class="login-panel-glow"></div>
-          <div class="login-panel-corner tl"></div>
-          <div class="login-panel-corner tr"></div>
-          <div class="login-panel-corner bl"></div>
-          <div class="login-panel-corner br"></div>
-        <div class="platform-login-card">
-          ${combinedNoticeHtml}
-          <div class="platform-login-card-top">
-            <div>
-              <div class="platform-login-card-label">Operator access</div>
-              <div class="platform-stepper">${stepperHtml}</div>
-            </div>
-            <div class="auth-mode-switch" role="tablist" aria-label="Authentication mode">
-              <button class="button ${mode === 'login' ? 'button-primary' : 'button-secondary'}" type="button" data-auth-mode="login">Sign in</button>
-              <button class="button ${mode === 'register' ? 'button-primary' : 'button-secondary'}" type="button" data-auth-mode="register">Create account</button>
-            </div>
-          </div>
-
-          <div class="platform-login-copy">
-            <div class="platform-login-kicker">Step ${verifying ? 3 : step} of 3</div>
-            <h2>${escapeHtml(title)}</h2>
-            <p>${escapeHtml(subtitle)}</p>
-          </div>
-
-          ${credentialSummaryHtml}
-
-          ${verifying ? verifyingHtml : step === 1 ? `
-            <form id="platform-login-identity-form" class="form-grid">
-              ${mode === 'register' ? `
-                <label>
-                  Full name
-                  <div class="platform-input-shell">
-                    <input name="fullName" type="text" autocomplete="name" value="${escapeHtml(draft.fullName)}" placeholder="How should we identify you?" />
-                  </div>
-                </label>
-              ` : ''}
-              <label>
-                Email
-                <div class="platform-input-shell">
-                  <input name="email" type="email" required autocomplete="username" value="${escapeHtml(draft.email)}" placeholder="operator@workspace.com" />
-                </div>
-              </label>
-              <div class="platform-login-action-row">
-                <button id="google-auth-btn" class="button button-ghost platform-button-ghost" type="button">
-                  ${renderGoogleGlyph('small')}
-                  Continue with Google
-                </button>
-                <button class="button button-primary platform-button-primary" type="submit">${escapeHtml(submitLabel)}</button>
-              </div>
-            </form>
-          ` : `
-            <form id="platform-login-auth-form" class="form-grid">
-              <label>
-                Password
-                <div class="platform-input-shell">
-                  <input name="password" type="password" required autocomplete="${mode === 'register' ? 'new-password' : 'current-password'}" value="${escapeHtml(draft.password)}" placeholder="${mode === 'register' ? 'Create a 6+ character password' : 'Enter your password'}" />
-                </div>
-              </label>
-              <div class="platform-login-action-row">
-                <button id="platform-login-back" class="button button-secondary" type="button">Back</button>
-                <button class="button button-primary platform-button-primary" type="submit">${escapeHtml(submitLabel)}</button>
-              </div>
-            </form>
-          `}
-
-          <div class="platform-login-footer">
-            <span>${escapeHtml(helperNote)}</span>
-            <button class="platform-link-button" type="button" data-auth-mode="${mode === 'register' ? 'login' : 'register'}">${escapeHtml(helperAction)}</button>
-          </div>
-          <p class="footnote">${mode === 'register'
-            ? 'After registration, the next step is selecting the account plan before entering the workspace.'
-            : 'Google-first accounts should continue with Google so we can restore the correct workspace session.'}</p>
-        </div>
-        </div>
-      </section>
-    </div>
-  `;
-
-  const identityForm = document.getElementById('platform-login-identity-form');
-  identityForm?.addEventListener('submit', (event) => {
-    event.preventDefault();
-    const data = new FormData(identityForm);
-    const nextDraft = {
-      fullName: String(data.get('fullName') ?? draft.fullName ?? '').trim(),
-      email: String(data.get('email') ?? draft.email ?? '').trim(),
-      password: '',
-    };
-
-    if (!nextDraft.email) {
-      renderRichLoginPage({ error: 'Email is required.', mode, step: 1, draft: nextDraft });
-      return;
-    }
-    if (!nextDraft.email.includes('@')) {
-      renderRichLoginPage({ error: 'Email must be valid.', mode, step: 1, draft: nextDraft });
-      return;
-    }
-    if (mode === 'register' && nextDraft.fullName && nextDraft.fullName.length < 2) {
-      renderRichLoginPage({ error: 'Full name must be at least 2 characters when provided.', mode, step: 1, draft: nextDraft });
-      return;
-    }
-
-    renderRichLoginPage({
-      mode,
-      step: 2,
-      draft: nextDraft,
-    });
-  });
-
-  const authForm = document.getElementById('platform-login-auth-form');
-  authForm?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const data = new FormData(authForm);
-    const password = String(data.get('password') ?? '').trim();
-    const nextDraft = {
-      ...draft,
-      password,
-    };
-
-    if (!password) {
-      renderRichLoginPage({ error: 'Password is required.', mode, step: 2, draft: nextDraft });
-      return;
-    }
-    if (mode === 'register' && password.length < 6) {
-      renderRichLoginPage({ error: 'Password must be at least 6 characters.', mode, step: 2, draft: nextDraft });
-      return;
-    }
-    renderRichLoginPage({
-      mode,
-      step: 2,
-      draft: nextDraft,
-      verifying: true,
-    });
-    await new Promise((resolve) => {
-      window.requestAnimationFrame(() => {
-        window.setTimeout(resolve, 90);
-      });
-    });
-
-    const result = mode === 'register'
-      ? await api.register({
-          email: draft.email,
-          password,
-          fullName: draft.fullName || undefined,
-        })
-      : await api.login({
-          email: draft.email,
-          password,
-        });
-
-    if (!result.ok) {
-      renderRichLoginPage({ error: result.error, mode, step: 2, draft: nextDraft });
-      return;
-    }
-    handleAuthenticatedNavigation(result.body?.user);
-  });
-
-  document.querySelectorAll('[data-auth-mode]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const nextMode = button.getAttribute('data-auth-mode') === 'register' ? 'register' : 'login';
-      navigate(buildUrl('/login', nextMode === 'register' ? { mode: 'register' } : {}), true);
-    });
-  });
-
-  const googleAuthButton = document.getElementById('google-auth-btn');
-  googleAuthButton?.addEventListener('click', async () => {
-    const result = await api.startAuthGoogleOauth();
-    if (!result.ok || !result.body?.redirectUrl) {
-      renderRichLoginPage({ error: result.error || 'Unable to start Google sign-in.', mode, step, draft });
-      return;
-    }
-    window.location.assign(result.body.redirectUrl);
-  });
-
-  const backButton = document.getElementById('platform-login-back');
-  backButton?.addEventListener('click', () => {
-    renderRichLoginPage({
-      mode,
-      step: 1,
-      draft: {
-        ...draft,
-        password: '',
-      },
-    });
-  });
-
-  const loginFontThemeSelect = document.getElementById('login-font-theme-select');
-  loginFontThemeSelect?.addEventListener('change', (event) => {
-    applyFontTheme(event.target.value);
-    renderRichLoginPage({ ...options, mode, step, draft });
-  });
-
-  bindBackgroundPicker(() => {
-    renderRichLoginPage({ ...options, mode, step, draft });
-  });
-  bindPlatformThemePicker(() => {
-    renderRichLoginPage({ ...options, mode, step, draft, verifying: false });
-  });
-  bindUiNoticeDismiss();
-  startPmpAutoRotation();
-}
-
-let pmpRotationTimer = null;
-
-function startPmpAutoRotation() {
-  if (pmpRotationTimer) {
-    clearInterval(pmpRotationTimer);
-    pmpRotationTimer = null;
-  }
-  const badge = document.getElementById('pmp-stage-badge');
-  if (!badge) return;
-  const letters = Array.from(badge.querySelectorAll('.pmp-badge-letter'));
-  if (letters.length === 0) return;
-
-  let currentIndex = -1;
-  const setActive = (index) => {
-    letters.forEach((letter, i) => {
-      letter.classList.toggle('pmp-auto-open', i === index);
-    });
-  };
-
-  const advance = () => {
-    currentIndex = (currentIndex + 1) % letters.length;
-    setActive(currentIndex);
-  };
-
-  advance();
-  pmpRotationTimer = setInterval(advance, 5000);
-}
 
 function animatePlaylistCockpit() {
   const cockpit = document.getElementById('playlist-cockpit');
@@ -4117,49 +2889,6 @@ function animatePlaylistCockpit() {
   }
 }
 
-let loginPmpRotationTimer = null;
-
-function startLoginPmpRotation() {
-  if (loginPmpRotationTimer) {
-    clearInterval(loginPmpRotationTimer);
-    loginPmpRotationTimer = null;
-  }
-  const stack = document.getElementById('login-pmp-stack');
-  if (!stack) return;
-  const cards = Array.from(stack.querySelectorAll('.login-pmp-card'));
-  if (cards.length === 0) return;
-
-  let currentIndex = -1;
-  const setActive = (index) => {
-    cards.forEach((card, i) => {
-      card.classList.toggle('login-pmp-open', i === index);
-    });
-  };
-
-  const advance = () => {
-    currentIndex = (currentIndex + 1) % cards.length;
-    setActive(currentIndex);
-  };
-
-  advance();
-  loginPmpRotationTimer = setInterval(advance, 3000);
-
-  cards.forEach((card, i) => {
-    card.addEventListener('mouseenter', () => {
-      if (loginPmpRotationTimer) {
-        clearInterval(loginPmpRotationTimer);
-        loginPmpRotationTimer = null;
-      }
-      currentIndex = i;
-      setActive(i);
-    });
-    card.addEventListener('mouseleave', () => {
-      if (!loginPmpRotationTimer) {
-        loginPmpRotationTimer = setInterval(advance, 3000);
-      }
-    });
-  });
-}
 
 function handleAuthenticatedNavigation(user) {
   state.me = user ?? null;
@@ -4171,16 +2900,6 @@ function handleAuthenticatedNavigation(user) {
   navigate(user.needsPlanSelection ? '/onboarding/plan' : '/workspace/dashboard', true);
 }
 
-async function loadPublicPlanOptions() {
-  try {
-    const plansResult = await api.listPlans();
-    const apiPlans = plansResult.ok ? (plansResult.body?.plans ?? []) : [];
-    return mergePlanDisplayOptions(apiPlans);
-  } catch {
-    return mergePlanDisplayOptions();
-  }
-}
-
 function renderPublicPlanCard(plan) {
   const planId = normalizePlanCode(plan.id);
   const isFeatured = planId === 'PRO';
@@ -4188,7 +2907,7 @@ function renderPublicPlanCard(plan) {
   const platforms = getPlanAllowedPlatforms(plan);
   const platformIcons = platforms.map((platform) => `
     <span class="public-plan-platform-icon" title="${escapeAttribute(PLAN_PLATFORM_LABELS[platform] ?? platform)}">
-      ${renderAnimatedLogoByPlatform(platform, 30) || renderPlatformGlyph(platform, 'small')}
+      ${renderPlatformArtwork(platform, 30) || renderPlatformGlyph(platform, 'small')}
     </span>
   `).join('');
   const platformNames = getPlanPlatformSummary(plan);
@@ -4346,198 +3065,69 @@ function renderWorkspacePlanCard(option, account) {
   `;
 }
 
-async function legacyRemovedSettingsPage() {
-  await ensureAccountPlan();
-  const growthAccountsResult = await api.accounts().catch(() => null);
-  if (growthAccountsResult?.ok && Array.isArray(growthAccountsResult.body?.accounts)) {
-    state.growthConnectedAccounts = growthAccountsResult.body.accounts;
-  }
-  const account = state.account;
-  const planId = getCurrentAccountPlanId();
-  const planConfig = getPlanVisualConfig(planId);
-  const selectedTheme = getSelectedBackgroundTheme();
-  const selectedFont = FONT_THEME_OPTIONS.find((option) => option.id === state.fontTheme) ?? FONT_THEME_OPTIONS[0];
-  const tokenCount = account?.tokens ?? 0;
+function renderWorkspaceServiceRequestsPanel(requests = []) {
+  const statusLabels = { received: 'Recebida', in_review: 'Em analise', waiting_user: 'Aguardando voce', resolved: 'Resolvida', closed: 'Encerrada' };
+  const recentHtml = requests.length > 0
+    ? requests.slice(0, 5).map((item) => `
+      <li>
+        <span><strong>${escapeHtml(item.protocol)}</strong><small>${escapeHtml(item.subject)}</small></span>
+        <span class="pill info">${escapeHtml(statusLabels[item.status] || item.status)}</span>
+      </li>`).join('')
+    : '<li class="muted">Nenhuma solicitacao registrada nesta conta.</li>';
 
-  renderWorkspaceShell({
-    title: 'Configurações',
-    subtitle: 'Controle visual, idioma, perfil e preferências da plataforma.',
-    contentHtml: `
-      <section class="settings-hub-hero card">
-        <div class="settings-hub-hero-copy">
-          <span class="settings-hub-kicker">Centro de controle</span>
-          <h2>Preferências da plataforma</h2>
-          <p class="muted">${escapeHtml(planConfig.summary)}</p>
-          <div class="settings-hub-meta-row">
-            <span class="pill ${escapeHtml(planConfig.tone)}">Plano ${escapeHtml(account?.planLabel ?? planConfig.label)}</span>
-            <span class="pill info">${formatNumber(tokenCount)} tokens</span>
-            <span class="pill info">${escapeHtml(state.locale)}</span>
-          </div>
-        </div>
-        <div
-          class="settings-hub-visual"
-          style="--background-preview:${escapeAttribute(selectedTheme.pageBackground)}; --preset-accent:${escapeAttribute(selectedTheme.primary)};"
-        >
-          ${renderSettingsMark('PMP', 'processing', 'settings-hero-mark')}
-          <strong>${escapeHtml(selectedTheme.label)}</strong>
-          <small>${escapeHtml(planConfig.label)} · ${escapeHtml(selectedFont.label)}</small>
-        </div>
-      </section>
-
-      <section class="settings-hub-grid">
-        <a class="settings-hub-card settings-hub-link-card" data-link href="/workspace/perfil">
-          <span class="settings-hub-card-icon">${renderSettingsMark('EU', 'success', 'settings-card-mark')}</span>
-          <span class="settings-hub-card-copy">
-            <strong>Painel do perfil</strong>
-            <small>Dados da conta, plano ativo, tokens e preferências persistidas.</small>
-          </span>
-        </a>
-
-        <a class="settings-hub-card settings-hub-link-card settings-hub-link-card-accounts" data-link href="/workspace/accounts">
-          <span class="settings-hub-card-icon">${renderSettingsMark('ACC', 'info', 'settings-card-mark')}</span>
-          <span class="settings-hub-card-copy">
-            <strong>Contas conectadas</strong>
-            <small>Conectar plataformas, revisar canais e resolver reconexoes.</small>
-          </span>
-        </a>
-
+  return `
+    <section class="settings-hub-section settings-service-requests" aria-label="Central de solicitacoes">
+      <div class="settings-hub-section-head">
+        <span class="settings-hub-kicker">Atendimento</span>
+        <h3>Solicitacoes e protocolos</h3>
+        <p class="muted">Registre uma demanda e acompanhe o historico associado ao seu email da conta.</p>
+      </div>
+      <div class="settings-preference-grid">
         <article class="settings-hub-card">
-          <span class="settings-hub-card-icon">${renderSettingsMark('IDI', 'info', 'settings-card-mark')}</span>
-          <div class="settings-hub-card-copy">
-            <strong>Idioma da plataforma</strong>
-            <small>Alterna todos os textos visíveis, labels, titles e aria-labels entre pt-BR e en.</small>
-          </div>
-          <div class="font-theme-grid font-theme-grid-compact language-grid language-grid-wide">
-            ${renderLanguageOptionButtons()}
-          </div>
-        </article>
-
-        <article class="settings-hub-card settings-hub-card-wide">
           <div class="settings-hub-card-head">
-            <span class="settings-hub-card-icon">${renderSettingsMark('BG', 'processing', 'settings-card-mark')}</span>
-            <span class="settings-hub-card-copy">
-              <strong>Backgrounds do seu plano</strong>
-              <small>Cada plano adiciona 4 sets; upgrades mantem os backgrounds dos planos anteriores.</small>
-            </span>
+            <span class="settings-hub-card-icon">${renderSettingsMark('NEW', 'processing', 'settings-card-mark')}</span>
+            <span class="settings-hub-card-copy"><strong>Nova solicitacao</strong><small>O protocolo e gerado imediatamente.</small></span>
           </div>
-          <div class="background-grid background-grid-plan">
-            ${renderPlanBackgroundCards(planId)}
-          </div>
+          <form id="workspace-service-request-form" class="form-grid" novalidate>
+            <label>Categoria<select name="category" required><option value="technical">Problema tecnico</option><option value="billing">Cobranca e pagamentos</option><option value="privacy">Privacidade e dados</option><option value="account">Conta e plano</option><option value="access">Acesso e senha</option><option value="other">Outro assunto</option></select></label>
+            <label>Assunto<input name="subject" required minlength="5" maxlength="140" placeholder="Resumo da solicitacao" /></label>
+            <label>Descricao<textarea name="description" required minlength="20" maxlength="4000" rows="4" placeholder="Explique o que aconteceu e o resultado esperado."></textarea></label>
+            <div class="notice" data-workspace-request-feedback hidden></div>
+            <button class="button button-primary" type="submit">Gerar protocolo</button>
+          </form>
         </article>
-
         <article class="settings-hub-card">
-          <span class="settings-hub-card-icon">${renderSettingsMark('TXT', 'success', 'settings-card-mark')}</span>
-          <div class="settings-hub-card-copy">
-            <strong>Cor do texto</strong>
-            <small>Ajusta o tom principal dos textos de interface sem mudar o layout.</small>
+          <div class="settings-hub-card-head">
+            <span class="settings-hub-card-icon">${renderSettingsMark('FILA', 'info', 'settings-card-mark')}</span>
+            <span class="settings-hub-card-copy"><strong>Protocolos recentes</strong><small>Ultimas cinco solicitacoes da conta.</small></span>
           </div>
-          <div class="font-theme-grid font-theme-grid-compact">
-            ${renderFontThemeButtons()}
-          </div>
+          <ul class="settings-request-list">${recentHtml}</ul>
         </article>
-
-        <article class="settings-hub-card">
-          <span class="settings-hub-card-icon">${renderSettingsMark('TOK', 'warning', 'settings-card-mark')}</span>
-          <div class="settings-hub-card-copy">
-            <strong>Plano e faturamento</strong>
-            <small>Gerencie upgrade, downgrade e compra de tokens avulsos.</small>
-          </div>
-          <a class="button button-secondary" data-link href="/workspace/planos">Abrir planos</a>
-        </article>
-      </section>
-
-      <section class="growth-module growth-settings-merged settings-growth-compact" aria-label="Funcoes Growth migradas para Configuracoes PMP">
-        ${renderGrowthSettingsPanel({ merged: true, compact: true })}
-      </section>
-    `,
-  });
-  bindGrowthInteractions();
+      </div>
+    </section>`;
 }
 
-async function legacyRemovedProfilePage() {
-  await ensureAccountPlan();
-  const account = state.account;
-  const selectedTheme = getSelectedBackgroundTheme();
-  const selectedFont = FONT_THEME_OPTIONS.find((option) => option.id === state.fontTheme) ?? FONT_THEME_OPTIONS[0];
-  const planConfig = getPlanVisualConfig();
-  const displayName = state.me?.fullName || state.me?.name || 'Operador';
-  const email = state.me?.email || '-';
-
-  renderWorkspaceShell({
-    title: 'Perfil',
-    subtitle: 'Conta, plano, tokens e preferências da plataforma.',
-    actionsHtml: '<a class="button button-secondary" data-link href="/workspace/configuracoes">Configurações</a>',
-    contentHtml: `
-      <section class="settings-profile-layout">
-        <article class="card settings-profile-card">
-          <div class="settings-profile-avatar" aria-hidden="true">
-            ${renderSettingsMark('EU', 'success', 'settings-profile-avatar-mark')}
-          </div>
-          <div class="settings-profile-copy">
-            <span class="settings-hub-kicker">Perfil</span>
-            <h2>${escapeHtml(displayName)}</h2>
-            <p class="muted">${escapeHtml(email)}</p>
-          </div>
-          <div class="settings-profile-stats">
-            <div>
-              <span>Plano</span>
-              <strong>${escapeHtml(account?.planLabel ?? planConfig.label)}</strong>
-            </div>
-            <div>
-              <span>Tokens</span>
-              <strong>${formatNumber(account?.tokens ?? 0)}</strong>
-            </div>
-            <div>
-              <span>Idioma</span>
-              <strong>${escapeHtml(state.locale)}</strong>
-            </div>
-          </div>
-        </article>
-
-        <article class="card settings-profile-panel">
-          <div class="settings-hub-card-head">
-            <span class="settings-hub-card-icon">${renderSettingsMark('IDI', 'info', 'settings-card-mark')}</span>
-            <span class="settings-hub-card-copy">
-              <strong>Idioma</strong>
-              <small>Escolha o idioma da interface da plataforma.</small>
-            </span>
-          </div>
-          <div class="font-theme-grid font-theme-grid-compact language-grid language-grid-wide">
-            ${renderLanguageOptionButtons()}
-          </div>
-        </article>
-
-        <article class="card settings-profile-panel">
-          <div class="settings-hub-card-head">
-            <span class="settings-hub-card-icon">${renderSettingsMark('VIS', 'processing', 'settings-card-mark')}</span>
-            <span class="settings-hub-card-copy">
-              <strong>Aparência atual</strong>
-              <small>${escapeHtml(selectedTheme.label)} · ${escapeHtml(selectedFont.label)}</small>
-            </span>
-          </div>
-          <div class="settings-current-visual" style="--background-preview:${escapeAttribute(selectedTheme.pageBackground)}; --preset-accent:${escapeAttribute(selectedTheme.primary)};">
-            <span></span>
-            <strong>${escapeHtml(selectedTheme.label)}</strong>
-          </div>
-          <a class="button button-secondary" data-link href="/workspace/configuracoes">Editar aparência</a>
-        </article>
-
-        <article class="card settings-profile-panel">
-          <div class="settings-hub-card-head">
-            <span class="settings-hub-card-icon">${renderSettingsMark('RES', 'success', 'settings-card-mark')}</span>
-            <span class="settings-hub-card-copy">
-              <strong>Preferências da plataforma</strong>
-              <small>Configurações visuais salvas neste navegador.</small>
-            </span>
-          </div>
-          <ul class="settings-profile-list">
-            <li><span>Background</span><strong>${escapeHtml(selectedTheme.label)}</strong></li>
-            <li><span>Cor do texto</span><strong>${escapeHtml(selectedFont.label)}</strong></li>
-            <li><span>Plano visual</span><strong>${escapeHtml(planConfig.label)}</strong></li>
-          </ul>
-        </article>
-      </section>
-    `,
+function bindWorkspaceServiceRequests() {
+  const form = document.getElementById('workspace-service-request-form');
+  form?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const data = new FormData(form);
+    const feedback = form.querySelector('[data-workspace-request-feedback]');
+    const result = await api.createAuthenticatedServiceRequest({
+      category: String(data.get('category') ?? ''),
+      subject: String(data.get('subject') ?? '').trim(),
+      description: String(data.get('description') ?? '').trim(),
+    });
+    if (!result.ok) {
+      if (feedback) {
+        feedback.hidden = false;
+        feedback.className = 'notice error';
+        feedback.textContent = result.error;
+      }
+      return;
+    }
+    state.uiNotice = { tone: 'success', message: `Solicitacao ${result.body?.request?.protocol} registrada com sucesso.` };
+    await renderSettingsPage();
   });
 }
 
@@ -4552,9 +3142,12 @@ async function renderSettingsPage() {
   const planId = getCurrentAccountPlanId();
   const planConfig = getPlanVisualConfig(planId);
   const selectedTheme = getSelectedBackgroundTheme();
-  const selectedFont = FONT_THEME_OPTIONS.find((option) => option.id === state.fontTheme) ?? FONT_THEME_OPTIONS[0];
   const tokenCount = account?.tokens ?? 0;
   const connectedAccountsCount = state.growthConnectedAccounts.filter((item) => item.status === 'connected').length;
+  const serviceRequestsResult = await api.serviceRequests().catch(() => null);
+  const serviceRequests = serviceRequestsResult?.ok && Array.isArray(serviceRequestsResult.body?.requests)
+    ? serviceRequestsResult.body.requests
+    : [];
 
   renderWorkspaceShell({
     title: 'Configuracoes',
@@ -4578,7 +3171,7 @@ async function renderSettingsPage() {
         >
           ${renderSettingsMark('PMP', 'processing', 'settings-hero-mark')}
           <strong>${escapeHtml(selectedTheme.label)}</strong>
-          <small>${escapeHtml(planConfig.label)} / ${escapeHtml(selectedFont.label)}</small>
+          <small>${escapeHtml(planConfig.label)} · contraste automático</small>
         </div>
       </section>
 
@@ -4634,26 +3227,18 @@ async function renderSettingsPage() {
             </div>
           </article>
 
-          <article class="settings-hub-card">
-            <div class="settings-hub-card-head">
-              <span class="settings-hub-card-icon">${renderSettingsMark('TXT', 'success', 'settings-card-mark')}</span>
-              <span class="settings-hub-card-copy">
-                <strong>Cor do texto</strong>
-                <small>Ajusta legibilidade sem mudar a estrutura do workspace.</small>
-              </span>
-            </div>
-            <div class="font-theme-grid font-theme-grid-compact">
-              ${renderFontThemeButtons()}
-            </div>
-          </article>
-
           <article class="settings-hub-card settings-hub-card-wide">
             <div class="settings-hub-card-head">
               <span class="settings-hub-card-icon">${renderSettingsMark('BG', 'processing', 'settings-card-mark')}</span>
               <span class="settings-hub-card-copy">
-                <strong>Backgrounds do seu plano</strong>
-                <small>Cada plano adiciona sets visuais; upgrades preservam os anteriores.</small>
+                <strong>Ambientes visuais PMP</strong>
+                <small>Cada conjunto coordena background, superfícies, textos, botões e gráficos.</small>
               </span>
+            </div>
+            <div class="theme-access-note ${isPaidVisualPlan(planId) ? 'is-unlocked' : 'is-locked'}">
+              ${isPaidVisualPlan(planId)
+                ? `<span>${renderSettingsMark('OK', 'success', 'theme-access-mark')}</span><div><strong>Seis ambientes liberados</strong><small>Seu plano permite alternar livremente entre todos os conjuntos PMP.</small></div>`
+                : `<span>${renderSettingsMark('PRO', 'warning', 'theme-access-mark')}</span><div><strong>PMP Essencial ativo</strong><small>Os seis ambientes abaixo são liberados ao assinar qualquer plano pago.</small></div><a class="button button-secondary" data-link href="/workspace/planos">Ver planos</a>`}
             </div>
             <div class="background-grid background-grid-plan">
               ${renderPlanBackgroundCards(planId)}
@@ -4666,10 +3251,13 @@ async function renderSettingsPage() {
         ${renderGrowthSettingsPanel({ merged: true, compact: true })}
       </section>
 
+      ${renderWorkspaceServiceRequestsPanel(serviceRequests)}
+
       ${renderAccountDeletionPanel()}
     `,
   });
   bindGrowthInteractions();
+  bindWorkspaceServiceRequests();
   bindAccountDeletionRequest();
 }
 
@@ -4682,7 +3270,6 @@ async function renderProfilePage() {
 
   const account = state.account;
   const selectedTheme = getSelectedBackgroundTheme();
-  const selectedFont = FONT_THEME_OPTIONS.find((option) => option.id === state.fontTheme) ?? FONT_THEME_OPTIONS[0];
   const planConfig = getPlanVisualConfig();
   const displayName = state.me?.fullName || state.me?.name || 'Operador';
   const email = state.me?.email || '-';
@@ -4745,7 +3332,7 @@ async function renderProfilePage() {
             <span class="settings-hub-card-icon">${renderSettingsMark('VIS', 'processing', 'settings-card-mark')}</span>
             <span class="settings-hub-card-copy">
               <strong>Aparencia atual</strong>
-              <small>${escapeHtml(selectedTheme.label)} / ${escapeHtml(selectedFont.label)}</small>
+              <small>${escapeHtml(selectedTheme.label)} · tipografia coordenada</small>
             </span>
           </div>
           <div class="settings-current-visual" style="--background-preview:${escapeAttribute(selectedTheme.pageBackground)}; --preset-accent:${escapeAttribute(selectedTheme.primary)};">
@@ -4765,7 +3352,7 @@ async function renderProfilePage() {
           <ul class="settings-profile-list">
             <li><span>Idioma</span><strong>${escapeHtml(state.locale)}</strong></li>
             <li><span>Background</span><strong>${escapeHtml(selectedTheme.label)}</strong></li>
-            <li><span>Cor do texto</span><strong>${escapeHtml(selectedFont.label)}</strong></li>
+            <li><span>Legibilidade</span><strong>Automática</strong></li>
           </ul>
         </article>
       </section>
@@ -5033,8 +3620,20 @@ function bindBackgroundPicker(onSelected) {
     element.addEventListener('click', (event) => {
       const selectedThemeId = event.currentTarget?.getAttribute('data-background-theme-option');
       if (!selectedThemeId) return;
+      if (!isBackgroundThemeAvailableForPlan(selectedThemeId)) {
+        setUiNotice('info', 'Tema disponível nos planos pagos', 'Assine qualquer plano para liberar os seis ambientes visuais PMP.');
+        navigate('/workspace/planos');
+        return;
+      }
       applyBackgroundTheme(selectedThemeId);
       onSelected();
+    });
+  });
+
+  document.querySelectorAll('[data-theme-locked]').forEach((element) => {
+    element.addEventListener('click', () => {
+      setUiNotice('info', 'Personalização premium', 'Qualquer plano pago libera os seis ambientes completos, com contraste automático.');
+      navigate('/workspace/planos');
     });
   });
 }
@@ -5131,7 +3730,7 @@ function attachGlobalNavigation() {
   });
 }
 
-const LEGAL_LAST_UPDATED = 'May 2, 2026';
+const LEGAL_LAST_UPDATED = '4 de setembro de 2026';
 const LEGAL_DOCUMENT_PATHS = Object.freeze({
   privacy: '/privacy',
   terms: '/terms',
@@ -5142,14 +3741,14 @@ function getLegalPagePresentation(activePage, title, subtitle) {
   const base = {
     title,
     subtitle,
-    eyebrow: 'Documentos legais',
-    badge: 'Conformidade operacional',
-    summary: 'Regras claras para uma operacao de video com contas autorizadas, midia, campanhas, filas e publicacoes em plataformas de terceiros.',
+    eyebrow: 'Documentos jurídicos',
+    badge: 'Conformidade e transparência',
+    summary: 'Regras claras para uma operação de vídeo com contas autorizadas, mídia, campanhas, filas e publicações em plataformas de terceiros.',
     accent: 'cyan',
     stats: [
-      ['OAuth', 'Conexao autorizada pelo usuario'],
-      ['Tokens', 'Protecao e controle de acesso'],
-      ['Revogacao', 'Usuario pode desconectar contas'],
+      ['OAuth', 'Conexão autorizada pelo usuário'],
+      ['Tokens', 'Proteção e controle de acesso'],
+      ['Revogação', 'Usuário pode desconectar contas'],
     ],
   };
 
@@ -5157,15 +3756,15 @@ function getLegalPagePresentation(activePage, title, subtitle) {
     return {
       ...base,
       eyebrow: 'Privacidade e dados',
-      badge: 'Dados, APIs e retencao',
-      title: 'Politica de Privacidade',
-      ptTitle: 'Politica de Privacidade',
-      summary: 'Explica quais dados sao coletados, por que sao usados, como sao protegidos e como usuarios podem solicitar acesso, correcao, exclusao ou exportacao.',
+      badge: 'Dados, APIs e retenção',
+      title: 'Política de Privacidade',
+      ptTitle: 'Política de Privacidade',
+      summary: 'Explica quais dados são tratados, por que são necessários, como são protegidos e como o titular pode exercer seus direitos.',
       accent: 'cyan',
       stats: [
-        ['90 dias', 'Retencao apos pedido de exclusao, salvo obrigacao maior'],
-        ['OAuth', 'YouTube, TikTok e Instagram autorizados pelo usuario'],
-        ['Sem ads', 'Dados de TikTok nao sao vendidos nem usados para anuncios'],
+        ['30 dias', 'Eliminação ou anonimização após a confirmação do pedido'],
+        ['OAuth', 'YouTube, TikTok e Instagram autorizados pelo usuário'],
+        ['Sem anúncios', 'Dados das plataformas não são vendidos para publicidade'],
       ],
     };
   }
@@ -5175,30 +3774,30 @@ function getLegalPagePresentation(activePage, title, subtitle) {
       ...base,
       eyebrow: 'Termos de uso',
       badge: 'Responsabilidades e limites',
-      title: 'Termos de Servico',
-      ptTitle: 'Termos de Servico',
-      summary: 'Define regras de uso, autorizacoes, responsabilidades por conteudo, limites de responsabilidade e relacao com plataformas independentes.',
+      title: 'Termos de Uso',
+      ptTitle: 'Termos de Uso',
+      summary: 'Define regras de uso, autorizações, responsabilidades por conteúdo, limites legais e a relação com plataformas independentes.',
       accent: 'violet',
       stats: [
-        ['Usuario', 'Responsavel por conteudo, direitos e destinos'],
-        ['APIs', 'Publicacao depende das regras de terceiros'],
-        ['Brasil', 'Lei aplicavel conforme os termos'],
+        ['Usuário', 'Responsável pelo conteúdo, direitos e destinos'],
+        ['APIs', 'Publicação depende das regras de terceiros'],
+        ['Brasil', 'Lei aplicável e direitos obrigatórios preservados'],
       ],
     };
   }
 
   return {
     ...base,
-    eyebrow: 'Exclusao de dados',
-    badge: 'Exclusao de dados',
-    title: 'Exclusao de Dados do Usuario',
-    ptTitle: 'Exclusao de Dados do Usuario',
-    summary: 'Mostra como solicitar exclusao de conta, contas conectadas, tokens OAuth, midias, campanhas e dados de integracao.',
+    eyebrow: 'Exclusão de dados',
+    badge: 'Controle do titular',
+    title: 'Exclusão de Dados e Revogação de Acesso',
+    ptTitle: 'Exclusão de Dados e Revogação de Acesso',
+    summary: 'Explica a diferença entre desconectar uma plataforma, revogar permissões e excluir os dados mantidos pelo PMP.',
     accent: 'green',
     stats: [
-      ['30 dias', 'Prazo para processar pedidos validos'],
-      ['Email', 'Solicitacao pelo endereco da conta'],
-      ['Revogacao', 'Tambem pode ser feita nas plataformas conectadas'],
+      ['30 dias', 'Prazo operacional para eliminar ou anonimizar dados'],
+      ['E-mail', 'Solicitação pelo endereço associado à conta'],
+      ['Revogação', 'Também disponível nas plataformas conectadas'],
     ],
   };
 }
@@ -5226,6 +3825,29 @@ function getSharedLegalDocuments() {
 function getLegalDocument(activePage) {
   const document = getSharedLegalDocuments()[activePage];
   return document && Array.isArray(document.sections) ? document : null;
+}
+
+function ensureMerchantLegalDocumentsForLogin(mode = 'login', initialSection = 'acesso') {
+  const hasAllDocuments = Object.keys(LEGAL_DOCUMENT_PATHS)
+    .every((documentKey) => Boolean(getLegalDocument(documentKey)));
+  if (hasAllDocuments) return true;
+
+  const currentPath = String(window.location.pathname || '/').replace(/\/+$/, '') || '/';
+  const initialPath = String(document.body?.dataset?.initialPath || '/').replace(/\/+$/, '') || '/';
+
+  // A direct /login response already includes the shared legal payload. When
+  // /login was reached through the SPA from another server-rendered route,
+  // request that complete document once instead of showing empty legal cards.
+  if (currentPath === '/login' && initialPath === '/login') {
+    return true;
+  }
+
+  const safeMode = mode === 'register' ? 'register' : 'login';
+  const safeSection = String(initialSection || 'acesso').replace(/[^a-z0-9_-]/gi, '') || 'acesso';
+  const query = safeMode === 'register' ? '?mode=register' : '';
+  const hash = safeSection === 'acesso' ? '' : `#${safeSection}`;
+  window.location.assign(`/login${query}${hash}`);
+  return false;
 }
 
 function getLegalReloadStorageKey(path) {
@@ -5274,12 +3896,12 @@ function renderPublicFooter() {
     <footer class="public-footer legal-saas-footer">
       <div class="public-footer-brand">
         <strong>Platform Multi Publisher</strong>
-        <span>Publicacao profissional sem prometer resultados dependentes de terceiros.</span>
+        <span>Publicação profissional com transparência sobre integrações de terceiros.</span>
       </div>
-      <nav class="public-footer-links" aria-label="Legal and account links">
-        <a href="/privacy" data-link>Politica de Privacidade</a>
-        <a href="/terms" data-link>Termos de Servico</a>
-        <a href="/data-deletion" data-link>Exclusao de Dados do Usuario</a>
+      <nav class="public-footer-links" aria-label="Links jurídicos e da conta">
+        <a href="/privacy" data-link>Política de Privacidade</a>
+        <a href="/terms" data-link>Termos de Uso</a>
+        <a href="/data-deletion" data-link>Exclusão de Dados</a>
       </nav>
     </footer>
   `;
@@ -5314,7 +3936,7 @@ function renderLegalPublicNav(activePage) {
   `;
 }
 
-function renderLegalShell(activePage, title, subtitle, bodyHtml, lastUpdated = LEGAL_LAST_UPDATED, reviewNote = 'This document should be reviewed by a qualified legal professional before publishing or relying on it for platform approval.') {
+function renderLegalShell(activePage, title, subtitle, bodyHtml, lastUpdated = LEGAL_LAST_UPDATED, reviewNote = 'Recomenda-se validação por profissional jurídico habilitado antes da publicação definitiva.') {
   const page = getLegalPagePresentation(activePage, title, subtitle);
   const headings = getLegalDocumentHeadings(bodyHtml);
   const decoratedBodyHtml = addLegalSectionIds(bodyHtml);
@@ -5330,10 +3952,10 @@ function renderLegalShell(activePage, title, subtitle, bodyHtml, lastUpdated = L
 
   root.innerHTML = `
     <div class="public-landing legal-page legal-saas-page public-saas-page" data-legal-page="${escapeAttribute(activePage)}" data-legal-accent="${escapeAttribute(page.accent)}">
-      <div class="login-modern-bg public-neon-bg" aria-hidden="true">
-        <div class="login-modern-orb login-modern-orb-1"></div>
-        <div class="login-modern-orb login-modern-orb-2"></div>
-        <div class="login-modern-grid"></div>
+      <div class="public-ambient-bg" aria-hidden="true">
+        <div class="public-ambient-orb public-ambient-orb-1"></div>
+        <div class="public-ambient-orb public-ambient-orb-2"></div>
+        <div class="public-ambient-grid"></div>
       </div>
       <div class="public-shell">
         ${renderLegalPublicNav(activePage)}
@@ -5354,25 +3976,25 @@ function renderLegalShell(activePage, title, subtitle, bodyHtml, lastUpdated = L
                 <a class="public-ghost-button" href="#legal-contact">Entrar em contato</a>
               </div>
             </div>
-            <aside class="legal-dashboard-card" aria-label="Resumo visual de seguranca e operacao">
+            <aside class="legal-dashboard-card" aria-label="Resumo visual de segurança e operação">
               <div class="legal-dashboard-top">
-                <span>${renderNeonMediaIcon('storage', 'stat', { state: 'success' })}</span>
+                <span>${renderMediaMark('storage', 'stat', { state: 'success' })}</span>
                 <div>
-                  <strong>Workspace com autorizacao do usuario</strong>
-                  <small>Campanhas, biblioteca, contas conectadas e fila de publicacao.</small>
+                  <strong>Workspace com autorização do usuário</strong>
+                  <small>Campanhas, biblioteca, contas conectadas e fila de publicação.</small>
                 </div>
               </div>
               <div class="legal-platform-row" aria-label="Plataformas suportadas">
-                ${renderAnimatedLogoByPlatform('youtube', 36)}
-                ${renderAnimatedLogoByPlatform('tiktok', 36)}
-                ${renderAnimatedLogoByPlatform('instagram', 36)}
+                ${renderPlatformArtwork('youtube', 36)}
+                ${renderPlatformArtwork('tiktok', 36)}
+                ${renderPlatformArtwork('instagram', 36)}
               </div>
               <div class="legal-status-list">
                 <span><b></b> Tokens protegidos</span>
-                <span><b></b> Revogacao de acesso</span>
-                <span><b></b> Logs de publicacao</span>
+                <span><b></b> Revogação de acesso</span>
+                <span><b></b> Logs de publicação</span>
               </div>
-              <p>Platform Multi Publisher nao e afiliado, patrocinado ou operado oficialmente por YouTube, TikTok, Instagram, Google ou Meta.</p>
+              <p>O Platform Multi Publisher não é afiliado, patrocinado nem operado oficialmente por YouTube, TikTok, Instagram, Google ou Meta.</p>
             </aside>
           </section>
 
@@ -5397,8 +4019,8 @@ function renderLegalShell(activePage, title, subtitle, bodyHtml, lastUpdated = L
           <section id="legal-contact" class="legal-contact-card">
             <div>
               <p class="public-eyebrow">Contato</p>
-              <h2>Precisa falar sobre privacidade, termos ou exclusao de dados?</h2>
-              <p>Use o formulario para preparar uma mensagem ao contato oficial. Para exclusao de dados, envie a solicitacao pelo email associado a conta.</p>
+              <h2>Precisa falar sobre privacidade, termos ou exclusão de dados?</h2>
+              <p>Use o formulário para preparar uma mensagem ao contato oficial. Para exclusão de dados, envie a solicitação pelo e-mail associado à conta.</p>
             </div>
             <form class="public-contact-form legal-contact-form" data-public-contact-form novalidate>
               <label>Nome<input name="name" autocomplete="name" required /></label>
@@ -5416,8 +4038,8 @@ function renderLegalShell(activePage, title, subtitle, bodyHtml, lastUpdated = L
     </div>
   `;
 
-  injectLogoStyles();
-  bindPublicContactForm();
+  window.scrollTo(0, 0);
+    bindPublicContactForm();
 }
 
 function renderLegalDocumentPage(activePage) {
@@ -5434,8 +4056,8 @@ function renderLegalDocumentPage(activePage) {
             <section class="legal-hero legal-saas-hero">
               <div class="legal-hero-copy">
                 <p class="public-eyebrow">Documentos legais</p>
-                <h1>Documento indisponivel</h1>
-                <p>Nao foi possivel carregar o conteudo legal compartilhado. Atualize a pagina ou tente novamente.</p>
+                <h1>Documento indisponível</h1>
+                <p>Não foi possível carregar o conteúdo jurídico. Atualize a página ou tente novamente.</p>
               </div>
             </section>
           </main>
@@ -5466,1000 +4088,141 @@ function renderTermsOfServicePage() {
 }
 
 function renderDataDeletionPage() {
-  renderLegalDocumentPage('data-deletion');
-}
+  const documentData = getLegalDocument('data-deletion');
+  if (!documentData) {
+    renderLegalDocumentPage('data-deletion');
+    return;
+  }
+
+  clearLegalReloadAttempt('data-deletion');
+  const contactEmail = 'PlataformMultiPublisher@gmail.com';
+  const mailtoHref = `mailto:${contactEmail}?subject=${encodeURIComponent('Solicitação de exclusão de dados')}&body=${encodeURIComponent('E-mail do workspace:\n\nConta conectada (YouTube, TikTok ou Instagram), se aplicável:\n\nSolicitação: exclusão de dados / revogação de acesso\n\nDetalhes adicionais:\n')}`;
+  const bodyHtml = renderLegalDocumentBodyHtml(documentData);
+  const documentBody = addLegalSectionIds(bodyHtml);
+  const headings = getLegalDocumentHeadings(bodyHtml);
+  const tocHtml = headings.map((heading, index) => `
+    <a href="#legal-section-${index}">${escapeHtml(heading)}</a>
+  `).join('');
+
+  root.innerHTML = `
+    <div class="public-landing legal-page legal-saas-page public-saas-page data-deletion-page" data-legal-page="data-deletion" data-legal-accent="green">
+      <div class="public-ambient-bg" aria-hidden="true">
+        <div class="public-ambient-orb public-ambient-orb-1"></div>
+        <div class="public-ambient-grid"></div>
+      </div>
+      <div class="public-shell">
+        ${renderLegalPublicNav('data-deletion')}
+        <main class="legal-main legal-saas-main">
+          <section class="deletion-hero">
+            <div class="deletion-hero-copy">
+              <p class="public-eyebrow">/data-deletion</p>
+              <span class="legal-hero-badge">Controle do usu&aacute;rio</span>
+              <h1>Seus dados.<br />Sua decis&atilde;o.</h1>
+              <p>Revogue o acesso de uma plataforma conectada ou solicite a exclus&atilde;o dos dados da sua conta PMP. As duas a&ccedil;&otilde;es s&atilde;o diferentes — e explicamos cada uma sem letras mi&uacute;das.</p>
+              <div class="deletion-hero-actions">
+                <a class="public-button public-button-large deletion-primary-action" href="${escapeAttribute(mailtoHref)}">Solicitar exclus&atilde;o</a>
+                <a class="public-ghost-button" href="#escolha">Entender as op&ccedil;&otilde;es</a>
+              </div>
+              <div class="deletion-trust-line" aria-label="Resumo do processo">
+                <span>Processamento em at&eacute; 30 dias</span>
+                <span>Verifica&ccedil;&atilde;o de identidade</span>
+                <span>Contato pelo e-mail da conta</span>
+              </div>
+            </div>
+            <aside class="deletion-request-card" aria-label="Dados necessarios para a solicitacao">
+              <div class="deletion-request-index">SOLICITA&Ccedil;&Atilde;O / 01</div>
+              <h2>Tenha estas informa&ccedil;&otilde;es em m&atilde;os</h2>
+              <ol>
+                <li><span>01</span><div><strong>E-mail do workspace</strong><small>Envie a mensagem pelo mesmo endere&ccedil;o usado na conta PMP.</small></div></li>
+                <li><span>02</span><div><strong>Conta conectada</strong><small>Informe YouTube, TikTok ou Instagram, quando aplic&aacute;vel.</small></div></li>
+                <li><span>03</span><div><strong>Escopo do pedido</strong><small>Indique se deseja revogar acesso ou excluir os dados.</small></div></li>
+              </ol>
+              <a href="${escapeAttribute(mailtoHref)}">Abrir solicita&ccedil;&atilde;o por e-mail <span aria-hidden="true">&rarr;</span></a>
+            </aside>
+          </section>
+
+          <section id="escolha" class="deletion-choice-section">
+            <header class="deletion-section-heading">
+              <p class="public-eyebrow">Antes de continuar</p>
+              <h2>Escolha a a&ccedil;&atilde;o certa.</h2>
+              <p>Revogar acesso interrompe a conex&atilde;o com uma plataforma. Excluir dados remove os registros aplic&aacute;veis mantidos pelo PMP.</p>
+            </header>
+            <div class="deletion-choice-list">
+              <article>
+                <div class="deletion-choice-number">A</div>
+                <div>
+                  <span class="deletion-choice-label">A&ccedil;&atilde;o imediata</span>
+                  <h3>Revogar acesso</h3>
+                  <p>Desconecte a conta na &aacute;rea de contas do workspace ou revogue o PMP diretamente nas configura&ccedil;&otilde;es da plataforma conectada. O token deixa de ser usado em futuras publica&ccedil;&otilde;es.</p>
+                </div>
+                <span class="deletion-choice-outcome">Interrompe a conex&atilde;o</span>
+              </article>
+              <article class="is-destructive">
+                <div class="deletion-choice-number">B</div>
+                <div>
+                  <span class="deletion-choice-label">Pedido permanente</span>
+                  <h3>Excluir dados</h3>
+                  <p>Solicite a exclus&atilde;o dos dados da conta, tokens OAuth criptografados, registros de m&iacute;dia, campanhas, publica&ccedil;&otilde;es e dados de integra&ccedil;&atilde;o aplic&aacute;veis.</p>
+                </div>
+                <a href="${escapeAttribute(mailtoHref)}">Iniciar pedido</a>
+              </article>
+            </div>
+          </section>
+
+          <section class="deletion-process-section" aria-labelledby="deletion-process-title">
+            <header class="deletion-section-heading">
+              <p class="public-eyebrow">Como funciona</p>
+              <h2 id="deletion-process-title">Um processo claro, do pedido &agrave; conclus&atilde;o.</h2>
+            </header>
+            <ol class="deletion-process">
+              <li><span>01</span><strong>Envie o pedido</strong><p>Use o e-mail associado &agrave; conta e o assunto “Solicita&ccedil;&atilde;o de exclus&atilde;o de dados”.</p></li>
+              <li><span>02</span><strong>Confirme sua identidade</strong><p>Podemos solicitar uma verifica&ccedil;&atilde;o para impedir exclus&otilde;es n&atilde;o autorizadas.</p></li>
+              <li><span>03</span><strong>Aguarde o processamento</strong><p>Pedidos v&aacute;lidos s&atilde;o processados em at&eacute; 30 dias, salvo prazo legal diferente.</p></li>
+              <li><span>04</span><strong>Receba a confirma&ccedil;&atilde;o</strong><p>O retorno ser&aacute; enviado ao endere&ccedil;o usado para abrir a solicita&ccedil;&atilde;o.</p></li>
+            </ol>
+            <aside class="deletion-retention-note">
+              <strong>O que pode permanecer?</strong>
+              <p>Registros limitados podem ser mantidos quando necess&aacute;rios para obriga&ccedil;&otilde;es legais, seguran&ccedil;a, preven&ccedil;&atilde;o a fraude, disputas, recupera&ccedil;&atilde;o de backup, registros financeiros ou depend&ecirc;ncias de campanhas ainda n&atilde;o resolvidas.</p>
+            </aside>
+          </section>
+
+          <section class="deletion-document-intro">
+            <div>
+              <p class="public-eyebrow">Documento completo</p>
+              <h2>Crit&eacute;rios e condi&ccedil;&otilde;es</h2>
+            </div>
+            <p>Leia os detalhes oficiais sobre escopo, verifica&ccedil;&atilde;o, prazo de processamento e reten&ccedil;&atilde;o limitada. Atualizado em ${escapeHtml(documentData.lastUpdated || LEGAL_LAST_UPDATED)}.</p>
+          </section>
+          <section class="legal-content-shell deletion-legal-content">
+            <aside class="legal-toc" aria-label="Indice do documento">
+              <strong>Nesta p&aacute;gina</strong>
+              ${tocHtml}
+            </aside>
+            <article class="legal-document">${documentBody}</article>
+          </section>
+
+          <section class="deletion-final-cta">
+            <div>
+              <p class="public-eyebrow">Canal oficial</p>
+              <h2>Pronto para enviar seu pedido?</h2>
+              <p>O bot&atilde;o abre uma mensagem com o assunto e os campos necess&aacute;rios. Envie pelo e-mail associado &agrave; sua conta.</p>
+            </div>
+            <div class="deletion-final-action">
+              <a class="public-button public-button-large" href="${escapeAttribute(mailtoHref)}">Preparar solicita&ccedil;&atilde;o</a>
+              <span>${escapeHtml(contactEmail)}</span>
+            </div>
+          </section>
+        </main>
+        ${renderPublicFooter()}
+      </div>
+    </div>
+  `;
+
+  window.scrollTo(0, 0);
+  }
 function unauthorizedRedirect() {
   state.me = null;
   navigate('/login', true);
-}
-
-async function renderPublicLandingPage() {
-  const publicPlanOptions = await loadPublicPlanOptions();
-  const planCardsHtml = publicPlanOptions.map((plan) => renderPublicPlanCard(plan)).join('');
-  const platformCardsHtml = [
-    {
-      id: 'youtube',
-      title: 'YouTube',
-      detail: 'Envio de videos, Shorts, playlists, status e historico operacional por campanha.',
-      meta: 'upload + playlist',
-    },
-    {
-      id: 'tiktok',
-      title: 'TikTok',
-      detail: 'Fluxo autorizado para videos curtos, fila de revisao e tratamento de erros.',
-      meta: 'upload + publish',
-    },
-    {
-      id: 'instagram',
-      title: 'Instagram',
-      detail: 'Reels, legendas, conta profissional e acompanhamento consolidado no workspace.',
-      meta: 'reels + feed',
-    },
-  ].map((platform) => `
-    <article class="public-platform-card" data-platform="${escapeAttribute(platform.id)}">
-      <div class="public-platform-card-head">
-        <div class="public-platform-icon" aria-hidden="true">
-          ${renderAnimatedLogoByPlatform(platform.id, 48)}
-        </div>
-        <span>${escapeHtml(platform.meta)}</span>
-      </div>
-      <h3>${escapeHtml(platform.title)}</h3>
-      <p>${escapeHtml(platform.detail)}</p>
-    </article>
-  `).join('');
-
-  const stepsHtml = [
-    ['01', 'Conecte suas contas', 'Autorize YouTube, TikTok e Instagram por OAuth, sempre com permissao do usuario.'],
-    ['02', 'Organize seus videos', 'Suba arquivos, capas e descricoes em uma biblioteca de midia reutilizavel.'],
-    ['03', 'Crie campanhas', 'Defina destinos, legendas, privacidade, agenda e regras antes de enviar.'],
-    ['04', 'Acompanhe a fila', 'Veja jobs prontos, enviados, publicados, pendentes ou com falha em um painel.'],
-  ].map(([step, title, text]) => `
-    <article class="public-flow-card">
-      <span class="public-flow-step">${escapeHtml(step)}</span>
-      <h3>${escapeHtml(title)}</h3>
-      <p>${escapeHtml(text)}</p>
-    </article>
-  `).join('');
-
-  const featuresHtml = [
-    ['playlist', 'Campanhas multiplataforma', 'Agrupe videos, destinos e regras por campanha para nao repetir trabalho.', 'processing'],
-    ['library', 'Biblioteca de midia', 'Centralize videos, thumbnails, descricoes e arquivos prontos para reutilizar.', 'info'],
-    ['available', 'Contas via OAuth', 'Conecte contas autorizadas e mantenha controle sobre revogacao e reconexao.', 'success'],
-    ['clock', 'Fila de publicacao', 'Acompanhe o que esta pronto, em envio, pendente, publicado ou com erro.', 'processing'],
-    ['warning', 'Status e logs', 'Transforme falhas de API em mensagens operacionais para agir rapido.', 'warning'],
-    ['folder', 'Organizacao por workspace', 'Separe operacoes por equipe, cliente, canal ou rotina de publicacao.', 'info'],
-    ['storage', 'Segurança operacional', 'Tokens protegidos, permissões claras e trilha de ações importantes.', 'success'],
-    ['video', 'YouTube, TikTok e Instagram', 'Use os canais conectados sem insinuar parceria oficial com as plataformas.', 'info'],
-  ].map(([icon, title, text, state]) => `
-    <article class="public-feature">
-      <span class="public-feature-icon">${renderNeonMediaIcon(icon, 'stat', { state })}</span>
-      <h3>${escapeHtml(title)}</h3>
-      <p>${escapeHtml(text)}</p>
-    </article>
-  `).join('');
-
-  const audiencesHtml = [
-    ['Criadores de conteudo', 'Organize uploads, copies e canais sem depender de planilhas soltas.'],
-    ['Agencias', 'Padronize operacoes por cliente e reduza retrabalho entre social media e edicao.'],
-    ['Social media managers', 'Veja prioridades, pendencias e falhas antes que virem problema.'],
-    ['Times de marketing', 'Centralize campanhas de video e mantenha uma rotina previsivel.'],
-    ['Empresas com volume', 'Controle multiplos destinos e publicacoes recorrentes com menos operacao manual.'],
-  ].map(([title, text]) => `
-    <article class="public-audience-card">
-      <h3>${escapeHtml(title)}</h3>
-      <p>${escapeHtml(text)}</p>
-    </article>
-  `).join('');
-
-  const benefitsHtml = [
-    ['Menos retrabalho', 'Cadastre a peca uma vez e reaproveite em campanhas e destinos diferentes.'],
-    ['Mais controle operacional', 'Saiba o que esta pronto, aguardando, enviado, publicado ou falhou.'],
-    ['Publicacao centralizada', 'Reduza troca de abas e organize a rotina em um unico workspace.'],
-    ['Visao clara por campanha', 'Acompanhe status, contas conectadas, midias e fila em uma narrativa unica.'],
-    ['Menos erro manual', 'Checklist de tokens, autorizacao, destino e revisao antes do disparo.'],
-    ['Producao mais organizada', 'Biblioteca, campanhas e logs ficam juntos para consulta posterior.'],
-  ].map(([title, text]) => `
-    <article class="public-benefit-card">
-      <span aria-hidden="true"></span>
-      <div>
-        <h3>${escapeHtml(title)}</h3>
-        <p>${escapeHtml(text)}</p>
-      </div>
-    </article>
-  `).join('');
-
-  const faqHtml = [
-    ['Como funciona a integracao com YouTube?', 'O usuario conecta a conta autorizada e escolhe quando usar o canal em campanhas. A publicacao depende das permissoes, regras e disponibilidade da API do Google/YouTube.'],
-    ['Como funciona a integracao com TikTok?', 'A plataforma usa o fluxo autorizado do TikTok para identificar a conta conectada, preparar videos selecionados pelo usuario e acompanhar status quando o escopo estiver aprovado.'],
-    ['Como funciona a integracao com Instagram?', 'O fluxo foi pensado para contas profissionais compatíveis com publicacao de Reels/feed via Meta, com revisao de legenda, midia e destino.'],
-    ['Meus dados ficam seguros?', 'A landing resume os controles principais: OAuth, tokens protegidos, acesso por conta e links publicos de privacidade, termos e exclusao de dados.'],
-    ['Como desconectar contas?', 'O usuario pode desconectar no workspace e tambem revogar o acesso diretamente nas configuracoes de apps conectados da plataforma.'],
-    ['O que acontece se uma publicacao falhar?', 'O job fica marcado para revisao, com status e mensagem operacional. A falha pode ocorrer por limite, permissao, token expirado, regra da plataforma ou rejeicao do conteudo.'],
-  ].map(([question, answer]) => `
-    <article class="public-faq-card">
-      <h3>${escapeHtml(question)}</h3>
-      <p>${escapeHtml(answer)}</p>
-    </article>
-  `).join('');
-
-  root.innerHTML = `
-    <div class="public-landing public-product-page public-saas-page">
-      <div class="login-modern-bg public-neon-bg" aria-hidden="true">
-        <div class="login-modern-orb login-modern-orb-1"></div>
-        <div class="login-modern-orb login-modern-orb-2"></div>
-        <div class="login-modern-orb login-modern-orb-3"></div>
-        <div class="login-modern-grid"></div>
-      </div>
-      <div class="public-shell">
-        ${renderPublicSaasNav({ context: 'landing', idPrefix: 'publicSaasPmp' })}
-
-        <main class="public-product-main">
-          <section class="public-hero public-saas-hero">
-            <div class="public-hero-copy">
-              <p class="public-eyebrow">SaaS operacional para video</p>
-              <h1>Publique videos no YouTube, TikTok e Instagram sem repetir o trabalho.</h1>
-              <p class="public-hero-text">Organize campanhas, conecte suas contas, acompanhe a fila de publicacao e gerencie tudo em um unico painel.</p>
-              <div class="public-hero-actions">
-                <a class="public-button public-button-large" href="/login?mode=register" data-link>Começar agora</a>
-                <a class="public-secondary-button" href="#demonstracao">Ver como funciona</a>
-                <a class="public-ghost-button" href="#contato">Entrar em contato</a>
-              </div>
-              <div class="public-trustline">
-                <span>Campanhas</span>
-                <span>Biblioteca de midia</span>
-                <span>Destinos conectados</span>
-                <span>Fila de publicacao</span>
-              </div>
-            </div>
-
-            <div class="public-dashboard-mockup" id="demonstracao" role="img" aria-label="Preview visual do dashboard com campanhas, biblioteca de midia, contas conectadas, fila de publicacao e status">
-              <div class="public-mockup-topbar">
-                <span></span><span></span><span></span>
-                <strong>Workspace operacional</strong>
-              </div>
-              <div class="public-mockup-grid">
-                <section class="public-mockup-panel public-mockup-campaigns">
-                  <div class="public-mockup-panel-head">
-                    <span>Campanhas</span>
-                    <strong>16 ativas</strong>
-                  </div>
-                  <div class="public-mockup-campaign active">
-                    <b>Lancamento Shorts</b>
-                    <small>YouTube + TikTok</small>
-                    <span style="width:76%"></span>
-                  </div>
-                  <div class="public-mockup-campaign">
-                    <b>Reels da semana</b>
-                    <small>Instagram</small>
-                    <span style="width:44%"></span>
-                  </div>
-                </section>
-                <section class="public-mockup-panel public-mockup-library">
-                  <div class="public-mockup-panel-head">
-                    <span>Biblioteca</span>
-                    <strong>128 itens</strong>
-                  </div>
-                  <div class="public-mockup-media-row">
-                    <span>${renderNeonMediaIcon('video', 'mini', { state: 'success' })}</span>
-                    <div><b>video_final_9x16.mp4</b><small>Pronto para publicar</small></div>
-                  </div>
-                  <div class="public-mockup-media-row">
-                    <span>${renderNeonMediaIcon('thumbnail', 'mini', { state: 'warning' })}</span>
-                    <div><b>capa_campanha.png</b><small>Revisar texto seguro</small></div>
-                  </div>
-                </section>
-                <section class="public-mockup-panel public-mockup-accounts">
-                  <div class="public-mockup-panel-head">
-                    <span>Contas conectadas</span>
-                    <strong>OAuth</strong>
-                  </div>
-                  <div class="public-account-icons">
-                    ${renderAnimatedLogoByPlatform('youtube', 34)}
-                    ${renderAnimatedLogoByPlatform('tiktok', 34)}
-                    ${renderAnimatedLogoByPlatform('instagram', 34)}
-                  </div>
-                  <p>Usuario controla autorizacao, reconexao e revogacao.</p>
-                </section>
-                <section class="public-mockup-panel public-mockup-queue">
-                  <div class="public-mockup-panel-head">
-                    <span>Fila de publicacao</span>
-                    <strong>Agora</strong>
-                  </div>
-                  <div class="public-queue-row"><span data-state="ready"></span><b>Pronto</b><small>28 jobs</small></div>
-                  <div class="public-queue-row"><span data-state="sending"></span><b>Enviando</b><small>12 jobs</small></div>
-                  <div class="public-queue-row"><span data-state="risk"></span><b>Revisar</b><small>6 jobs</small></div>
-                </section>
-              </div>
-            </div>
-          </section>
-
-          <section class="public-section public-proof-strip" aria-label="Resumo do produto">
-            <article><strong>1</strong><span>workspace para campanhas, midia e destinos</span></article>
-            <article><strong>3</strong><span>integracoes previstas: YouTube, TikTok e Instagram</span></article>
-            <article><strong>OAuth</strong><span>conexao autorizada pelo usuario</span></article>
-            <article><strong>Logs</strong><span>status e falhas visiveis para operacao</span></article>
-          </section>
-
-          <section id="como-funciona" class="public-section public-flow">
-            <div class="public-section-head">
-              <p class="public-eyebrow">Como funciona</p>
-              <h2>Da conta conectada ao job acompanhado no painel.</h2>
-            </div>
-            <div class="public-flow-grid">${stepsHtml}</div>
-          </section>
-
-          <section id="recursos" class="public-section">
-            <div class="public-section-head">
-              <p class="public-eyebrow">Recursos principais</p>
-              <h2>O essencial para publicar video em volume sem bagunca.</h2>
-            </div>
-            <div class="public-feature-grid public-feature-grid-dense">${featuresHtml}</div>
-          </section>
-
-          <section class="public-section public-audience-section">
-            <div class="public-section-head">
-              <p class="public-eyebrow">Para quem e</p>
-              <h2>Feito para operacoes que precisam de previsibilidade.</h2>
-            </div>
-            <div class="public-audience-grid">${audiencesHtml}</div>
-          </section>
-
-          <section class="public-section public-benefits-section">
-            <div class="public-section-head">
-              <p class="public-eyebrow">Beneficios</p>
-              <h2>Menos troca de ferramenta. Mais clareza sobre cada publicacao.</h2>
-            </div>
-            <div class="public-benefit-grid">${benefitsHtml}</div>
-          </section>
-
-          <section id="integracoes" class="public-section">
-            <div class="public-section-head">
-              <p class="public-eyebrow">Integrações</p>
-              <h2>YouTube, TikTok e Instagram em uma rotina unica.</h2>
-              <p class="public-section-note">Os icones identificam as plataformas suportadas e nao indicam afiliacao, patrocinio ou operacao oficial por elas.</p>
-            </div>
-            <div class="public-platform-grid">${platformCardsHtml}</div>
-          </section>
-
-          <section id="seguranca" class="public-section public-security-section">
-            <div class="public-security-card">
-              <div>
-                <p class="public-eyebrow">Segurança e conformidade</p>
-                <h2>Controle de acesso claro para usuarios e equipes.</h2>
-                <p>As contas sao conectadas por autorizacao do usuario. Tokens devem ser protegidos, o usuario controla as contas conectadas e pode revogar acesso no workspace ou na propria plataforma.</p>
-                <p class="public-disclaimer">Platform Multi Publisher nao e afiliado, patrocinado ou operado oficialmente por YouTube, TikTok, Instagram, Google ou Meta.</p>
-              </div>
-              <div class="public-security-links">
-                <a href="/privacy" data-link>Politica de Privacidade</a>
-                <a href="/terms" data-link>Termos de Servico</a>
-                <a href="/data-deletion" data-link>Exclusao de Dados do Usuario</a>
-              </div>
-            </div>
-          </section>
-
-          <section id="planos" class="public-section">
-            <div class="public-section-head">
-              <p class="public-eyebrow">Preços</p>
-              <h2>Planos reais do workspace, com limites claros.</h2>
-              <p class="public-section-note">Valores, plataformas e tokens seguem a mesma configuracao da pagina Planos. Publicacoes podem depender de regras e disponibilidade das APIs de terceiros.</p>
-            </div>
-            <div class="public-pricing-grid">${planCardsHtml}</div>
-          </section>
-
-          <section id="faq" class="public-section public-faq">
-            <div class="public-section-head">
-              <p class="public-eyebrow">FAQ</p>
-              <h2>Duvidas comuns antes de conectar suas contas.</h2>
-            </div>
-            <div class="public-faq-grid">${faqHtml}</div>
-          </section>
-
-          <section id="contato" class="public-section public-contact-section">
-            <div class="public-contact-card">
-              <div>
-                <p class="public-eyebrow">Contato</p>
-                <h2>Quer validar a operacao antes de cadastrar?</h2>
-                <p>Envie nome, email, empresa e mensagem. O formulario abre uma mensagem para o email de contato oficial.</p>
-              </div>
-              <form class="public-contact-form" data-public-contact-form novalidate>
-                <label>Nome<input name="name" autocomplete="name" required /></label>
-                <label>Email<input name="email" type="email" autocomplete="email" required /></label>
-                <label>Empresa<input name="company" autocomplete="organization" /></label>
-                <label class="public-contact-message">Mensagem<textarea name="message" rows="4" required></textarea></label>
-                <p class="public-form-feedback" data-contact-feedback aria-live="polite"></p>
-                <button class="public-button public-button-large" type="submit">Enviar mensagem</button>
-              </form>
-            </div>
-          </section>
-
-          <section class="public-section public-final-cta">
-            <p class="public-eyebrow">Comece pela organizacao</p>
-            <h2>Pronto para centralizar sua operacao de videos?</h2>
-            <div class="public-hero-actions">
-              <a class="public-button public-button-large" href="/login?mode=register" data-link>Começar agora</a>
-              <a class="public-secondary-button" href="#contato">Solicitar acesso</a>
-            </div>
-          </section>
-        </main>
-
-        <footer class="public-footer" aria-label="Rodape institucional">
-          <div class="public-footer-brand">
-            <strong>Platform Multi Publisher</strong>
-            <span>Publicacao profissional sem prometer resultados dependentes de terceiros.</span>
-          </div>
-          <nav class="public-footer-links" aria-label="Links institucionais">
-            <a href="/privacy" data-link>Politica de Privacidade</a>
-            <a href="/terms" data-link>Termos de Servico</a>
-            <a href="/data-deletion" data-link>Exclusao de Dados do Usuario</a>
-            <a href="/login" data-link>Entrar</a>
-          </nav>
-        </footer>
-      </div>
-    </div>
-  `;
-
-  injectLogoStyles();
-  bindPublicLandingInteractions();
-  bindPublicContactForm();
-}
-
-async function renderPublicLandingPagePsychedelic() {
-  const publicPlanOptions = await loadPublicPlanOptions();
-  const planCardsHtml = publicPlanOptions.map((plan) => renderPublicPlanCard(plan)).join('');
-
-  const stepsHtml = [
-    ['01', 'Conecte suas contas', 'Autorize YouTube, TikTok e Instagram por OAuth e mantenha controle sobre reconexão e revogação.'],
-    ['02', 'Crie campanhas', 'Escolha vídeo, legenda, destino, agenda, privacidade e regra operacional antes de publicar.'],
-    ['03', 'Publique sem repetir', 'Reaproveite mídias e copies em canais diferentes sem recriar todo o trabalho manualmente.'],
-    ['04', 'Acompanhe falhas', 'Veja jobs prontos, enviados, publicados, pendentes ou com erro em uma leitura única.'],
-  ].map(([step, title, text]) => `
-    <article class="psy-step-card">
-      <strong>${escapeHtml(step)}</strong>
-      <h3>${escapeHtml(title)}</h3>
-      <p>${escapeHtml(text)}</p>
-    </article>
-  `).join('');
-
-  const featureCardsHtml = [
-    ['CAM', 'Campanhas multiplataforma', 'Agrupe vídeos, destinos, agenda e regras por campanha para não repetir trabalho.'],
-    ['LIB', 'Biblioteca de mídia', 'Centralize vídeos, thumbnails, descrições e arquivos prontos para reutilizar.'],
-    ['OAU', 'Contas via OAuth', 'Conecte contas autorizadas e mantenha controle sobre revogação e reconexão.'],
-    ['JOB', 'Fila de publicação', 'Acompanhe pronto, enviando, publicado, pendente, erro e reautenticação.'],
-    ['LOG', 'Status e logs', 'Transforme falhas de API em mensagens operacionais para agir rápido.'],
-    ['REP', 'Relatórios', 'Resuma campanhas, falhas, sinais operacionais e próximas ações para management.'],
-  ].map(([mark, title, text]) => `
-    <article class="psy-feature-card">
-      <strong>${escapeHtml(mark)}</strong>
-      <h3>${escapeHtml(title)}</h3>
-      <p>${escapeHtml(text)}</p>
-    </article>
-  `).join('');
-
-  const platformCardsHtml = [
-    ['YT', 'YouTube', 'upload e status', 'Vídeos, Shorts, canais, status e histórico operacional por campanha.'],
-    ['TT', 'TikTok', 'vídeo curto', 'Vídeos curtos, fila de revisão, tratamento de erros e destinos autorizados.'],
-    ['IG', 'Instagram', 'reels e feed', 'Reels, legendas, conta profissional e acompanhamento consolidado.'],
-  ].map(([mark, title, meta, text]) => `
-    <article class="psy-platform-card">
-      <span class="psy-platform-mark" aria-hidden="true">${escapeHtml(mark)}</span>
-      <span class="psy-card-meta">${escapeHtml(meta)}</span>
-      <h3>${escapeHtml(title)}</h3>
-      <p>${escapeHtml(text)}</p>
-    </article>
-  `).join('');
-
-  const audienceCardsHtml = [
-    ['Criadores de conteúdo', 'Suba uma peça, adapte destinos e acompanhe status sem planilhas soltas.'],
-    ['Agências', 'Padronize operação por cliente e reduza retrabalho entre social media e edição.'],
-    ['Times de marketing', 'Controle campanhas recorrentes, pendências e relatórios em uma rotina previsível.'],
-  ].map(([title, text]) => `
-    <article class="psy-audience-card">
-      <h3>${escapeHtml(title)}</h3>
-      <p>${escapeHtml(text)}</p>
-    </article>
-  `).join('');
-
-  const faqHtml = [
-    ['Como funciona a integração com YouTube?', 'O usuário conecta a conta autorizada e escolhe quando usar o canal em campanhas. A publicação depende das permissões, regras e disponibilidade da API do Google/YouTube.'],
-    ['Como funciona a integração com TikTok?', 'A plataforma usa fluxo autorizado para preparar vídeos selecionados pelo usuário e acompanhar status quando o escopo estiver aprovado.'],
-    ['Como funciona a integração com Instagram?', 'O fluxo foi pensado para contas profissionais compatíveis com publicação de Reels/feed via Meta, com revisão de legenda, mídia e destino.'],
-    ['Meus dados ficam seguros?', 'A landing resume os controles principais: OAuth, tokens protegidos, acesso por conta e links públicos de privacidade, termos e exclusão de dados.'],
-    ['O que acontece se uma publicação falhar?', 'O job fica marcado para revisão, com status e mensagem operacional. A falha pode ocorrer por limite, permissão, token expirado, regra da plataforma ou rejeição do conteúdo.'],
-  ].map(([question, answer]) => `
-    <article class="psy-faq-card">
-      <h3>${escapeHtml(question)}</h3>
-      <p>${escapeHtml(answer)}</p>
-    </article>
-  `).join('');
-
-  root.innerHTML = `
-    <div class="public-landing public-product-page public-psychedelic-page">
-      <div class="psy-page-grain" aria-hidden="true"></div>
-      <div class="public-shell psy-shell">
-        <nav class="psy-nav" aria-label="Navegação principal">
-          <a class="psy-brand" href="/" data-link aria-label="Platform Multi Publisher">
-            <span class="psy-brand-mark" aria-hidden="true">PMP</span>
-            <span>Platform Multi Publisher</span>
-          </a>
-          <div class="psy-nav-links">
-            <a href="#como-funciona">Como funciona</a>
-            <a href="#recursos">Recursos</a>
-            <a href="#planos">Planos</a>
-            <a href="#faq">FAQ</a>
-          </div>
-          <div class="psy-nav-actions">
-            <a class="psy-link" href="/login" data-link>Entrar</a>
-            <a class="psy-button psy-button-primary" href="/login?mode=register" data-link>Começar agora</a>
-          </div>
-        </nav>
-        <div class="psy-type-rail" aria-hidden="true">
-          <span>YT</span><span>TT</span><span>IG</span><span>CAM</span><span>LIB</span><span>JOB</span><span>REP</span><span>SEO</span><span>CTA</span>
-        </div>
-
-        <main class="psy-main">
-          <section class="psy-hero">
-            <div class="psy-hero-copy">
-              <p class="psy-eyebrow">Landing SEO + conversão</p>
-              <h1>Publique vídeos no YouTube, TikTok e Instagram em um só painel</h1>
-              <p class="psy-hero-text">Organize campanhas, conecte suas contas, acompanhe falhas e mantenha sua rotina de conteúdo sem retrabalho.</p>
-              <div class="psy-actions">
-                <a class="psy-button psy-button-primary" href="/login?mode=register" data-link>Começar agora</a>
-                <a class="psy-button" href="#como-funciona">Ver como funciona</a>
-              </div>
-              <div class="psy-chip-row" aria-label="Resumo do produto">
-                <span>YouTube</span>
-                <span>TikTok</span>
-                <span>Instagram</span>
-                <span>Campanhas</span>
-                <span>Biblioteca de mídia</span>
-                <span>Relatórios</span>
-              </div>
-            </div>
-
-            <div class="psy-poster-frame" id="demonstracao" role="img" aria-label="Preview do produto mostrando contas conectadas, campanhas, biblioteca de mídia, fila e relatórios">
-              <div class="psy-poster-arc" aria-hidden="true">Publicar em três canais</div>
-              <i class="psy-cloud psy-cloud-one" aria-hidden="true"></i>
-              <i class="psy-cloud psy-cloud-two" aria-hidden="true"></i>
-              <div class="psy-mascot" aria-hidden="true"><span></span></div>
-              <div class="psy-sun-mark" aria-hidden="true">PMP</div>
-              <div class="psy-dashboard-card">
-                <div class="psy-dashboard-head">
-                  <span>Workspace de publicação</span>
-                  <div class="psy-platform-pills"><b>YT</b><b>TT</b><b>IG</b></div>
-                </div>
-                <div class="psy-workflow">
-                  <div><strong class="psy-dot-number">01</strong><span>Conectar contas</span></div>
-                  <div><strong class="psy-dot-number">02</strong><span>Criar campanha</span></div>
-                  <div><strong class="psy-dot-number">03</strong><span>Publicar vídeos</span></div>
-                  <div><strong class="psy-dot-number">04</strong><span>Acompanhar status</span></div>
-                </div>
-                <div class="psy-status-list">
-                  <span><b>Vídeos prontos</b><em>128</em></span>
-                  <span><b>Campanhas ativas</b><em>16</em></span>
-                  <span><b>Falhas para revisar</b><em>6</em></span>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section class="psy-proof-strip" aria-label="Resumo do produto">
-            <article><strong class="psy-dot-number">1</strong><span>workspace para campanhas, mídia e destinos</span></article>
-            <article><strong class="psy-dot-number">3</strong><span>plataformas: YouTube, TikTok e Instagram</span></article>
-            <article><strong>OAuth</strong><span>contas conectadas pelo usuário</span></article>
-            <article><strong>Logs</strong><span>falhas visíveis para agir rápido</span></article>
-          </section>
-
-          <section id="como-funciona" class="psy-section">
-            <div class="psy-section-head">
-              <p class="psy-eyebrow">Fluxo em 4 passos</p>
-              <h2>Da conta conectada ao relatório semanal.</h2>
-            </div>
-            <div class="psy-step-grid">${stepsHtml}</div>
-          </section>
-
-          <section id="recursos" class="psy-section">
-            <div class="psy-section-head">
-              <p class="psy-eyebrow">Recursos principais</p>
-              <h2>Uma operação de vídeo mais clara.</h2>
-            </div>
-            <div class="psy-feature-grid">${featureCardsHtml}</div>
-          </section>
-
-          <section class="psy-section">
-            <div class="psy-section-head">
-              <p class="psy-eyebrow">Para quem é</p>
-              <h2>Feito para quem precisa publicar com previsibilidade.</h2>
-            </div>
-            <div class="psy-audience-grid">${audienceCardsHtml}</div>
-          </section>
-
-          <section id="integracoes" class="psy-section">
-            <div class="psy-section-head">
-              <p class="psy-eyebrow">Integrações</p>
-              <h2>YouTube, TikTok e Instagram em uma rotina única.</h2>
-              <p>As marcas identificam plataformas suportadas e não indicam afiliação, patrocínio ou operação oficial por elas.</p>
-            </div>
-            <div class="psy-platform-grid">${platformCardsHtml}</div>
-          </section>
-
-          <section id="seguranca" class="psy-section">
-            <div class="psy-security-card">
-              <div>
-                <p class="psy-eyebrow">Segurança e conformidade</p>
-                <h2>Controle de acesso claro antes de publicar.</h2>
-                <p>As contas são conectadas por autorização do usuário. Tokens devem ser protegidos, o usuário controla as contas conectadas e pode revogar acesso no workspace ou na própria plataforma.</p>
-                <p class="psy-disclaimer">Platform Multi Publisher não é afiliado, patrocinado ou operado oficialmente por YouTube, TikTok, Instagram, Google ou Meta.</p>
-              </div>
-              <div class="psy-security-links">
-                <a href="/privacy" data-link>Política de Privacidade</a>
-                <a href="/terms" data-link>Termos de Serviço</a>
-                <a href="/data-deletion" data-link>Exclusão de Dados do Usuário</a>
-              </div>
-            </div>
-          </section>
-
-          <section id="planos" class="psy-section">
-            <div class="psy-section-head">
-              <p class="psy-eyebrow">Preços</p>
-              <h2>Planos reais do workspace, com limites claros.</h2>
-              <p>Valores, plataformas e tokens seguem a mesma configuração da página Planos. Publicações podem depender de regras e disponibilidade das APIs de terceiros.</p>
-            </div>
-            <div class="public-pricing-grid">${planCardsHtml}</div>
-          </section>
-
-          <section id="faq" class="psy-section">
-            <div class="psy-section-head">
-              <p class="psy-eyebrow">FAQ</p>
-              <h2>Dúvidas comuns antes de conectar suas contas.</h2>
-            </div>
-            <div class="psy-faq-grid">${faqHtml}</div>
-          </section>
-
-          <section id="contato" class="psy-section">
-            <div class="psy-contact-card">
-              <div>
-                <p class="psy-eyebrow">Contato</p>
-                <h2>Quer validar a operação antes de cadastrar?</h2>
-                <p>Envie nome, email, empresa e mensagem. O formulário abre uma mensagem para o email de contato oficial.</p>
-              </div>
-              <form class="public-contact-form psy-contact-form" data-public-contact-form novalidate>
-                <label>Nome<input name="name" autocomplete="name" required /></label>
-                <label>Email<input name="email" type="email" autocomplete="email" required /></label>
-                <label>Empresa<input name="company" autocomplete="organization" /></label>
-                <label class="public-contact-message">Mensagem<textarea name="message" rows="4" required></textarea></label>
-                <p class="public-form-feedback" data-contact-feedback aria-live="polite"></p>
-                <button class="psy-button psy-button-primary" type="submit">Enviar mensagem</button>
-              </form>
-            </div>
-          </section>
-
-          <section class="psy-final-cta">
-            <p class="psy-eyebrow">Comece pela organização</p>
-            <h2>Pronto para centralizar sua operação de vídeos?</h2>
-            <div class="psy-actions">
-              <a class="psy-button psy-button-primary" href="/login?mode=register" data-link>Começar agora</a>
-              <a class="psy-button" href="#contato">Solicitar acesso</a>
-            </div>
-          </section>
-        </main>
-
-        <footer class="psy-footer" aria-label="Rodapé institucional">
-          <div>
-            <strong>Platform Multi Publisher</strong>
-            <span>Publicação profissional sem prometer resultados dependentes de terceiros.</span>
-          </div>
-          <nav aria-label="Links institucionais">
-            <a href="/privacy" data-link>Política de Privacidade</a>
-            <a href="/terms" data-link>Termos de Serviço</a>
-            <a href="/data-deletion" data-link>Exclusão de Dados do Usuário</a>
-            <a href="/login" data-link>Entrar</a>
-          </nav>
-        </footer>
-      </div>
-    </div>
-  `;
-
-  injectLogoStyles();
-  bindPublicLandingInteractions();
-  bindPublicContactForm();
-}
-
-async function renderPublicLandingPageLegacy() {
-  const publicPlanOptions = await loadPublicPlanOptions();
-  const platformCardsHtml = [
-    {
-      id: 'youtube',
-      title: 'YouTube',
-      detail: 'Videos, Shorts, thumbnails, playlists e historico de jobs.',
-      meta: 'upload + playlist',
-    },
-    {
-      id: 'tiktok',
-      title: 'TikTok',
-      detail: 'Videos curtos, autorizacao oficial e fila de revisao.',
-      meta: 'upload + publish',
-    },
-    {
-      id: 'instagram',
-      title: 'Instagram',
-      detail: 'Reels, legenda, conta profissional e status consolidado.',
-      meta: 'reels + feed',
-    },
-  ].map((platform) => `
-    <article class="public-platform-card" data-platform="${escapeAttribute(platform.id)}">
-      <div class="public-platform-card-head">
-        <div class="public-platform-icon" aria-hidden="true">
-          ${renderAnimatedLogoByPlatform(platform.id, 48)}
-        </div>
-        <span>${escapeHtml(platform.meta)}</span>
-      </div>
-      <h3>${escapeHtml(platform.title)}</h3>
-      <p>${escapeHtml(platform.detail)}</p>
-    </article>
-  `).join('');
-
-  const planCardsHtml = publicPlanOptions.map((plan) => renderPublicPlanCard(plan)).join('');
-
-  root.innerHTML = `
-    <div class="public-landing public-product-page">
-      <div class="login-modern-bg public-neon-bg" aria-hidden="true">
-        <div class="login-modern-orb login-modern-orb-1"></div>
-        <div class="login-modern-orb login-modern-orb-2"></div>
-        <div class="login-modern-orb login-modern-orb-3"></div>
-        <div class="login-modern-grid"></div>
-      </div>
-      <div class="public-shell">
-        <header class="public-nav">
-          <a class="public-brand pmp-brand" href="/" data-link aria-label="Platform Multi Publisher">
-            <div class="pmp-logo-mark" aria-hidden="true">
-              <svg class="pmp-logo-svg" viewBox="0 0 100 100" role="img">
-                <defs>
-                  <linearGradient id="publicPmpRing" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#67e8f9" />
-                    <stop offset="52%" stop-color="#22d3ee" />
-                    <stop offset="100%" stop-color="#3b82f6" />
-                  </linearGradient>
-                  <linearGradient id="publicPmpLetters" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#f8fafc" />
-                    <stop offset="42%" stop-color="#67e8f9" />
-                    <stop offset="100%" stop-color="#22d3ee" />
-                  </linearGradient>
-                  <radialGradient id="publicPmpInnerGlow" cx="50%" cy="50%" r="50%">
-                    <stop offset="0%" stop-color="rgba(34,211,238,0.28)" />
-                    <stop offset="62%" stop-color="rgba(59,130,246,0.05)" />
-                    <stop offset="100%" stop-color="transparent" />
-                  </radialGradient>
-                  <filter id="publicPmpGlow" x="-30%" y="-30%" width="160%" height="160%">
-                    <feGaussianBlur stdDeviation="1.6" result="b" />
-                    <feMerge>
-                      <feMergeNode in="b" />
-                      <feMergeNode in="SourceGraphic" />
-                    </feMerge>
-                  </filter>
-                </defs>
-                <rect x="6" y="6" width="88" height="88" rx="24" fill="url(#publicPmpInnerGlow)" />
-                <rect class="pmp-logo-ring" x="8" y="8" width="84" height="84" rx="22" fill="none" stroke="url(#publicPmpRing)" stroke-width="2.8" />
-                <g class="pmp-logo-share" stroke="url(#publicPmpLetters)" stroke-width="1.8" fill="none" stroke-linecap="round">
-                  <circle cx="42" cy="26" r="2.4" fill="url(#publicPmpLetters)" />
-                  <circle cx="58" cy="26" r="2.4" fill="url(#publicPmpLetters)" />
-                  <circle cx="50" cy="34" r="2.4" fill="url(#publicPmpLetters)" />
-                  <line x1="42" y1="26" x2="50" y2="34" />
-                  <line x1="58" y1="26" x2="50" y2="34" />
-                </g>
-                <text class="pmp-logo-text public-pmp-logo-text" x="50" y="68" text-anchor="middle"
-                  font-family="'Georgia', 'Times New Roman', serif"
-                  font-size="22" font-weight="900"
-                  fill="url(#publicPmpLetters)" filter="url(#publicPmpGlow)"
-                  letter-spacing="0">PMP</text>
-                <g class="pmp-logo-bars" stroke="url(#publicPmpLetters)" stroke-width="1.6" stroke-linecap="round" opacity="0.85">
-                  <line x1="44" y1="80" x2="44" y2="76" />
-                  <line x1="48" y1="80" x2="48" y2="74" />
-                  <line x1="52" y1="80" x2="52" y2="71" />
-                  <line x1="56" y1="80" x2="56" y2="73" />
-                </g>
-              </svg>
-              <span class="pmp-logo-pulse" aria-hidden="true"></span>
-            </div>
-            <div class="pmp-brand-text">
-              <span class="pmp-brand-kicker">PLATFORM</span>
-              <span class="pmp-brand-name">Multi Publisher</span>
-            </div>
-          </a>
-          <nav class="public-nav-links" aria-label="Conteudo principal">
-            <a href="#operacao">Operacao</a>
-            <a href="#fluxo">Fluxo</a>
-            <a href="#plataformas">Plataformas</a>
-            <a href="#planos">Planos</a>
-            <a href="#faq">FAQ</a>
-          </nav>
-          <div class="public-nav-actions">
-            <a class="public-link" href="/login" data-link>Entrar</a>
-            <a class="public-button" href="/login?mode=register" data-link>Criar conta</a>
-          </div>
-        </header>
-
-        <main class="public-product-main">
-          <section class="public-hero" id="operacao">
-            <div class="public-hero-head">
-              <div>
-                <p class="public-eyebrow">Central de publicacao para operacao recorrente</p>
-                <h1>Platform Multi Publisher</h1>
-              </div>
-              <p class="public-hero-text">
-                Conecte contas oficiais, monte campanhas, revise filas e publique em YouTube,
-                TikTok e Instagram a partir de um workspace unico.
-              </p>
-              <div class="public-hero-actions">
-                <a class="public-button public-button-large" href="/login?mode=register" data-link>Criar workspace</a>
-                <a class="public-secondary-button" href="/login" data-link>Acessar workspace</a>
-              </div>
-            </div>
-
-            <div class="public-ops-board" aria-label="Resumo operacional do produto">
-              <article class="public-ops-panel public-ops-panel-wide">
-                <div class="public-panel-head">
-                  <div>
-                    <span class="public-panel-kicker">Command center</span>
-                    <h2>Fila, contas e campanhas no mesmo lugar</h2>
-                  </div>
-                  <span class="public-live-pill"><span></span> Online</span>
-                </div>
-                <div class="public-command-list">
-                  <div class="public-command-row" data-tone="success">
-                    <span>01</span>
-                    <strong>Conectar contas</strong>
-                    <p>OAuth oficial para YouTube, TikTok e Instagram.</p>
-                  </div>
-                  <div class="public-command-row" data-tone="info">
-                    <span>02</span>
-                    <strong>Preparar campanha</strong>
-                    <p>Arquivo, legenda, thumbnail, privacidade e destino.</p>
-                  </div>
-                  <div class="public-command-row" data-tone="warning">
-                    <span>03</span>
-                    <strong>Revisar antes do envio</strong>
-                    <p>Status, tokens, permissao e pendencias visiveis.</p>
-                  </div>
-                </div>
-              </article>
-
-              <article class="public-ops-panel public-kpi-panel">
-                <span class="public-panel-kicker">Hoje</span>
-                <strong>42</strong>
-                <p>publicacoes e jobs preparados</p>
-                <div class="public-mini-meter"><span style="width:74%"></span></div>
-              </article>
-
-              <article class="public-ops-panel public-preview" data-platform="youtube" aria-label="Preview operacional do produto">
-                <div class="public-preview-shell">
-                  <div class="public-panel-head">
-                    <div>
-                      <span class="public-panel-kicker">Plataformas</span>
-                      <h2>Visao por canal</h2>
-                    </div>
-                  </div>
-                  <div class="public-preview-toolbar" role="tablist" aria-label="Escolha de plataforma">
-                    <button type="button" class="active" data-landing-platform="youtube">YouTube</button>
-                    <button type="button" data-landing-platform="tiktok">TikTok</button>
-                    <button type="button" data-landing-platform="instagram">Instagram</button>
-                  </div>
-                  <div class="public-preview-screen">
-                    <div class="public-metric-line">
-                      <span>Campanhas ativas</span>
-                      <strong>16</strong>
-                    </div>
-                    <div class="public-channel-rail" aria-label="Distribuicao por canal">
-                      <span class="rail rail-youtube"></span>
-                      <span class="rail rail-tiktok"></span>
-                      <span class="rail rail-instagram"></span>
-                    </div>
-                    <div class="public-preview-panels">
-                      <article data-landing-panel="youtube">
-                        <h3>YouTube</h3>
-                        <p>Videos, Shorts e playlists em um fluxo unico com historico de jobs por campanha.</p>
-                        <ul>
-                          <li>Conecte canais oficiais</li>
-                          <li>Defina privacidade e marcacoes</li>
-                          <li>Monitore status e falhas em lote</li>
-                        </ul>
-                      </article>
-                      <article data-landing-panel="tiktok" hidden>
-                        <h3>TikTok</h3>
-                        <p>Fluxo simplificado para videos curtos com revisao e reconexao rapida.</p>
-                        <ul>
-                          <li>Upload unico por peca</li>
-                          <li>Conectividade em equipe</li>
-                          <li>Alertas de bloqueio de autenticacao</li>
-                        </ul>
-                      </article>
-                      <article data-landing-panel="instagram" hidden>
-                        <h3>Instagram</h3>
-                        <p>Reels e feed com legenda, thumbnail e destino visual por campanha.</p>
-                        <ul>
-                          <li>Conta de negocio integrada</li>
-                          <li>Checklist de direitos de uso</li>
-                          <li>Status consolidado de publicacao</li>
-                        </ul>
-                      </article>
-                    </div>
-                    <div class="public-job-grid" aria-label="Estados de publicacao">
-                      <span data-state="ready">Pronto 28</span>
-                      <span data-state="sending">Enviando 12</span>
-                      <span data-state="published">Publicado 40</span>
-                      <span data-state="risk">Revisar 6</span>
-                    </div>
-                  </div>
-                </div>
-              </article>
-
-              <article class="public-ops-panel public-check-panel">
-                <span class="public-panel-kicker">Checklist</span>
-                <div class="public-check-list">
-                  <span data-state="ok">Tokens disponiveis</span>
-                  <span data-state="ok">Conta autorizada</span>
-                  <span data-state="warn">Revisao pendente</span>
-                  <span data-state="ok">Destino selecionado</span>
-                </div>
-              </article>
-            </div>
-          </section>
-
-          <section class="public-section public-quick-glance" aria-label="Resumo de operacao">
-            <article>
-              <p>16</p>
-              <span>Campanhas ativas esta semana</span>
-            </article>
-            <article>
-              <p>3</p>
-              <span>Plataformas conectadas</span>
-            </article>
-            <article>
-              <p>98%</p>
-              <span>Sincronizacao estavel</span>
-            </article>
-            <article>
-              <p>11</p>
-              <span>Itens aguardando revisao</span>
-            </article>
-          </section>
-
-          <section id="recursos" class="public-section">
-            <div class="public-section-head">
-              <p class="public-eyebrow">Recursos de operacao</p>
-              <h2>O que normalmente ficaria espalhado vira uma rotina unica</h2>
-            </div>
-            <div class="public-feature-grid">
-              <article class="public-feature">
-                <p class="public-feature-kicker">Planejamento</p>
-                <h3>Planejamento central</h3>
-                <p>Crie campanhas por objetivo, destino e prioridade em uma interface unica.</p>
-              </article>
-              <article class="public-feature">
-                <p class="public-feature-kicker">Biblioteca</p>
-                <h3>Acervo de pecas reutilizavel</h3>
-                <p>Armazene videos, capas e copies para reaproveitamento entre canais e clientes.</p>
-              </article>
-              <article class="public-feature">
-                <p class="public-feature-kicker">Segurança</p>
-                <h3>Controle de acesso</h3>
-                <p>OAuth oficial por plataforma e trilha de acoes para reduzir falhas operacionais.</p>
-              </article>
-            </div>
-          </section>
-
-          <section id="fluxo" class="public-section public-flow">
-            <div class="public-section-head">
-              <p class="public-eyebrow">Como funciona</p>
-              <h2>Um fluxo claro para pessoas comuns, empresas e escritorios</h2>
-            </div>
-            <div class="public-flow-grid">
-              <article class="public-flow-card">
-                <span class="public-flow-step">1</span>
-                <h3>Conectar</h3>
-                <p>Autorize suas contas com permissoes minimas necessarias.</p>
-              </article>
-              <article class="public-flow-card">
-                <span class="public-flow-step">2</span>
-                <h3>Programar</h3>
-                <p>Monte campanhas com datas, texto, arquivos e regras por canal.</p>
-              </article>
-              <article class="public-flow-card">
-                <span class="public-flow-step">3</span>
-                <h3>Publicar</h3>
-                <p>Dispare por lote ou por peca e acompanhe aprovacao e agendamento.</p>
-              </article>
-              <article class="public-flow-card">
-                <span class="public-flow-step">4</span>
-                <h3>Otimizar</h3>
-                <p>Analise resposta e refine conteudo com visao de operacao.</p>
-              </article>
-            </div>
-          </section>
-
-          <section id="plataformas" class="public-section">
-            <div class="public-section-head">
-              <p class="public-eyebrow">Integrações oficiais</p>
-              <h2>Conecte onde seu publico esta</h2>
-            </div>
-            <div class="public-platform-grid">${platformCardsHtml}</div>
-          </section>
-
-          <section id="planos" class="public-section">
-            <div class="public-section-head">
-              <p class="public-eyebrow">Planos</p>
-              <h2>Planos reais do workspace, sem surpresa no cadastro</h2>
-              <p class="public-section-note">Valores, plataformas e tokens seguem a mesma configuracao da pagina Planos.</p>
-            </div>
-            <div class="public-pricing-grid">
-              ${planCardsHtml}
-            </div>
-            <div class="public-cta-row">
-              <a class="public-button public-button-large" href="/login?mode=register" data-link>Ver opcoes no cadastro</a>
-              <span>Sem compromisso até concluir o cadastro.</span>
-            </div>
-          </section>
-
-          <section id="faq" class="public-section public-faq">
-            <div class="public-section-head">
-              <p class="public-eyebrow">Perguntas rápidas</p>
-              <h2>Como evitamos fricção no dia a dia?</h2>
-            </div>
-            <div class="public-faq-grid">
-              <article class="public-faq-card">
-                <h3>Posso gerenciar multiplas contas e clientes?</h3>
-                <p>Sim. O workspace organiza contas por cliente e mantem historico compartilhado com seguranca.</p>
-              </article>
-              <article class="public-faq-card">
-                <h3>Como funciona a seguranca?</h3>
-                <p>Conexao via OAuth e controle de escopo para operacoes criticas.</p>
-              </article>
-              <article class="public-faq-card">
-                <h3>Posso revogar acesso depois?</h3>
-                <p>Sim. Voce pode desconectar a conta pelo workspace ou pela propria plataforma integrada.</p>
-              </article>
-              <article class="public-faq-card">
-                <h3>Funciona para escritorios e despachantes?</h3>
-                <p>Sim. A estrutura foi feita para operacao recorrente com multiplos perfis e times.</p>
-              </article>
-            </div>
-          </section>
-        </main>
-
-        <footer class="public-footer" aria-label="Rodape institucional">
-          <div class="public-footer-brand">
-            <strong>Platform Multi Publisher</strong>
-            <span>Publicacao profissional sem complicar a rotina.</span>
-          </div>
-          <nav class="public-footer-links" aria-label="Links institucionais">
-            <a href="/privacy" data-link>Politica de Privacidade</a>
-            <a href="/terms" data-link>Termos de Servico</a>
-            <a href="/data-deletion" data-link>Exclusao de Dados do Usuario</a>
-          </nav>
-        </footer>
-      </div>
-    </div>
-  `;
-
-  injectLogoStyles();
-  bindPublicLandingInteractions();
-}
-function bindPublicLandingInteractions() {
-  const preview = document.querySelector('.public-preview');
-  const buttons = Array.from(document.querySelectorAll('[data-landing-platform]'));
-  const panels = Array.from(document.querySelectorAll('[data-landing-panel]'));
-
-  buttons.forEach((button) => {
-    button.addEventListener('click', () => {
-      const platform = button.getAttribute('data-landing-platform');
-      if (!platform || !preview) return;
-
-      preview.setAttribute('data-platform', platform);
-      buttons.forEach((item) => item.classList.toggle('active', item === button));
-      panels.forEach((panel) => {
-        panel.hidden = panel.getAttribute('data-landing-panel') !== platform;
-      });
-    });
-  });
 }
 
 function bindPublicContactForm() {
@@ -6525,44 +4288,6 @@ function toDatetimeLocalValue(value) {
   return localDate.toISOString().slice(0, 16);
 }
 
-function renderBreakdownList(breakdown, emptyLabel = 'No data') {
-  const entries = Object.entries(breakdown ?? {})
-    .filter(([, count]) => Number(count ?? 0) > 0)
-    .sort((left, right) => Number(right[1] ?? 0) - Number(left[1] ?? 0) || String(left[0]).localeCompare(String(right[0])));
-
-  if (entries.length === 0) {
-    return `<p class="muted">${escapeHtml(emptyLabel)}</p>`;
-  }
-
-  return `
-    <div class="metric-list">
-      ${entries.map(([status, count]) => `
-        <div class="metric-row">
-          ${statusPill(normalizeLabel(status))}
-          <strong>${formatNumber(count)}</strong>
-        </div>
-      `).join('')}
-    </div>
-  `;
-}
-
-function renderStatusBars(breakdown, colorMap, emptyMsg = 'No data.') {
-  const entries = Object.entries(breakdown ?? {})
-    .filter(([, count]) => Number(count ?? 0) > 0)
-    .sort((a, b) => Number(b[1] ?? 0) - Number(a[1] ?? 0));
-  if (entries.length === 0) return `<p class="muted">${escapeHtml(emptyMsg)}</p>`;
-  const total = Math.max(1, entries.reduce((s, [, v]) => s + Number(v ?? 0), 0));
-  return `<div class="status-bar-row">${entries.map(([key, count]) => {
-    const pct = Math.round(Number(count ?? 0) / total * 100);
-    const cls = colorMap?.[key] ?? 'muted';
-    return `<div class="status-bar-item">
-      <span class="status-bar-name">${escapeHtml(normalizeLabel(key))}</span>
-      <div class="status-bar-track"><div class="status-bar-fill ${cls}" style="width:${pct}%"></div></div>
-      <span class="status-bar-count">${formatNumber(count)}</span>
-    </div>`;
-  }).join('')}</div>`;
-}
-
 function renderEmptyStateCard({ title, message, actionsHtml = '', tone = 'neutral' }) {
   return `
     <section class="card stack empty-state-card">
@@ -6573,16 +4298,6 @@ function renderEmptyStateCard({ title, message, actionsHtml = '', tone = 'neutra
       ${actionsHtml ? `<div class="inline-actions">${actionsHtml}</div>` : ''}
     </section>
   `;
-}
-
-function formatAccountIdentityLabel(account) {
-  const primary = account?.displayName ?? account?.email ?? 'Unknown account';
-  const email = account?.email && account.email !== primary ? account.email : null;
-  const providerLabel = getProviderLabel(account?.provider);
-  return {
-    primary,
-    secondary: [email, providerLabel].filter(Boolean).join(' | '),
-  };
 }
 
 function getDisplayInitials(value) {
@@ -6610,7 +4325,7 @@ function formatVisibleChannelName(channel, account = null) {
 
 function channelAvatarHtml(channel, label, className = 'channel-avatar') {
   if (channel?.thumbnailUrl) {
-    return `<img class="${escapeAttribute(className)}" src="${escapeAttribute(channel.thumbnailUrl)}" alt="${escapeAttribute(label)}" loading="lazy" />`;
+    return `<img class="${escapeAttribute(className)}" src="${escapeAttribute(channel.thumbnailUrl)}" alt="${escapeAttribute(label)}" loading="lazy" decoding="async" />`;
   }
   return `<span class="${escapeAttribute(className)} placeholder" aria-hidden="true">${escapeHtml(getDisplayInitials(label))}</span>`;
 }
@@ -6758,6 +4473,7 @@ function renderThumbnailPreviewCell(asset) {
           src="${escapeHtml(imageUrl)}"
           alt="${escapeHtml(asset.original_name ?? asset.id)}"
           loading="lazy"
+          decoding="async"
         />
         <div class="media-preview-overlay">
           <span class="media-preview-hint">Passe o mouse para ampliar e clique para abrir</span>
@@ -6844,6 +4560,7 @@ function openMediaPreviewDialog(asset) {
         src="${escapeHtml(previewUrl)}"
         alt="${escapeHtml(assetName)}"
         loading="eager"
+        decoding="async"
       />
     `;
 
@@ -6868,26 +4585,6 @@ function openMediaPreviewDialog(asset) {
       </div>
     `,
   });
-}
-
-function renderChecklistCard(title, items) {
-  return `
-    <section class="card stack">
-      <h3>${escapeHtml(title)}</h3>
-      <div class="checklist">
-        ${items.map((item) => `
-          <div class="checklist-item ${item.done ? 'done' : ''}">
-            <span class="checklist-mark">${item.done ? 'Done' : 'Next'}</span>
-            <div class="stack">
-              <strong>${escapeHtml(item.label)}</strong>
-              <span class="muted">${escapeHtml(item.hint)}</span>
-            </div>
-            ${item.actionHtml ? `<div class="inline-actions">${item.actionHtml}</div>` : ''}
-          </div>
-        `).join('')}
-      </div>
-    </section>
-  `;
 }
 
 function summarizeCampaignOutcomes(campaign) {
@@ -7026,7 +4723,7 @@ function renderGrowthMetricCard(metric) {
     <article class="growth-card growth-metric-card">
       <div class="growth-card-topline">
         <span>${escapeHtml(metric.label)}</span>
-        <span class="growth-card-icon">${renderNeonMediaIcon(metric.icon, 'chip', metric.tone)}</span>
+        <span class="growth-card-icon">${renderCampaignMark(metric.icon, metric.tone, 'growth-metric-mark')}</span>
       </div>
       <strong>${escapeHtml(metric.value)}</strong>
       <small>${escapeHtml(metric.change)}</small>
@@ -7072,7 +4769,7 @@ function renderGrowthChartCard(title, bodyHtml, description = '') {
           <h3>${escapeHtml(title)}</h3>
           ${description ? `<p>${escapeHtml(description)}</p>` : ''}
         </div>
-        <span>${renderNeonMediaIcon('star', 'chip', 'info')}</span>
+        <span>${renderMediaMark('star', 'chip', 'info')}</span>
       </div>
       ${bodyHtml}
     </section>
@@ -7110,7 +4807,7 @@ function renderGrowthIdeaCard(idea) {
 function renderGrowthReportCard(report) {
   return `
     <article class="growth-card">
-      <div class="growth-card-heading"><span>${renderNeonMediaIcon('library', 'chip', 'info')}</span><h3>${escapeHtml(report.title)}</h3></div>
+      <div class="growth-card-heading"><span>${renderMediaMark('library', 'chip', 'info')}</span><h3>${escapeHtml(report.title)}</h3></div>
       <p>${escapeHtml(report.summary)}</p>
     </article>
   `;
@@ -7160,7 +4857,7 @@ function renderGrowthScriptResearchResult(result = {}) {
           <h3>Brief usado para gerar o roteiro</h3>
           <p>${escapeHtml(brief.summary ?? 'Brief operacional criado a partir do tema e dos sinais reais do Growth.')}</p>
         </div>
-        <span>${renderNeonMediaIcon('star', 'chip', 'info')}</span>
+        <span>${renderMediaMark('star', 'chip', 'info')}</span>
       </div>
       <div class="growth-mini-grid growth-script-signal-grid">
         <span><strong>Melhor plataforma</strong><small>${escapeHtml(signals.bestPlatform ?? 'Sem sinal')}</small></span>
@@ -7264,7 +4961,7 @@ function buildGeneratedGrowthIdeas(topic) {
 function renderGrowthEmptyState(title, description, action = '', actionHref = '') {
   return `
     <section class="growth-empty-state">
-      <span>${renderNeonMediaIcon('add', 'chip', 'warning')}</span>
+      <span>${renderMediaMark('add', 'chip', 'warning')}</span>
       <h3>${escapeHtml(title)}</h3>
       <p>${escapeHtml(description)}</p>
       ${action && actionHref ? `<a class="button button-primary" data-link href="${escapeAttribute(actionHref)}">${escapeHtml(action)}</a>` : ''}
@@ -7590,14 +5287,14 @@ function buildGrowthWorkspaceData(input = {}) {
     heroLabel: targetTotal > 0 ? 'taxa de sucesso real' : 'contas conectadas',
     overviewSummary: `Campanhas: ${formatNumber(campaignTotal)} - Destinos: ${formatNumber(targetTotal)} - Publicados: ${formatNumber(publishedTargets)} - Falhas: ${formatNumber(failedTargets)} - Contas conectadas: ${formatNumber(connectedAccounts.length)}`,
     metrics: [
-      { label: 'Campanhas reais', value: formatNumber(campaignTotal), change: `${formatNumber(campaigns.length)} carregadas`, icon: 'playlist', tone: 'info' },
-      { label: 'Destinos publicados', value: formatNumber(publishedTargets), change: `${formatPercent(successRate, 0)} sucesso`, icon: 'published', tone: 'success' },
-      { label: 'Falhas', value: formatNumber(failedTargets), change: failedTargets > 0 ? 'exigem revisao' : 'sem bloqueios recentes', icon: 'warning', tone: failedTargets > 0 ? 'warning' : 'success' },
-      { label: 'Contas conectadas', value: formatNumber(connectedAccounts.length), change: `${formatNumber(accounts.length)} cadastradas`, icon: 'available', tone: 'success' },
-      { label: 'Canais ativos', value: channelMetricValue, change: channelMetricChange, icon: 'video', tone: channelSyncStatus === 'partial' ? 'warning' : 'info' },
-      { label: 'Alcance observado', value: formatNumber(totalViews), change: totalViews > 0 ? 'views sincronizadas' : 'sem views sincronizadas', icon: 'star', tone: 'processing' },
-      { label: 'Fila ativa', value: formatNumber(activeJobs), change: 'queued + processing', icon: 'clock', tone: activeJobs > 0 ? 'warning' : 'success' },
-      { label: 'Cota projetada', value: formatPercent(projectedQuota, 0), change: 'uso estimado da API', icon: 'storage', tone: projectedQuota >= 80 ? 'warning' : 'info' },
+      { label: 'Campanhas reais', value: formatNumber(campaignTotal), change: `${formatNumber(campaigns.length)} carregadas`, icon: 'CP', tone: 'info' },
+      { label: 'Destinos publicados', value: formatNumber(publishedTargets), change: `${formatPercent(successRate, 0)} sucesso`, icon: 'PUB', tone: 'success' },
+      { label: 'Falhas', value: formatNumber(failedTargets), change: failedTargets > 0 ? 'exigem revisao' : 'sem bloqueios recentes', icon: 'ER', tone: failedTargets > 0 ? 'warning' : 'success' },
+      { label: 'Contas conectadas', value: formatNumber(connectedAccounts.length), change: `${formatNumber(accounts.length)} cadastradas`, icon: 'ACC', tone: 'success' },
+      { label: 'Canais ativos', value: channelMetricValue, change: channelMetricChange, icon: 'CAN', tone: channelSyncStatus === 'partial' ? 'warning' : 'info' },
+      { label: 'Alcance observado', value: formatNumber(totalViews), change: totalViews > 0 ? 'views sincronizadas' : 'sem views sincronizadas', icon: 'VIS', tone: 'processing' },
+      { label: 'Fila ativa', value: formatNumber(activeJobs), change: 'queued + processing', icon: 'FILA', tone: activeJobs > 0 ? 'warning' : 'success' },
+      { label: 'Cota projetada', value: formatPercent(projectedQuota, 0), change: 'uso estimado da API', icon: 'COTA', tone: projectedQuota >= 80 ? 'warning' : 'info' },
     ],
     platformGrowth,
     monthlyReach: lineValues.length ? lineValues : [0, 0, 0],
@@ -7700,7 +5397,7 @@ function renderGrowthOverview(growthData = buildGrowthWorkspaceData()) {
       <section class="growth-card">
         <div class="growth-card-heading">
           <div><h3>Painel de decisao</h3><p>O que postar, onde postar, o que corrigir e o que repetir.</p></div>
-          <span>${renderNeonMediaIcon('star', 'chip', 'info')}</span>
+          <span>${renderMediaMark('star', 'chip', 'info')}</span>
         </div>
         <div class="growth-list growth-decision-list">
           ${decisionActions.map(renderGrowthDecisionAction).join('')}
@@ -7712,7 +5409,7 @@ function renderGrowthOverview(growthData = buildGrowthWorkspaceData()) {
       <section class="growth-card">
         <div class="growth-card-heading">
           <div><h3>Proxima melhor acao</h3><p>Recomendacoes praticas para consistencia, alcance observado e correcoes.</p></div>
-          <span>${renderNeonMediaIcon('published', 'chip', 'success')}</span>
+          <span>${renderMediaMark('published', 'chip', 'success')}</span>
         </div>
         <div class="growth-list">
           ${growthData.recommendations.map((item) => `<article><span class="growth-list-marker"></span><p>${escapeHtml(item)}</p></article>`).join('')}
@@ -7720,14 +5417,6 @@ function renderGrowthOverview(growthData = buildGrowthWorkspaceData()) {
       </section>
     </section>
   `;
-}
-
-function renderGrowthCalendar(growthData = buildGrowthWorkspaceData()) {
-  return renderGrowthContentHub(growthData);
-}
-
-function renderGrowthIdeas() {
-  return renderGrowthContentHub(buildGrowthWorkspaceData());
 }
 
 function renderGrowthScriptComposer() {
@@ -7748,17 +5437,6 @@ function renderGrowthScriptComposer() {
         </div>
       </article>
     </section>
-  `;
-}
-
-function renderGrowthScript() {
-  return `
-    <section class="growth-page-title">
-      <span class="growth-eyebrow">Gerador de roteiro</span>
-      <h3>Transforme uma ideia em estrutura de conteudo.</h3>
-      <p>Use uma previa local para estruturar gancho, desenvolvimento, legenda e CTA antes de criar a campanha.</p>
-    </section>
-    ${renderGrowthScriptComposer()}
   `;
 }
 
@@ -7791,7 +5469,7 @@ function renderGrowthContentHub(growthData = buildGrowthWorkspaceData()) {
       <section class="growth-card">
         <div class="growth-card-heading">
           <div><h3>Proximas campanhas do PMP</h3><p>Visualizacao simples de campanhas recentes ou agendadas, sem filtros falsos.</p></div>
-          <span>${renderNeonMediaIcon('clock', 'chip', 'info')}</span>
+          <span>${renderMediaMark('clock', 'chip', 'info')}</span>
         </div>
         ${upcomingPosts.length
           ? `<div class="growth-card-grid">${upcomingPosts.map(renderGrowthContentCard).join('')}</div>`
@@ -7800,7 +5478,7 @@ function renderGrowthContentHub(growthData = buildGrowthWorkspaceData()) {
       <section class="growth-card">
         <div class="growth-card-heading">
           <div><h3>Modelos para reutilizar</h3><p>Templates locais para acelerar roteiro e campanha. Nao substituem biblioteca persistida.</p></div>
-          <span>${renderNeonMediaIcon('library', 'chip', 'warning')}</span>
+          <span>${renderMediaMark('library', 'chip', 'warning')}</span>
         </div>
         <div class="growth-list growth-list-plain">
           ${GROWTH_TEMPLATE_DATA.library.map((item) => `
@@ -8083,10 +5761,6 @@ function renderGrowthCampaigns(growthData = buildGrowthWorkspaceData()) {
   `;
 }
 
-function renderGrowthLibrary() {
-  return renderGrowthContentHub(buildGrowthWorkspaceData());
-}
-
 function getGrowthPlatformSettingsRows() {
   const allowedPlatforms = new Set(
     (state.account?.allowedPlatforms ?? []).map((platform) => String(platform).toLowerCase())
@@ -8208,7 +5882,6 @@ function buildGrowthPreferencesExportPayload() {
       plan: state.account?.plan ?? null,
       planLabel: state.account?.planLabel ?? getPlanVisualConfig().label,
       backgroundTheme: state.backgroundTheme,
-      fontTheme: state.fontTheme,
     },
     platforms: getGrowthPlatformSettingsRows().map((platform) => ({
       key: platform.key,
@@ -8692,9 +6365,9 @@ function buildOdThemeFromSettings() {
   const appearance = selected.appearance === 'dark' ? 'dark' : 'light';
   const accent = selected.primary ?? '#40e0d0';
   const accent2 = selected.primaryStrong ?? selected.info ?? accent;
-  const textHi = appearance === 'dark' ? '#f8fafc' : '#0f172a';
-  const textMd = appearance === 'dark' ? '#dbeafe' : '#334155';
-  const textLo = appearance === 'dark' ? '#94a3b8' : '#64748b';
+  const textHi = selected.text;
+  const textMd = selected.textSubtle;
+  const textLo = selected.textMuted;
   const border = withAlpha(selected.border, appearance === 'dark' ? 0.32 : 0.26);
   const borderDim = withAlpha(selected.border, appearance === 'dark' ? 0.2 : 0.18);
   const panel = `linear-gradient(180deg, ${selected.surface} 0%, ${selected.surfaceMuted} 100%)`;
@@ -8730,6 +6403,7 @@ function applyOdThemeFromSettings() {
   const root = document.getElementById('od-root');
   if (!root) return;
   const dashboardPage = root.closest('.workspace-page-dashboard');
+
   const isDarkTheme = theme.appearance === 'dark';
   root.style.background = theme.bg;
   if (dashboardPage) {
@@ -8798,23 +6472,6 @@ function dashboardNumber(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function dashboardStatusHref(status) {
-  return status ? buildUrl('/workspace/campanhas', { status }) : '/workspace/campanhas';
-}
-
-function dashboardFailureReasonLabel(reason) {
-  switch (reason) {
-    case 'quota_exceeded':
-      return 'Quota exceeded';
-    case 'post_upload_step_failed':
-      return 'Post upload step';
-    case 'other_failure':
-      return 'Other failure';
-    default:
-      return 'No failures';
-  }
-}
-
 function dashboardPlatformLabel(platform) {
   switch ((platform ?? '').toLowerCase()) {
     case 'youtube':
@@ -8828,126 +6485,8 @@ function dashboardPlatformLabel(platform) {
   }
 }
 
-function renderEditorialPulseInsights({ stats, campaigns, targetTotal, publishedTargets, failedTargets, activeJobs, successRate, projectedQuota }) {
-  const queuedTargets = Math.max(0, targetTotal - publishedTargets - failedTargets - activeJobs);
-  const segments = [
-    { key: 'published', label: 'Published', value: publishedTargets, tone: 'success' },
-    { key: 'active',    label: 'In flight', value: activeJobs,        tone: 'info'    },
-    { key: 'queued',    label: 'Queued',    value: queuedTargets,     tone: 'neutral' },
-    { key: 'failed',    label: 'Failed',    value: failedTargets,     tone: 'danger'  },
-  ].filter((segment) => segment.value > 0);
-  const totalForBar = segments.reduce((sum, segment) => sum + segment.value, 0) || 1;
-
-  const distributionBar = segments.length
-    ? `<div class="od-pulse-distribution-bar" role="img" aria-label="Targets by status">
-         ${segments.map((segment) => `
-           <span class="od-pulse-dist-seg" data-tone="${segment.tone}"
-                 style="flex:${segment.value};"
-                 title="${escapeAttribute(`${segment.label}: ${segment.value}`)}"></span>
-         `).join('')}
-       </div>
-       <div class="od-pulse-distribution-legend od-mono">
-         ${segments.map((segment) => `
-           <span class="od-pulse-dist-legend-item" data-tone="${segment.tone}">
-             <span class="od-pulse-dist-legend-dot"></span>
-             <span>${escapeHtml(segment.label)}</span>
-             <strong>${formatNumber(segment.value)}</strong>
-           </span>
-         `).join('')}
-       </div>`
-    : '<div class="od-muted od-mono" style="font-size:0.7rem">No targets dispatched yet — start a campaign to see distribution.</div>';
-
-  const successPct = clampPercent(successRate);
-  const quotaPct = clampPercent(projectedQuota);
-  const quotaTone = quotaPct >= 80 ? 'danger' : quotaPct >= 60 ? 'warning' : 'success';
-  const successTone = successPct >= 90 ? 'success' : successPct >= 70 ? 'warning' : 'danger';
-
-  const statChips = `
-    <div class="od-pulse-stat" data-tone="${successTone}">
-      <div class="od-pulse-stat-head">
-        <span class="od-pulse-stat-label od-mono">Success</span>
-        <strong class="od-pulse-stat-value">${formatPercent(successPct)}</strong>
-      </div>
-      <div class="od-pulse-stat-track"><span class="od-pulse-stat-fill" style="width:${successPct}%"></span></div>
-    </div>
-    <div class="od-pulse-stat" data-tone="${quotaTone}">
-      <div class="od-pulse-stat-head">
-        <span class="od-pulse-stat-label od-mono">Quota</span>
-        <strong class="od-pulse-stat-value">${formatPercent(quotaPct)}</strong>
-      </div>
-      <div class="od-pulse-stat-track"><span class="od-pulse-stat-fill" style="width:${quotaPct}%"></span></div>
-    </div>
-    <div class="od-pulse-stat" data-tone="${activeJobs > 0 ? 'info' : 'neutral'}">
-      <div class="od-pulse-stat-head">
-        <span class="od-pulse-stat-label od-mono">Live jobs</span>
-        <strong class="od-pulse-stat-value">${formatNumber(activeJobs)}</strong>
-      </div>
-      <div class="od-pulse-stat-foot od-muted od-mono">
-        <span class="od-pulse-stat-dot${activeJobs > 0 ? ' active' : ''}"></span>
-        <span>${activeJobs > 0 ? 'processing' : 'idle'}</span>
-      </div>
-    </div>
-  `;
-
-  const upcoming = (campaigns || [])
-    .filter((campaign) => campaign?.scheduledAt)
-    .slice(0, 4)
-    .map((campaign) => ({
-      title: String(campaign?.title ?? 'Untitled'),
-      scheduledAt: campaign.scheduledAt,
-      formatted: formatDate(campaign.scheduledAt),
-    }));
-
-  const timeline = upcoming.length
-    ? `<div class="od-pulse-timeline" aria-label="Upcoming campaigns">
-         <div class="od-pulse-timeline-track" aria-hidden="true"></div>
-         ${upcoming.map((item, index) => `
-           <div class="od-pulse-timeline-node" style="--node-pos:${(index / Math.max(1, upcoming.length - 1)) * 100}%">
-             <span class="od-pulse-timeline-dot" data-position="${index === 0 ? 'next' : 'later'}"></span>
-             <div class="od-pulse-timeline-meta">
-               <span class="od-mono od-pulse-timeline-when">${escapeHtml(item.formatted)}</span>
-               <span class="od-pulse-timeline-title">${escapeHtml(item.title)}</span>
-             </div>
-           </div>
-         `).join('')}
-       </div>`
-    : '';
-
-  return `
-    <div class="od-pulse-insights">
-      <div class="od-pulse-insight-block od-pulse-distribution">
-        <div class="od-pulse-insight-head">
-          <span class="od-kpi-label od-mono">Publishing distribution</span>
-          <span class="od-panel-meta od-muted od-mono">${formatNumber(targetTotal)} total targets</span>
-        </div>
-        ${distributionBar}
-      </div>
-      <div class="od-pulse-insight-block od-pulse-stats" role="group" aria-label="Operational health">
-        ${statChips}
-      </div>
-      ${timeline ? `<div class="od-pulse-insight-block od-pulse-upcoming">
-        <div class="od-pulse-insight-head">
-          <span class="od-kpi-label od-mono">Upcoming launches</span>
-          <span class="od-panel-meta od-muted od-mono">${upcoming.length} scheduled</span>
-        </div>
-        ${timeline}
-      </div>` : ''}
-    </div>
-  `;
-}
-
-function renderDashboardActionMark(kind = 'create') {
-  const map = {
-    create: { label: 'NEW', tone: 'info' },
-    campaigns: { label: 'FILA', tone: 'processing' },
-    accounts: { label: 'AUTH', tone: 'success' },
-  };
-  const meta = map[kind] ?? map.create;
-  return renderCampaignMark(meta.label, meta.tone, 'od-hero-action-mark');
-}
-
 function getDashboardChannelLabel(channel) {
-  return String(channel?.channelLabel ?? '').trim() || 'Connected account';
+  return String(channel?.channelLabel ?? '').trim() || 'Conta conectada';
 }
 
 function renderRankBadge(index) {
@@ -8986,8 +6525,8 @@ function buildChannelKpiSlots(channelsByProvider) {
       const baseline = hasStats ? Math.max(1, Math.round((totalViews - todayViews) / 30)) : 1;
       const growth = hasStats ? Math.round(((todayViews - baseline) / baseline) * 100) : 0;
       const meta = hasStats
-        ? (successRate > 0 ? `${successRate.toFixed(1)}% delivery` : 'Trending up')
-        : 'Awaiting first publish';
+        ? (successRate > 0 ? `${successRate.toFixed(1)}% de entrega` : 'Em crescimento')
+        : 'Aguardando primeira publicacao';
       return {
         kind: 'account',
         label: getDashboardChannelLabel(channel),
@@ -9006,11 +6545,11 @@ function buildChannelKpiSlots(channelsByProvider) {
       const aggGrowth = aggTotal > 0 ? Math.round(((aggToday - aggBaseline) / aggBaseline) * 100) : 0;
       aggregate = {
         kind: 'aggregate',
-        label: 'All accounts',
+        label: 'Todas as contas',
         totalViews: aggTotal,
         todayViews: aggToday,
         growth: aggGrowth,
-        meta: `${individual.length} accounts combined`,
+        meta: `${individual.length} contas combinadas`,
       };
     }
     slots[provider] = { individual, aggregate };
@@ -9029,16 +6568,16 @@ function renderChannelKpiCard(provider, slot) {
         <header class="od-channel-card-head">
           <div class="od-channel-icon" aria-hidden="true">${icon}</div>
           <div class="od-channel-meta">
-            <span class="od-kpi-label od-mono">Channel</span>
+            <span class="od-kpi-label od-mono">Canal</span>
             <strong class="od-channel-name">${escapeHtml(platformLabel)}</strong>
           </div>
         </header>
         <div class="od-channel-card-body">
-          <span class="od-kpi-label od-mono">No connected accounts</span>
+          <span class="od-kpi-label od-mono">Sem contas conectadas</span>
           <strong class="od-channel-total od-channel-total-empty">—</strong>
         </div>
         <footer class="od-channel-card-foot">
-          <small class="od-muted od-mono">Connect a ${escapeHtml(platformLabel)} account to start tracking views.</small>
+          <small class="od-muted od-mono">Conecte uma conta do ${escapeHtml(platformLabel)} para acompanhar visualizacoes.</small>
         </footer>
       </article>
     `;
@@ -9059,12 +6598,12 @@ function renderChannelKpiCard(provider, slot) {
         </span>
       </header>
       <div class="od-channel-card-body">
-        <span class="od-kpi-label od-mono" data-bind="kind-label">Account total views</span>
+        <span class="od-kpi-label od-mono" data-bind="kind-label">Visualizacoes totais da conta</span>
         <strong class="od-channel-total" data-bind="total">0</strong>
       </div>
       <footer class="od-channel-card-foot">
         <div class="od-channel-today">
-          <span class="od-kpi-label od-mono">Today</span>
+          <span class="od-kpi-label od-mono">Hoje</span>
           <strong data-bind="today">+0</strong>
         </div>
         <div class="od-channel-trend od-muted od-mono">
@@ -9074,7 +6613,7 @@ function renderChannelKpiCard(provider, slot) {
       </footer>
       <div class="od-channel-card-pager" aria-hidden="true">
         <span class="od-channel-card-counter od-mono" data-bind="counter">1/${slot.individual.length}</span>
-        <span class="od-channel-card-aggregate-flag" data-bind="agg-flag" hidden>All accounts</span>
+        <span class="od-channel-card-aggregate-flag" data-bind="agg-flag" hidden>Todas as contas</span>
       </div>
     </article>
   `;
@@ -9111,7 +6650,7 @@ function renderLeadershipRows(rankedChannels, emptyLabel) {
         <span class="od-leader-rank">${renderRankBadge(index)}</span>
         <div class="od-leader-main">
           ${thumbnailUrl
-            ? `<img class="od-leader-thumb" src="${escapeAttribute(thumbnailUrl)}" alt="${escapeAttribute(topVideoLabel)}" loading="lazy" referrerpolicy="no-referrer" />`
+            ? `<img class="od-leader-thumb" src="${escapeAttribute(thumbnailUrl)}" alt="${escapeAttribute(topVideoLabel)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
             : '<div class="od-leader-thumb od-leader-thumb-empty" aria-hidden="true"></div>'}
           <div class="od-leader-copy">
             <small class="od-leader-account">${escapeHtml(accountLabel)}</small>
@@ -9133,7 +6672,7 @@ function renderLeadershipRows(rankedChannels, emptyLabel) {
 function renderViewsPerformancePanel(rankedChannels) {
   const visibleChannels = rankedChannels.slice(0, 6);
   if (!visibleChannels.length) {
-    return '<div class="od-muted" style="padding:1rem 0">Connect accounts to unlock channel performance.</div>';
+    return '<div class="od-muted" style="padding:1rem 0">Conecte contas para liberar a analise de desempenho.</div>';
   }
   const totalViews = visibleChannels.reduce((sum, channel) => sum + Number(channel?.totalViews ?? 0), 0);
   const averageSuccess = visibleChannels.reduce((sum, channel) => sum + Number(channel?.successRate ?? 0), 0) / visibleChannels.length;
@@ -9165,15 +6704,15 @@ function renderViewsPerformancePanel(rankedChannels) {
   return `
     <div class="od-views-summary">
       <div class="od-views-total">
-        <span class="od-kpi-label od-mono">Total views</span>
+        <span class="od-kpi-label od-mono">Visualizacoes totais</span>
         <strong>${formatNumber(totalViews)}</strong>
       </div>
       <div class="od-views-chip">
-        <span>Leader</span>
+        <span>Lider</span>
         <strong>${escapeHtml(getDashboardChannelLabel(topChannel))}</strong>
       </div>
       <div class="od-views-chip">
-        <span>Avg delivery</span>
+        <span>Entrega media</span>
         <strong>${formatPercent(averageSuccess)}</strong>
       </div>
     </div>
@@ -9226,8 +6765,8 @@ function startChannelKpiCarousel(root) {
         if (elements.label) elements.label.textContent = data.label;
         if (elements.kindLabel) {
           elements.kindLabel.textContent = data.kind === 'aggregate'
-            ? 'Total platform views'
-            : 'Account total views';
+            ? 'Visualizacoes totais da plataforma'
+            : 'Visualizacoes totais da conta';
         }
         if (elements.total) elements.total.textContent = formatNumber(data.totalViews);
         if (elements.today) elements.today.textContent = `+${formatNumber(data.todayViews)}`;
@@ -9237,7 +6776,7 @@ function startChannelKpiCarousel(root) {
           const sign = data.growth > 0 ? '+' : '';
           elements.deltaText.textContent = `${sign}${data.growth}%`;
         }
-        if (elements.trendText) elements.trendText.textContent = data.meta || (direction === 'up' ? 'Trending up' : 'Trending down');
+        if (elements.trendText) elements.trendText.textContent = data.meta || (direction === 'up' ? 'Em crescimento' : 'Em queda');
         if (elements.counter) elements.counter.textContent = `${(idx % individual.length) + 1}/${individual.length}`;
         if (elements.aggFlag) elements.aggFlag.hidden = data.kind !== 'aggregate';
         card.setAttribute('data-trend', direction);
@@ -9359,8 +6898,8 @@ function renderDashboardPlaylistPlayerItem(playlist, video, isActive = false) {
     >
       <div class="od-playlist-player-thumb">
         ${video.posterUrl
-          ? `<img src="${escapeAttribute(video.posterUrl)}" alt="${escapeAttribute(video.title)}" loading="lazy" />`
-          : renderNeonMediaIcon('video', 'tile', { state: video.item?.usedAt ? 'success' : 'processing' })}
+          ? `<img src="${escapeAttribute(video.posterUrl)}" alt="${escapeAttribute(video.title)}" loading="lazy" decoding="async" />`
+          : renderMediaMark('video', 'tile', { state: video.item?.usedAt ? 'success' : 'processing' })}
         <span class="od-playlist-player-play" aria-hidden="true"></span>
       </div>
       <div class="od-playlist-player-copy">
@@ -9432,7 +6971,7 @@ function renderDashboardPlaylistPanel(playlists, assets) {
           `
           : `
             <div class="od-playlist-player-empty">
-              ${renderNeonMediaIcon('playlist', 'stat', { state: 'processing' })}
+              ${renderMediaMark('playlist', 'stat', { state: 'processing' })}
               <strong>Nenhuma playlist com vídeos prontos</strong>
               <span>Crie uma playlist com vídeos da biblioteca para reproduzir aqui.</span>
               <a class="button button-secondary" data-link href="/workspace/videos?view=playlists">Abrir playlists</a>
@@ -9836,127 +7375,162 @@ async function renderPlatformDashboardPage() {
     },
   ];
 
+  const primaryDecision = dashboardDecisionCards[0];
+  const secondaryDecisions = dashboardDecisionCards.slice(1);
+  const operationTone = failedTargets > 0 || reauthAccounts > 0 ? 'attention' : activeJobs > 0 ? 'active' : 'healthy';
+  const operationLabel = operationTone === 'attention'
+    ? 'Atencao necessaria'
+    : operationTone === 'active'
+      ? 'Publicacoes em andamento'
+      : 'Operacao saudavel';
+
   const contentHtml = `
-    <div id="od-root" class="od-root od-dashboard-pro" data-mode="overview">
-      <div class="od-bg-globe-field" aria-hidden="true">
-        <div class="od-bg-globe od-bg-globe-secondary">${buildOdGlobe()}</div>
-        <div class="od-bg-globe">${buildOdGlobe()}</div>
-      </div>
+    <div id="od-root" class="od-root od-dashboard-pro pmp-dashboard" data-mode="overview">
+      <header class="pmp-dashboard-header">
+        <div class="pmp-dashboard-title">
+          <span class="pmp-eyebrow">Central de operacao</span>
+          <h1>Visao geral</h1>
+          <p>Acompanhe publicacoes, identifique bloqueios e escolha a proxima acao sem perder o contexto.</p>
+        </div>
+        <div class="pmp-dashboard-header-actions">
+          <span class="pmp-updated od-mono"><span class="od-live-dot"></span> Atualizado <strong data-dashboard-clock>${escapeHtml(liveClock)}</strong></span>
+          <button type="button" class="pmp-button pmp-button-quiet" data-action="dashboard-refresh">Atualizar</button>
+          <a class="pmp-button pmp-button-primary" data-link href="/workspace/campanhas/nova">Criar campanha</a>
+        </div>
+      </header>
 
-      <div class="od-topbar od-command-topbar">
-        <div>
-          <div class="od-brand">Painel editorial</div>
-          <span class="od-muted">Visao operacional para publicacao e performance.</span>
-        </div>
-        <div class="od-topbar-right od-muted od-mono">
-          <span class="od-live-dot"></span><span data-dashboard-clock>${escapeHtml(liveClock)}</span>
-          <button type="button" class="od-refresh-button od-mono" data-action="dashboard-refresh">Atualizar</button>
-        </div>
-      </div>
+      <section class="pmp-command" aria-label="Prioridade operacional">
+        <article class="pmp-priority-panel" data-tone="${escapeHtml(operationTone)}">
+          <div class="pmp-priority-status">
+            <span class="pmp-status-dot" aria-hidden="true"></span>
+            <span>${escapeHtml(operationLabel)}</span>
+          </div>
+          <div class="pmp-priority-copy">
+            <span class="pmp-section-kicker">Proxima melhor acao</span>
+            <h2>${escapeHtml(primaryDecision.title)}</h2>
+            <p>${escapeHtml(primaryDecision.detail)}</p>
+          </div>
+          <div class="pmp-priority-actions">
+            <a class="pmp-button pmp-button-primary" data-link href="${escapeAttribute(primaryDecision.href)}">${escapeHtml(primaryDecision.cta)}</a>
+            <a class="pmp-text-link" data-link href="/workspace/campanhas">Ver todas as campanhas</a>
+          </div>
+          <div class="pmp-priority-context">
+            <span>Proxima publicacao</span>
+            <strong>${escapeHtml(nextCampaign ? `${nextCampaign.title ?? 'Sem titulo'} - ${formatDate(nextCampaign.scheduledAt)}` : 'Nenhuma campanha agendada')}</strong>
+          </div>
+        </article>
 
-      <section class="od-command-hero od-command-hero-split">
-        <div class="od-hero-copy od-panel">
-          <div class="od-pulse-header">
-            <span class="od-kpi-label od-mono">Pulso editorial</span>
-            <span class="od-pulse-clock od-mono" aria-label="Hora atual">
-              <span>Agora</span>
-              <strong data-dashboard-clock>${escapeHtml(liveClock)}</strong>
-            </span>
+        <aside class="pmp-health-panel" aria-label="Saude da operacao">
+          <div class="pmp-panel-heading">
+            <div>
+              <span class="pmp-section-kicker">Saude da operacao</span>
+              <h2>Fluxo de publicacao</h2>
+            </div>
+            <span class="pmp-health-score">${formatPercent(successRate)}</span>
           </div>
-          <div class="od-pulse-rotator" aria-live="polite">
-            ${pulseAds.map((line, index) => `<h1 class="od-pulse-line${index === 0 ? ' active' : ''}" data-pulse-line>${escapeHtml(line)}</h1>`).join('')}
+          <div class="pmp-health-list">
+            <div class="pmp-health-item">
+              <div><span>Taxa de sucesso</span><strong>${formatPercent(successRate)}</strong></div>
+              <span class="pmp-health-track"><span style="width:${clampPercent(successRate)}%"></span></span>
+            </div>
+            <div class="pmp-health-item" data-tone="${projectedQuota >= 80 ? 'danger' : projectedQuota >= 60 ? 'warning' : 'info'}">
+              <div><span>Uso projetado da cota</span><strong>${formatPercent(projectedQuota)}</strong></div>
+              <span class="pmp-health-track"><span style="width:${clampPercent(projectedQuota)}%"></span></span>
+            </div>
           </div>
-          <p class="od-muted">
-            Proxima campanha: ${escapeHtml(nextCampaign ? `${nextCampaign.title ?? 'Sem titulo'} em ${formatDate(nextCampaign.scheduledAt)}` : 'nenhuma agendada')}
-          </p>
-          ${renderEditorialPulseInsights({ stats, campaigns, targetTotal, publishedTargets, failedTargets, activeJobs, successRate, projectedQuota })}
-          <div class="od-hero-actions">
-            <a class="platform-button-primary od-hero-action-btn" data-link href="/workspace/campanhas/nova">
-              <span class="od-hero-action-icon">${renderDashboardActionMark('create')}</span>
-              <span>Criar campanha</span>
-            </a>
-            <a class="button button-secondary od-hero-action-btn" data-link href="/workspace/campanhas">
-              <span class="od-hero-action-icon">${renderDashboardActionMark('campaigns')}</span>
-              <span>Ver campanhas</span>
-            </a>
-            <a class="button button-secondary od-hero-action-btn" data-link href="/workspace/accounts">
-              <span class="od-hero-action-icon">${renderDashboardActionMark('accounts')}</span>
-              <span>Contas conectadas</span>
-            </a>
+          <div class="pmp-health-meta">
+            <div><strong>${formatNumber(accounts.length)}</strong><span>contas</span></div>
+            <div><strong>${formatNumber(destinations.length)}</strong><span>canais</span></div>
+            <div><strong>${formatNumber(targetTotal)}</strong><span>destinos</span></div>
           </div>
-        </div>
-        ${playlistPanelHtml}
+        </aside>
       </section>
 
-      <section class="od-decision-strip" aria-label="Proxima melhor acao">
-        <div class="od-decision-head">
-          <span class="od-kpi-label od-mono">Proxima melhor acao</span>
-          <span class="od-panel-meta od-muted od-mono">Publicar, corrigir, repetir</span>
+      <section class="pmp-metrics-section" aria-labelledby="pmp-metrics-title">
+        <div class="pmp-section-heading">
+          <div>
+            <span class="pmp-section-kicker">Resumo de hoje</span>
+            <h2 id="pmp-metrics-title">O que esta acontecendo agora</h2>
+          </div>
+          <span class="pmp-section-note">Dados consolidados do workspace</span>
         </div>
-        <div class="od-decision-grid">
-          ${dashboardDecisionCards.map((card) => `
-            <article class="od-decision-card" data-tone="${escapeHtml(card.tone)}">
-              ${renderCampaignMark(card.mark, card.tone, 'od-decision-mark')}
-              <div class="od-decision-copy">
+        <div class="pmp-metric-board">
+          <article class="pmp-metric"><span>Publicacoes concluidas</span><strong>${formatNumber(publishedTargets)}</strong><small>${formatPercent(successRate)} de sucesso</small></article>
+          <article class="pmp-metric"><span>Campanhas</span><strong>${formatNumber(campaignTotal)}</strong><small>Total no workspace</small></article>
+          <article class="pmp-metric" data-tone="${activeJobs > 0 ? 'active' : 'neutral'}"><span>Em processamento</span><strong>${formatNumber(activeJobs)}</strong><small>Fila e jobs ativos</small></article>
+          <article class="pmp-metric" data-tone="${failedTargets > 0 ? 'danger' : 'healthy'}"><span>Exigem atencao</span><strong>${formatNumber(failedTargets)}</strong><small>${failedTargets > 0 ? 'Falhas para revisar' : 'Nenhum bloqueio'}</small></article>
+        </div>
+      </section>
+
+      <section class="pmp-action-section" aria-labelledby="pmp-actions-title">
+        <div class="pmp-section-heading">
+          <div>
+            <span class="pmp-section-kicker">Decisoes rapidas</span>
+            <h2 id="pmp-actions-title">Mantenha a operacao em movimento</h2>
+          </div>
+        </div>
+        <div class="pmp-secondary-actions">
+          ${secondaryDecisions.map((card) => `
+            <article class="pmp-secondary-action" data-tone="${escapeAttribute(card.tone)}">
+              <div class="pmp-secondary-action-copy">
                 <span>${escapeHtml(card.label)}</span>
-                <strong>${escapeHtml(card.title)}</strong>
+                <h3>${escapeHtml(card.title)}</h3>
                 <p>${escapeHtml(card.detail)}</p>
               </div>
-              <a class="button button-secondary button-sm" data-link href="${escapeHtml(card.href)}">${escapeHtml(card.cta)}</a>
+              <a class="pmp-text-link" data-link href="${escapeAttribute(card.href)}">${escapeHtml(card.cta)}</a>
             </article>
           `).join('')}
         </div>
       </section>
 
-      <section class="od-channel-kpi-row" aria-label="Desempenho dos canais">
-        <div class="od-channel-kpi-head">
-          <span class="od-kpi-label od-mono">Desempenho dos canais</span>
-          <span class="od-panel-meta od-muted od-mono">Hoje vs. ultimas 24h</span>
+      <section class="pmp-channel-section" aria-labelledby="pmp-channel-title">
+        <div class="pmp-section-heading">
+          <div>
+            <span class="pmp-section-kicker">Canais conectados</span>
+            <h2 id="pmp-channel-title">Desempenho por plataforma</h2>
+          </div>
+          <a class="pmp-text-link" data-link href="/workspace/accounts">Gerenciar contas</a>
         </div>
-        <div class="od-channel-kpi-grid" data-channel-kpi-grid>
+        <div class="od-channel-kpi-grid pmp-channel-grid" data-channel-kpi-grid>
           ${renderChannelKpiCards(channelsByProvider)}
         </div>
       </section>
 
-      <section class="od-kpi-grid">
-        <article class="od-kpi-card" data-tone="info"><span class="od-kpi-label od-mono">Campanhas</span><strong>${formatNumber(campaignTotal)}</strong><span class="od-kpi-detail">Total no workspace</span></article>
-        <article class="od-kpi-card" data-tone="success"><span class="od-kpi-label od-mono">Publicados</span><strong>${formatNumber(publishedTargets)}</strong><span class="od-kpi-detail">Destinos com sucesso</span></article>
-        <article class="od-kpi-card" data-tone="warning"><span class="od-kpi-label od-mono">Em fila</span><strong>${formatNumber(activeJobs)}</strong><span class="od-kpi-detail">Jobs em fila + processamento</span></article>
-        <article class="od-kpi-card" data-tone="danger"><span class="od-kpi-label od-mono">Falhas</span><strong>${formatNumber(failedTargets)}</strong><span class="od-kpi-detail">Destinos com erro</span></article>
-        <article class="od-kpi-card" data-tone="info"><span class="od-kpi-label od-mono">Midias</span><strong>${formatNumber(assets.length)}</strong><span class="od-kpi-detail">Tamanho da biblioteca</span></article>
-        <article class="od-kpi-card" data-tone="success"><span class="od-kpi-label od-mono">Cota</span><strong>${formatPercent(projectedQuota)}</strong><span class="od-kpi-detail">${formatPercent(successRate)} taxa de sucesso</span></article>
-      </section>
-
-      <section class="od-dashboard-section" data-dashboard-panel="overview">
-        <div class="od-dashboard-main">
-          <div class="od-panel">
-            <div class="od-panel-head">
-              <span class="od-panel-label od-mono">Resumo operacional</span>
-            </div>
-            <div class="od-health-metrics">
-              <div><span>Destinos</span><strong>${formatNumber(targetTotal)}</strong></div>
-              <div><span>Contas</span><strong>${formatNumber(accounts.length)}</strong></div>
-              <div><span>Canais</span><strong>${formatNumber(destinations.length)}</strong></div>
-              <div><span>Hora</span><strong>${escapeHtml(liveClock)}</strong></div>
-            </div>
+      <section class="pmp-performance-section" aria-labelledby="pmp-performance-title">
+        <div class="pmp-section-heading">
+          <div>
+            <span class="pmp-section-kicker">Analise de crescimento</span>
+            <h2 id="pmp-performance-title">Conteudos e canais com maior sinal</h2>
           </div>
+          <a class="pmp-text-link" data-link href="/workspace/growth/metricas">Abrir metricas</a>
         </div>
-        <div class="od-dashboard-main od-performance-row">
-          <div class="od-panel od-leader-panel">
-            <div class="od-panel-head">
-              <span class="od-panel-label od-mono">MELHORES SINAIS</span>
-              <span class="od-panel-meta od-muted od-mono">Videos por visualizacoes</span>
+        <div class="pmp-performance-grid">
+          <article class="od-panel od-leader-panel pmp-data-panel">
+            <div class="pmp-data-panel-head">
+              <h3>Melhores conteudos</h3>
+              <span>Por visualizacoes</span>
             </div>
             ${leadershipHtml}
-          </div>
-          <div class="od-panel od-views-panel">
-            <div class="od-panel-head">
-              <span class="od-panel-label od-mono">DESEMPENHO DE VIEWS</span>
-              <span class="od-panel-meta od-muted od-mono">Visualizacoes por canal</span>
+          </article>
+          <article class="od-panel od-views-panel pmp-data-panel">
+            <div class="pmp-data-panel-head">
+              <h3>Visualizacoes por canal</h3>
+              <span>Comparativo consolidado</span>
             </div>
             ${viewsPerformanceHtml}
-          </div>
+          </article>
         </div>
+      </section>
+
+      <section class="pmp-library-section" aria-labelledby="pmp-library-title">
+        <div class="pmp-section-heading">
+          <div>
+            <span class="pmp-section-kicker">Biblioteca</span>
+            <h2 id="pmp-library-title">Conteudo pronto para publicar</h2>
+          </div>
+          <div class="pmp-library-meta"><strong>${formatNumber(assets.length)}</strong><span>midias disponiveis</span></div>
+        </div>
+        <div class="pmp-library-player">${playlistPanelHtml}</div>
       </section>
     </div>
   `;
@@ -9968,195 +7542,6 @@ async function renderPlatformDashboardPage() {
 
   if (typeof shouldAutoRefreshDashboard === 'function' && shouldAutoRefreshDashboard(stats)) {
     scheduleDashboardAutoRefresh({ protectPlaylistPlayer: true });
-  }
-}
-
-async function renderPlatformDashboardLegacyPage() {
-  const [result, recentCampaignsResult] = await Promise.all([
-    api.dashboard(),
-    api.campaigns({ limit: 8, offset: 0 }),
-  ]);
-
-  if (!result.ok) {
-    if (result.status === 401) {
-      unauthorizedRedirect();
-      return;
-    }
-    renderWorkspaceShell({
-      title: 'Dashboard',
-      subtitle: 'Campaign health and operational summaries.',
-      noticeHtml: `<div class="notice error">${escapeHtml(result.error)}</div>`,
-      contentHtml: '<section class="card">Unable to load dashboard data.</section>',
-    });
-    return;
-  }
-
-  const stats = result.body ?? {};
-  const campaignsByStatus = stats?.campaigns?.byStatus ?? {};
-  const targetsByStatus = stats?.targets?.byStatus ?? {};
-  const jobsByStatus = stats?.jobs?.byStatus ?? {};
-  const channels = Array.isArray(stats?.channels) ? [...stats.channels] : [];
-  const rankedChannels = [...channels].sort((left, right) => {
-    const leftTopViews = Number(left?.topVideoViews ?? 0);
-    const rightTopViews = Number(right?.topVideoViews ?? 0);
-    if (rightTopViews !== leftTopViews) {
-      return rightTopViews - leftTopViews;
-    }
-
-    const leftTotalViews = Number(left?.totalViews ?? 0);
-    const rightTotalViews = Number(right?.totalViews ?? 0);
-    if (rightTotalViews !== leftTotalViews) {
-      return rightTotalViews - leftTotalViews;
-    }
-
-    const leftPublished = Number(left?.published ?? 0);
-    const rightPublished = Number(right?.published ?? 0);
-    if (rightPublished !== leftPublished) {
-      return rightPublished - leftPublished;
-    }
-
-    return String(left?.channelId ?? '').localeCompare(String(right?.channelId ?? ''));
-  });
-
-  const recentCampaigns = recentCampaignsResult.ok && Array.isArray(recentCampaignsResult.body?.campaigns)
-    ? recentCampaignsResult.body.campaigns
-    : [];
-  const liveClock = formatClockLabel();
-  const quotaWarningState = stats?.quota?.warningState ?? 'healthy';
-  const quotaTone = quotaWarningState === 'critical' ? 'danger' : quotaWarningState === 'warning' ? 'warning' : 'info';
-  function statCard(label, val, sub) {
-    return `<div class="od-stat-card">
-      <div class="od-stat-val od-mono">${val}</div>
-      <div class="od-stat-label od-muted">${escapeHtml(label)}</div>
-      ${sub ? `<div class="od-stat-sub od-muted">${escapeHtml(sub)}</div>` : ''}
-    </div>`;
-  }
-
-  function buildBarChart(published) {
-    const bars = Array.from({length: 14}, (_, i) => {
-      if (i === 13) return published;
-      const seed = (i * 7919 + 3) % 100;
-      return Math.max(0, Math.round(published * (0.25 + (seed / 100) * 0.75)));
-    });
-    const maxVal = Math.max(1, ...bars);
-    return `<div class="od-bars">${bars.map((v, i) => `<div class="od-bar-col${i === 13 ? ' od-bar-today' : ''}"><div class="od-bar" style="height:${clampPercent((v / maxVal) * 100)}%"></div></div>`).join('')}</div>`;
-  }
-
-  function buildDonut(byStatus) {
-    const keys = ['draft', 'ready', 'launching', 'completed', 'failed'];
-    const values = keys.map(k => Number(byStatus[k] ?? 0));
-    const total = values.reduce((a, b) => a + b, 0);
-    const R = 38, C = 2 * Math.PI * R;
-    if (!total) return '<div class="od-donut-empty od-muted od-mono">NO DATA</div>';
-    let cumLen = 0;
-    const slices = values.map((v, i) => {
-      if (!v) return '';
-      const len = (v / total) * C;
-      const offset = C - cumLen;
-      cumLen += len;
-      return `<circle class="od-donut-slice" data-cidx="${i}" cx="50" cy="50" r="${R}" fill="none" stroke-width="12" stroke-dasharray="${len.toFixed(1)} ${(C - len).toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}" transform="rotate(-90 50 50)"/>`;
-    }).join('');
-    const legend = keys.map((k, i) => !values[i] ? '' : `<div class="od-donut-legend-item"><span class="od-donut-dot" data-cidx="${i}"></span><span class="od-muted">${escapeHtml(k)}</span><span class="od-mono" style="margin-left:auto">${values[i]}</span></div>`).join('');
-    return `<div class="od-donut-wrap"><svg class="od-donut-svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="${R}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="12"/>${slices}<text x="50" y="46" text-anchor="middle" dominant-baseline="middle" class="od-donut-center-val">${total}</text><text x="50" y="60" text-anchor="middle" class="od-donut-center-sub">campaigns</text></svg><div class="od-donut-legend">${legend}</div></div>`;
-  }
-
-  const activityItems = [
-    { tone: quotaTone, label: quotaWarningState === 'healthy' ? 'Quota stable' : 'Quota under pressure', meta: `${formatPercent(stats?.quota?.projectedPercent ?? 0)} projected` },
-    { tone: Number(stats?.reauth?.blockedTargets ?? 0) > 0 ? 'warning' : 'success', label: Number(stats?.reauth?.blockedTargets ?? 0) > 0 ? `${formatNumber(stats.reauth.blockedTargets)} blocked targets` : 'All accounts ready', meta: `${formatNumber(rankedChannels.length)} channels` },
-    { tone: Number(stats?.jobs?.totalRetries ?? 0) > 0 ? 'warning' : 'success', label: Number(stats?.jobs?.totalRetries ?? 0) > 0 ? 'Retry pressure detected' : 'Retry pressure low', meta: stats?.retries?.hotspotChannelId ?? 'Stable' },
-    ...recentCampaigns.slice(0, 2).map(c => ({ tone: statusTone(c.status ?? 'draft'), label: c.title ?? 'Untitled', meta: normalizeLabel(c.status ?? 'draft') })),
-  ];
-
-  const leaderboardHtml = renderLeadershipRows(rankedChannels, 'Connect accounts to unlock leaderboard.');
-
-  const selectedBackgroundTheme = getSelectedBackgroundTheme();
-
-  const quotaMeterHtml = `<div class="od-quota"><div class="od-quota-track"><div class="od-quota-used" style="width:${clampPercent(stats?.quota?.usagePercent ?? 0)}%"></div><div class="od-quota-proj" style="width:${clampPercent(stats?.quota?.projectedPercent ?? 0)}%"></div></div><div class="od-quota-labels od-muted od-mono"><span>${formatNumber(stats?.quota?.estimatedConsumedUnits ?? 0)} used</span><span>${formatNumber(stats?.quota?.dailyLimitUnits ?? 0)} limit</span></div></div>`;
-
-  const feedHtml = activityItems.map(item => `<div class="od-feed-row" data-tone="${escapeHtml(item.tone)}"><span class="od-feed-dot"></span><div class="od-feed-copy"><span class="od-feed-label">${escapeHtml(item.label)}</span><span class="od-muted od-feed-meta">${escapeHtml(item.meta)}</span></div></div>`).join('');
-
-  const warningBannerHtml = quotaWarningState !== 'healthy' ? `<div class="od-warning-banner" data-tone="${escapeHtml(quotaTone)}">&#x26A0; Quota ${escapeHtml(quotaWarningState)}: ${formatPercent(stats?.quota?.projectedPercent ?? 0)} projected of ${formatNumber(stats?.quota?.dailyLimitUnits ?? 0)} units</div>` : '';
-
-  const contentHtml = `
-    <div id="od-root" class="od-root">
-      <div class="od-bracket od-bracket-tl"></div>
-      <div class="od-bracket od-bracket-tr"></div>
-      <div class="od-bracket od-bracket-bl"></div>
-      <div class="od-bracket od-bracket-br"></div>
-      <div class="od-bg-globe-field" aria-hidden="true">
-        <div class="od-bg-globe od-bg-globe-secondary">${buildOdGlobe()}</div>
-        <div class="od-bg-globe">${buildOdGlobe()}</div>
-      </div>
-
-      <div class="od-topbar">
-        <div class="od-brand od-mono">PLATFORM COMMAND</div>
-        <div class="od-topbar-right od-muted od-mono">
-          <span id="od-theme-name">THEME: ${escapeHtml(selectedBackgroundTheme.label)}</span>
-          <span class="od-live-dot"></span>${escapeHtml(liveClock)}
-        </div>
-      </div>
-
-      ${warningBannerHtml}
-
-      <div class="od-header-row">
-        <div class="od-globe-wrap">${buildOdGlobe()}</div>
-        <div class="od-stat-grid">
-          ${statCard('Total campaigns', formatNumber(stats?.campaigns?.total ?? 0), `${formatNumber(campaignsByStatus.launching ?? 0)} launching`)}
-          ${statCard('Published', formatNumber(targetsByStatus.publicado ?? 0), `${formatPercent(stats?.targets?.successRate ?? 0)} success`)}
-          ${statCard('Queued', formatNumber((jobsByStatus.queued ?? 0) + (jobsByStatus.processing ?? 0)), `${formatNumber(stats?.jobs?.total ?? 0)} jobs`)}
-          ${statCard('Tokens', formatNumber(state.account?.tokens ?? 0), state.account ? `Plano ${escapeHtml(state.account.planLabel)}` : 'FREE')}
-        </div>
-      </div>
-
-      <div class="od-charts-row">
-        <div class="od-panel od-bar-panel">
-          <div class="od-panel-head">
-            <span class="od-panel-label od-mono">PUBLISHED · 14 DAYS</span>
-            <span class="od-panel-meta od-muted od-mono">TODAY: ${formatNumber(targetsByStatus.publicado ?? 0)}</span>
-          </div>
-          ${buildBarChart(targetsByStatus.publicado ?? 0)}
-        </div>
-        <div class="od-panel od-donut-panel">
-          <div class="od-panel-head">
-            <span class="od-panel-label od-mono">CAMPAIGN STATUS</span>
-          </div>
-          ${buildDonut(campaignsByStatus)}
-        </div>
-      </div>
-
-      <div class="od-bottom-row">
-        <div class="od-panel od-leader-panel">
-          <div class="od-panel-head">
-            <span class="od-panel-label od-mono">TOP PERFORMERS</span>
-            <span class="od-panel-meta od-muted od-mono">Ranked videos by views</span>
-          </div>
-          ${leaderboardHtml}
-        </div>
-        <div class="od-panel od-right-panel">
-          <div class="od-panel-head">
-            <span class="od-panel-label od-mono">QUOTA · ${formatPercent(stats?.quota?.usagePercent ?? 0)} USED</span>
-            <span class="od-panel-meta od-muted od-mono">${formatNumber(stats?.quota?.dailyLimitUnits ?? 0)} limit</span>
-          </div>
-          ${quotaMeterHtml}
-          <div class="od-panel-head" style="margin-top:1.25rem">
-            <span class="od-panel-label od-mono">ACTIVITY FEED</span>
-          </div>
-          ${feedHtml}
-        </div>
-      </div>
-
-      <div class="od-footer od-muted od-mono">
-        PLATAFORM MULTI PUBLI &nbsp;·&nbsp; ${escapeHtml(liveClock)} &nbsp;·&nbsp; ${formatNumber(stats?.campaigns?.total ?? 0)} campaigns &nbsp;·&nbsp; ${formatNumber(targetsByStatus.publicado ?? 0)} published
-      </div>
-    </div>
-  `;
-
-  renderWorkspaceShell({ title: '', contentHtml });
-  applyOdThemeFromSettings();
-  clearAutoRefreshTimer();
-
-  if (shouldAutoRefreshDashboard(stats)) {
-    scheduleDashboardAutoRefresh({ protectPlaylistPlayer: false });
   }
 }
 
@@ -10914,19 +8299,19 @@ async function renderAccountsPage() {
   document.querySelectorAll('[data-action="start-youtube-oauth"]').forEach((button) => {
     button.addEventListener('click', async () => {
       clearUiNotice();
-      setButtonBusy(button, true, 'Connecting...');
+      setButtonBusy(button, true, 'Conectando...');
       const result = await api.startYouTubeOauth();
       setButtonBusy(button, false);
 
       if (!result.ok) {
-        setUiNotice('error', 'YouTube OAuth failed', result.error);
+        setUiNotice('error', 'Conexao com YouTube indisponivel', result.error);
         await renderAccountsPage();
         return;
       }
 
       const redirectUrl = result.body?.redirectUrl;
       if (!redirectUrl) {
-        setUiNotice('error', 'YouTube OAuth failed', 'OAuth redirect URL not returned by API.');
+        setUiNotice('error', 'Conexao com YouTube indisponivel', 'A API nao retornou a URL segura de autorizacao do Google.');
         await renderAccountsPage();
         return;
       }
@@ -11135,114 +8520,6 @@ function attachVideoPreviewListeners(assetMap) {
   });
 }
 
-const NEON_MEDIA_ICON_KINDS = new Set([
-  'library',
-  'playlist',
-  'video',
-  'thumbnail',
-  'storage',
-  'clock',
-  'folder',
-  'available',
-  'published',
-  'star',
-  'add',
-  'error',
-  'warning',
-  'processing',
-  'disabled',
-]);
-
-const NEON_MEDIA_ICON_STATE_BY_KIND = {
-  available: 'success',
-  published: 'success',
-  star: 'success',
-  add: 'warning',
-  error: 'error',
-  warning: 'warning',
-  clock: 'processing',
-  processing: 'processing',
-  disabled: 'disabled',
-};
-
-const NEON_MEDIA_ICON_KIND_ALIASES = {
-  erro: 'error',
-  falha: 'error',
-  falhas: 'error',
-  failed: 'error',
-  failure: 'error',
-};
-
-const NEON_MEDIA_ERROR_SVG_KINDS = new Set(['error', 'erro', 'falha', 'falhas', 'failed', 'failure']);
-
-function normalizeNeonIconState(kind, tone) {
-  const normalizedTone = String(tone ?? '').toLowerCase().trim();
-  if (['success', 'ready', 'completed', 'available', 'published', 'active', 'connected', 'ok'].includes(normalizedTone)) return 'success';
-  if (['danger', 'error', 'errors', 'failed', 'failure', 'erro', 'erros', 'falha', 'falhas', 'falhou'].includes(normalizedTone)) return 'error';
-  if (['warning', 'warn', 'attention', 'pending', 'queued', 'draft', 'aguardando'].includes(normalizedTone)) return 'warning';
-  if (['processing', 'loading', 'launching', 'syncing', 'enviando', 'running'].includes(normalizedTone)) return 'processing';
-  if (['disabled', 'inactive', 'locked', 'blocked', 'unavailable', 'indisponivel'].includes(normalizedTone)) return 'disabled';
-  if (['info', 'default', 'neutral'].includes(normalizedTone)) return 'info';
-  return NEON_MEDIA_ICON_STATE_BY_KIND[kind] ?? 'info';
-}
-
-function renderNeonMediaIcon(kind = 'library', size = 'md', options = {}) {
-  const requestedKind = String(kind ?? '').toLowerCase().trim();
-  const normalizedKind = NEON_MEDIA_ICON_KIND_ALIASES[requestedKind] ?? requestedKind;
-  const safeKind = NEON_MEDIA_ICON_KINDS.has(normalizedKind) ? normalizedKind : 'library';
-  const requestedState = typeof options === 'string' ? options : options?.state ?? options?.tone;
-  const iconState = normalizeNeonIconState(safeKind, requestedState);
-  const shouldRenderErrorSvg = safeKind === 'error' && NEON_MEDIA_ERROR_SVG_KINDS.has(requestedKind);
-  const errorSvgHtml = shouldRenderErrorSvg
-    ? `
-        <svg class="neon-media-error-svg" viewBox="0 0 100 100" focusable="false" aria-hidden="true">
-          <path class="neon-media-error-stroke neon-media-error-glow-stroke" d="M26 22H46C53 22 53 29 59 29H78C85 29 89 33 89 40V48" />
-          <path class="neon-media-error-stroke neon-media-error-glow-stroke" d="M18 32H43C50 32 50 39 57 39H84C91 39 95 43 95 51V60" />
-          <path class="neon-media-error-stroke neon-media-error-glow-stroke" d="M10 46C11 40 16 37 23 37H43C50 37 50 45 57 45H86C94 45 98 50 98 58V85C98 92 94 96 87 96H13C6 96 2 92 2 85V58C2 51 5 47 10 46Z" />
-          <circle class="neon-media-error-stroke neon-media-error-glow-stroke" cx="50" cy="70" r="18" />
-          <path class="neon-media-error-stroke neon-media-error-glow-stroke" d="M40 60L60 80M60 60L40 80" />
-
-          <path class="neon-media-error-stroke neon-media-error-hot-stroke" d="M26 22H46C53 22 53 29 59 29H78C85 29 89 33 89 40V48" />
-          <path class="neon-media-error-stroke neon-media-error-hot-stroke" d="M18 32H43C50 32 50 39 57 39H84C91 39 95 43 95 51V60" />
-          <path class="neon-media-error-stroke neon-media-error-hot-stroke" d="M10 46C11 40 16 37 23 37H43C50 37 50 45 57 45H86C94 45 98 50 98 58V85C98 92 94 96 87 96H13C6 96 2 92 2 85V58C2 51 5 47 10 46Z" />
-          <circle class="neon-media-error-stroke neon-media-error-hot-stroke" cx="50" cy="70" r="18" />
-          <path class="neon-media-error-stroke neon-media-error-hot-stroke" d="M40 60L60 80M60 60L40 80" />
-        </svg>`
-    : '';
-  return `
-    <span class="neon-media-icon neon-media-icon-${safeKind} neon-media-icon-${escapeHtml(size)}" data-icon-kind="${escapeAttribute(safeKind)}" data-icon-state="${escapeAttribute(iconState)}" aria-hidden="true">
-      <span class="neon-media-icon-glow"></span>
-      <span class="neon-media-icon-canvas">
-        ${errorSvgHtml}
-        <span class="neon-media-shape neon-media-frame"></span>
-        <span class="neon-media-shape neon-media-folder-tab"></span>
-        <span class="neon-media-shape neon-media-tile tile-a"></span>
-        <span class="neon-media-shape neon-media-tile tile-b"></span>
-        <span class="neon-media-shape neon-media-tile tile-c"></span>
-        <span class="neon-media-shape neon-media-tile tile-d"></span>
-        <span class="neon-media-shape neon-media-bullet bullet-a"></span>
-        <span class="neon-media-shape neon-media-bullet bullet-b"></span>
-        <span class="neon-media-shape neon-media-bullet bullet-c"></span>
-        <span class="neon-media-shape neon-media-line line-a"></span>
-        <span class="neon-media-shape neon-media-line line-b"></span>
-        <span class="neon-media-shape neon-media-line line-c"></span>
-        <span class="neon-media-shape neon-media-play"></span>
-        <span class="neon-media-shape neon-media-plus-x"></span>
-        <span class="neon-media-shape neon-media-plus-y"></span>
-        <span class="neon-media-shape neon-media-check-a"></span>
-        <span class="neon-media-shape neon-media-check-b"></span>
-        <span class="neon-media-shape neon-media-star"></span>
-        <span class="neon-media-shape neon-media-clock-hand"></span>
-        <span class="neon-media-shape neon-media-spinner"></span>
-        <span class="neon-media-shape neon-media-warning-mark"></span>
-        <span class="neon-media-shape neon-media-warning-dot"></span>
-        <span class="neon-media-shape neon-media-lock-shackle"></span>
-        <span class="neon-media-shape neon-media-lock-body"></span>
-      </span>
-    </span>
-  `;
-}
-
 const MEDIA_MARK_KIND_ALIASES = {
   assets: 'library',
   asset: 'library',
@@ -11253,6 +8530,11 @@ const MEDIA_MARK_KIND_ALIASES = {
   used: 'published',
   ready: 'available',
   plus: 'add',
+  erro: 'error',
+  falha: 'error',
+  falhas: 'error',
+  failed: 'error',
+  failure: 'error',
 };
 
 const MEDIA_MARK_LABELS = {
@@ -11267,6 +8549,28 @@ const MEDIA_MARK_LABELS = {
   published: 'PUB',
   star: 'TOP',
   add: 'ADD',
+  error: 'ER',
+  warning: 'ALR',
+  processing: 'SYNC',
+  disabled: 'BLOQ',
+};
+
+const MEDIA_MARK_ARTWORK = {
+  add: '/assets/icons/ADD_adicionar.svg',
+  clock: '/assets/icons/DUR_relogio.svg',
+  folder: '/assets/icons/DIR_pasta.svg',
+  library: '/assets/icons/LIB_biblioteca.svg',
+  playlist: '/assets/icons/LIST_playlist.svg',
+  published: '/assets/icons/PUB_publicacao.svg',
+  star: '/assets/icons/TOP_estrela.svg',
+  storage: '/assets/icons/STO_armazenamento.svg',
+  thumbnail: '/assets/icons/IMG_imagem.svg',
+  video: '/assets/icons/VID_video.svg',
+  available: '/assets/icons/OK_check.svg',
+  error: '/assets/icons/ER_erro.svg',
+  warning: '/assets/icons/ALERTA_aviso.svg',
+  processing: '/assets/icons/SYNC_sincronizacao.svg',
+  disabled: '/assets/icons/BLOQ_cadeado.svg',
 };
 
 const MEDIA_MARK_TITLES = {
@@ -11281,13 +8585,17 @@ const MEDIA_MARK_TITLES = {
   published: 'Publicado',
   star: 'Destaque',
   add: 'Adicionar',
+  error: 'Erro',
+  warning: 'Aviso',
+  processing: 'Processando',
+  disabled: 'Bloqueado',
 };
 
 const MEDIA_MARK_TONES = new Set(['info', 'success', 'warning', 'danger', 'processing', 'disabled']);
 
 function normalizeMediaMarkKind(kind) {
   const requestedKind = String(kind ?? '').toLowerCase().trim();
-  const aliasedKind = MEDIA_MARK_KIND_ALIASES[requestedKind] ?? NEON_MEDIA_ICON_KIND_ALIASES[requestedKind] ?? requestedKind;
+  const aliasedKind = MEDIA_MARK_KIND_ALIASES[requestedKind] ?? requestedKind;
   return Object.prototype.hasOwnProperty.call(MEDIA_MARK_LABELS, aliasedKind) ? aliasedKind : 'library';
 }
 
@@ -11306,13 +8614,16 @@ function normalizeMediaMarkTone(kind, tone) {
 
 function renderMediaMark(kind = 'library', size = 'md', options = {}, className = '') {
   const safeKind = normalizeMediaMarkKind(kind);
+  const artworkSrc = MEDIA_MARK_ARTWORK[safeKind] ?? '';
   const requestedTone = typeof options === 'string' ? options : options?.tone ?? options?.state;
   const safeTone = normalizeMediaMarkTone(safeKind, requestedTone);
   const safeSize = String(size ?? 'md').toLowerCase().replace(/[^a-z0-9-]/g, '') || 'md';
   const extraClasses = String(className ?? '').trim().split(/\s+/).filter(Boolean);
-  const classes = ['media-mark', `media-mark-${safeSize}`, ...extraClasses].join(' ');
+  const classes = ['media-mark', artworkSrc ? 'media-mark-artwork' : '', `media-mark-${safeSize}`, ...extraClasses].filter(Boolean).join(' ');
   const title = MEDIA_MARK_TITLES[safeKind] ?? MEDIA_MARK_LABELS[safeKind];
-  return `<span class="${escapeAttribute(classes)}" data-media-kind="${escapeAttribute(safeKind)}" data-tone="${escapeAttribute(safeTone)}" title="${escapeAttribute(title)}" aria-hidden="true"><span>${escapeHtml(MEDIA_MARK_LABELS[safeKind])}</span></span>`;
+  return `<span class="${escapeAttribute(classes)}" data-media-kind="${escapeAttribute(safeKind)}" data-tone="${escapeAttribute(safeTone)}" title="${escapeAttribute(title)}" aria-hidden="true">${artworkSrc
+    ? `<img class="media-mark-artwork-image" src="${escapeAttribute(artworkSrc)}" alt="" decoding="async" draggable="false" />`
+    : `<span>${escapeHtml(MEDIA_MARK_LABELS[safeKind])}</span>`}</span>`;
 }
 
 function renderMediaPipelineMark(kind, label, tone = 'info') {
@@ -11951,13 +9262,18 @@ function getCampaignSignalTone(tone) {
 
 function renderCampaignMark(label = 'ST', tone = 'info', className = 'campaign-mark') {
   const toneKey = getCampaignSignalTone(tone);
+  const safeLabel = String(label ?? 'ST').slice(0, 4).toUpperCase();
+  const artworkSrc = CAMPAIGN_MARK_ARTWORK[safeLabel] ?? '';
   const classes = [
     'campaign-mark',
+    artworkSrc ? 'campaign-mark-artwork' : '',
     ...String(className ?? '').split(/\s+/).filter((name) => name && name !== 'campaign-mark'),
   ].join(' ');
   return `
     <span class="${escapeAttribute(classes)}" data-tone="${escapeAttribute(toneKey)}" aria-hidden="true">
-      <span>${escapeHtml(String(label ?? 'ST').slice(0, 4).toUpperCase())}</span>
+      ${artworkSrc
+        ? `<img class="campaign-mark-artwork-image" src="${escapeAttribute(artworkSrc)}" alt="" decoding="async" draggable="false" />`
+        : `<span>${escapeHtml(safeLabel)}</span>`}
     </span>
   `;
 }
@@ -11976,13 +9292,17 @@ function renderCampaignPlatformMark(platform, className = 'campaign-platform-mar
   const platformKey = CAMPAIGN_FLOW_PLATFORMS.includes(String(platform ?? '').toLowerCase())
     ? String(platform).toLowerCase()
     : 'unknown';
+  const artworkSrc = CAMPAIGN_PLATFORM_ARTWORK[platformKey] ?? '';
   const classes = [
     'campaign-platform-mark',
+    artworkSrc ? 'campaign-platform-mark-artwork' : '',
     ...String(className ?? '').split(/\s+/).filter((name) => name && name !== 'campaign-platform-mark'),
   ].join(' ');
   return `
     <span class="${escapeAttribute(classes)}" data-platform="${escapeAttribute(platformKey)}" title="${escapeAttribute(getCampaignFlowPlatformLabel(platformKey))}" aria-label="${escapeAttribute(getCampaignFlowPlatformLabel(platformKey))}">
-      ${escapeHtml(getCampaignPlatformMark(platformKey))}
+      ${artworkSrc
+        ? `<img class="campaign-platform-mark-artwork-image" src="${escapeAttribute(artworkSrc)}" alt="" decoding="async" draggable="false" />`
+        : escapeHtml(getCampaignPlatformMark(platformKey))}
     </span>
   `;
 }
@@ -12133,36 +9453,6 @@ function renderCampaignReauthPanel(overview, options = {}) {
         </div>
       </div>
     </section>
-  `;
-}
-
-function buildRadarPoints(statusTotals) {
-  const statuses = [
-    { key: 'draft', angle: -90 },
-    { key: 'ready', angle: -18 },
-    { key: 'launching', angle: 54 },
-    { key: 'completed', angle: 126 },
-    { key: 'failed', angle: 198 },
-  ];
-  const total = Math.max(1, Object.values(statusTotals).reduce((a, b) => a + (Number(b) || 0), 0));
-  const cx = 110, cy = 110, maxRadius = 96;
-  const points = statuses.map((s) => {
-    const val = Number(statusTotals[s.key] ?? 0);
-    const radius = Math.max(6, (val / total) * maxRadius);
-    const rad = (s.angle * Math.PI) / 180;
-    const x = cx + radius * Math.cos(rad);
-    const y = cy + radius * Math.sin(rad);
-    return { ...s, x, y, val };
-  });
-  const polygon = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-  const dots = points.map((p) => `
-    <circle class="radar-dot radar-dot-${p.key}" data-status="${p.key}" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="5">
-      <animate attributeName="r" values="5;8;5" dur="2.5s" repeatCount="indefinite" />
-    </circle>
-  `).join('');
-  return `
-    <polygon class="radar-polygon" points="${polygon}" />
-    ${dots}
   `;
 }
 
@@ -13225,12 +10515,6 @@ async function renderCampaignsPage() {
               </div>
               ${renderCampaignOutcomeChips(summary)}
               ${renderCampaignProgress(summary)}
-              <div class="campaign-item-outcome is-legacy-hidden">
-                <span class="ok">✓ ${formatNumber(summary.published)}</span>
-                <span class="fail">✕ ${formatNumber(summary.failed)}</span>
-                <span class="pending">◷ ${formatNumber(summary.pending)}</span>
-                ${summary.reauthRequired > 0 ? `<span class="warn">⚠ ${formatNumber(summary.reauthRequired)} reauth</span>` : ''}
-              </div>
             </div>
             <div class="campaign-item-actions">${campaignActionButtons(campaign)}</div>
           </article>
@@ -13475,11 +10759,11 @@ async function renderCampaignsPage() {
           </label>
           <div class="inline-actions cc-filter-actions">
             <button class="cc-apply-btn" type="submit" title="Aplicar filtros">
-              <span class="cc-apply-icon" aria-hidden="true">FL</span>
+              <span class="cc-apply-icon" aria-hidden="true"><img class="cc-filter-artwork-image" src="/assets/icons/FL_aplicar_filtros.svg" alt="" decoding="async" draggable="false" /></span>
               <span class="cc-apply-label">Aplicar filtros</span>
             </button>
             <a class="cc-clear-btn" data-link href="/workspace/campanhas" title="Limpar filtros">
-              <span class="cc-clear-mark" aria-hidden="true">X</span>
+              <span class="cc-clear-mark" aria-hidden="true"><img class="cc-filter-artwork-image" src="/assets/icons/X_limpar_filtros.svg" alt="" decoding="async" draggable="false" /></span>
               Limpar
             </a>
           </div>
@@ -14146,7 +11430,7 @@ function renderCampaignFlowPlatformStep(context, flowState) {
       <label class="campaign-platform-card" data-tone="${meta.tone}" data-disabled="${disabled ? 'true' : 'false'}" data-selected="${selected ? 'true' : 'false'}">
         <input type="checkbox" data-platform-input="${platform}" value="${platform}" ${selected ? 'checked' : ''} ${disabled ? 'disabled' : ''} />
         <span class="campaign-platform-card-top">
-          ${renderAnimatedLogoByPlatform(platform, 36)}
+          ${renderPlatformArtwork(platform, 36)}
           <span class="campaign-platform-status">${disabled ? 'Sem conta conectada' : `${formatNumber(count)} destino${count === 1 ? '' : 's'}`}</span>
         </span>
         <strong>${escapeHtml(meta.title)}</strong>
@@ -14348,7 +11632,7 @@ function renderCampaignFlowDestinationStep(context, flowState) {
           <label>
             <input type="checkbox" data-destination-input="${escapeHtml(ref)}" ${selected ? 'checked' : ''} />
             <span>
-              ${renderAnimatedLogoByPlatform(destination.platform, 28)}
+              ${renderPlatformArtwork(destination.platform, 28)}
               <strong>${escapeHtml(destination.destinationLabel ?? destination.title ?? destination.destinationId)}</strong>
               <small>${escapeHtml(getProviderLabel(destination.platform))} - ${escapeHtml(destination.handle ?? destination.email ?? destination.youtubeChannelId ?? destination.destinationId)}</small>
             </span>
@@ -14846,7 +12130,7 @@ function renderCampaignFlowReviewStep(context, flowState) {
         </div>
         ${selectedDestinations.map(({ ref, destination }) => `
           <div class="campaign-review-destination">
-            <span>${renderAnimatedLogoByPlatform(destination.platform, 24)}</span>
+            <span>${renderPlatformArtwork(destination.platform, 24)}</span>
             <strong>${escapeHtml(destination.destinationLabel ?? destination.title ?? destination.destinationId)}</strong>
             <small>${escapeHtml(flowState.perTargetPublishAt?.[ref] ? campaignFlowFormatLocalDate(flowState.perTargetPublishAt[ref]) : 'Usa horario geral ou imediato')}</small>
           </div>
@@ -15062,8 +12346,7 @@ async function renderCampaignFlowPage(step = 1) {
     return;
   }
 
-  injectLogoStyles();
-  const flowState = readCampaignFlowState();
+    const flowState = readCampaignFlowState();
   flowState.selectedPlatforms = flowState.selectedPlatforms.filter((platform) => CAMPAIGN_FLOW_PLATFORMS.includes(platform));
   flowState.selectedDestinationRefs = flowState.selectedDestinationRefs.filter((ref) =>
     flowState.selectedPlatforms.includes(campaignFlowParseDestinationRef(ref).platform));
@@ -15105,739 +12388,6 @@ async function renderCampaignFlowPage(step = 1) {
 
 async function renderCampaignComposerPage() {
   await renderCampaignFlowPage(1);
-  return;
-
-  const [mediaResult, destinationsResult, playlistsResult] = await Promise.all([api.media(), loadConnectedPublishDestinations(), api.playlists()]);
-  if (!mediaResult.ok || !destinationsResult.ok) {
-    const failing = !mediaResult.ok ? mediaResult : destinationsResult;
-    if (failing.status === 401) {
-      unauthorizedRedirect();
-      return;
-    }
-    renderWorkspaceShell({
-      title: 'New Campaign',
-      subtitle: 'Create campaign and optional target batch.',
-      noticeHtml: `<div class="notice error">${escapeHtml(failing.error)}</div>`,
-      contentHtml: '<section class="card">Unable to load campaign composer dependencies.</section>',
-    });
-    return;
-  }
-
-  const assets = Array.isArray(mediaResult.body?.assets) ? mediaResult.body.assets : [];
-  const videos = assets.filter((asset) => asset.asset_type === 'video' || asset.asset_type === undefined);
-  const shortVideos = videos.filter((asset) => getVideoPublishFormat(asset) === 'short');
-  const standardVideos = videos.filter((asset) => getVideoPublishFormat(asset) === 'standard');
-  const unknownDurationVideos = videos.filter((asset) => getVideoPublishFormat(asset) === 'unknown');
-  const connectedChannels = destinationsResult.destinations;
-  const activeChannels = connectedChannels.filter((channel) => channel.platform === 'youtube');
-  const socialDestinationCount = connectedChannels.length - activeChannels.length;
-  const hasVideos = videos.length > 0;
-  const hasChannels = connectedChannels.length > 0;
-  const playlists = Array.isArray(playlistsResult.body?.playlists) ? playlistsResult.body.playlists : [];
-  const playlistOptions = playlists.map((pl) => `<option value="${escapeHtml(pl.id)}">${escapeHtml(pl.name)} (${formatNumber(pl.items?.length ?? 0)} videos)</option>`).join('');
-
-  // Inject logo animation styles on first use
-  injectLogoStyles();
-
-  const channelToggleCards = connectedChannels.length === 0
-    ? '<p class="muted">No connected publishing destinations available.</p>'
-    : connectedChannels.map((channel) => `
-      <label class="channel-toggle-card ${channel.isActive ? 'selected' : ''}" data-channel-toggle-card>
-        <input class="channel-toggle-input" type="checkbox" name="destinationRef" value="${escapeHtml(`${channel.platform}:${channel.destinationId}`)}" ${channel.platform === 'youtube' ? 'checked' : ''} />
-        <span class="channel-toggle-body">
-          <span class="channel-toggle-meta">
-            <span class="channel-logo-wrapper" style="display: inline-flex; align-items: center; gap: 8px; margin-right: 8px;">
-              ${renderAnimatedLogoByPlatform(channel.platform, 28)}
-              <strong>${escapeHtml(channel.destinationLabel || channel.title || channel.youtubeChannelId || channel.id)}</strong>
-            </span>
-            <small>${escapeHtml(getProviderLabel(channel.platform))}</small>
-            <small>${escapeHtml(channel.handle || channel.youtubeChannelId || channel.email || channel.id)}</small>
-          </span>
-          <span class="channel-toggle-switch" aria-hidden="true">
-            <span class="channel-toggle-switch-track">
-              <span class="channel-toggle-switch-thumb"></span>
-            </span>
-            <span class="channel-toggle-switch-label">${channel.platform === 'youtube' ? 'ON' : 'OFF'}</span>
-          </span>
-        </span>
-      </label>
-    `).join('');
-
-  const videoOptions = videos.map((video) => (
-    `<option value="${escapeHtml(video.id)}" data-format="${escapeHtml(getVideoPublishFormat(video))}">${escapeHtml(video.original_name)} (${escapeHtml(getVideoPublishFormatLabel(getVideoPublishFormat(video)))}, ${escapeHtml(formatDurationSeconds(video.duration_seconds))})</option>`
-  )).join('');
-
-  renderWorkspaceShell({
-    title: 'New Campaign',
-    subtitle: 'Create campaign and optional target batch.',
-    contentHtml: `
-      ${renderChecklistCard('Campaign setup checklist', [
-        {
-          done: hasVideos,
-          label: hasVideos ? 'Media library is ready' : 'Upload media first',
-          hint: hasVideos ? `${formatNumber(videos.length)} video assets are available for campaign creation.` : 'You need at least one video in Media before saving a campaign.',
-          actionHtml: '<a class="button button-secondary" data-link href="/workspace/videos">Open videos</a>',
-        },
-        {
-          done: hasChannels,
-          label: hasChannels ? 'Publishing destinations are ready' : 'Connect publishing accounts',
-          hint: hasChannels ? `${formatNumber(activeChannels.length)} YouTube channels and ${formatNumber(socialDestinationCount)} social destinations are available for this campaign.` : 'Connect YouTube, TikTok, or Instagram accounts to target publications directly from the composer.',
-          actionHtml: '<a class="button button-secondary" data-link href="/workspace/accounts">Open accounts</a>',
-        },
-      ])}
-      <section class="card stack">
-        <div class="notice info">If no destinations are selected, a draft campaign is created without targets.</div>
-        ${!hasVideos ? renderEmptyStateCard({
-          title: 'No video assets available',
-          message: 'The composer is ready, but you still need to upload at least one video before creating a campaign.',
-          tone: 'warning',
-          actionsHtml: '<a class="button button-primary" data-link href="/workspace/videos">Upload media</a>',
-        }) : ''}
-        <div class="grid-3">
-          <article class="card">
-            <div class="summary-value">${formatNumber(shortVideos.length)}</div>
-            <div class="summary-label">Reels / Shorts</div>
-            <div class="summary-hint">Videos with up to 3 minutes (180 seconds)</div>
-          </article>
-          <article class="card">
-            <div class="summary-value">${formatNumber(standardVideos.length)}</div>
-            <div class="summary-label">Videos Normais</div>
-            <div class="summary-hint">Long-form and regular uploads</div>
-          </article>
-          <article class="card">
-            <div class="summary-value">${formatNumber(videos.length)}</div>
-            <div class="summary-label">Total Videos</div>
-            <div class="summary-hint">${formatNumber(unknownDurationVideos.length)} with unknown duration</div>
-          </article>
-        </div>
-        <form id="campaign-create-form" class="form-grid">
-          <fieldset class="card">
-            <legend>1. Connected publishing destinations <small class="muted">(escolha onde publicar)</small></legend>
-            <div class="inline-actions">
-              <button class="button button-secondary" type="button" data-action="select-all-campaign-channels">Turn all ON</button>
-              <button class="button button-secondary" type="button" data-action="clear-campaign-channels">Turn all OFF</button>
-            </div>
-            <div class="notice info">Use the toggle to decide exactly which connected channels or social accounts will receive this campaign.</div>
-            <div class="channel-toggle-grid">${channelToggleCards}</div>
-          </fieldset>
-          <label id="campaign-title-field">
-            Campaign title <small class="muted" id="campaign-title-hint"></small>
-            <input name="title" id="campaign-title-input" placeholder="My campaign" />
-          </label>
-          <label>
-            Publish format
-            <select name="publishFormat" required>
-              <option value="standard">Video normal</option>
-              <option value="short">Reels / Shorts</option>
-            </select>
-          </label>
-          <label id="video-asset-field">
-            Video asset <small class="muted" id="video-asset-hint"></small>
-            <select name="videoAssetId">
-              <option value="">Select a video</option>
-              ${videoOptions}
-            </select>
-          </label>
-          <label>
-            Scheduled at (optional)
-            <input name="scheduledAt" type="datetime-local" />
-          </label>
-          ${playlistOptions ? `
-          <label>
-            Playlist (opcional)
-            <select name="playlistId">
-              <option value="">Sem playlist (video manual)</option>
-              ${playlistOptions}
-            </select>
-          </label>
-          <input type="hidden" name="autoMode" id="auto-mode-toggle" value="" />
-          <fieldset class="card schedule-pattern-fieldset">
-            <legend class="schedule-pattern-legend">
-              <span><strong>Padrao de agendamento aleatorio</strong> <small class="muted">(opcional)</small></span>
-              <label class="schedule-toggle-switch" data-schedule-master>
-                <input type="checkbox" name="schedulePatternEnabled" value="1" id="schedule-pattern-toggle" />
-                <span class="schedule-toggle-track"><span class="schedule-toggle-thumb"></span></span>
-                <span class="schedule-toggle-label">OFF</span>
-              </label>
-            </legend>
-            <div class="schedule-pattern-panel" id="schedule-pattern-panel" data-disabled="true">
-              <div class="schedule-grid">
-                <div class="schedule-field">
-                  <span class="schedule-field-label">Quantidade de disparos no dia</span>
-                  <input name="scheduleTimesPerDay" id="schedule-times-per-day" type="number" min="1" max="48" value="1" />
-                  <small class="muted">Define quantos disparos sao gerados no dia</small>
-                </div>
-                <div class="schedule-field">
-                  <span class="schedule-field-label">
-                    <span>Fonte do video</span>
-                    <label class="schedule-toggle-switch schedule-sub-toggle" data-schedule-sub="source">
-                      <input type="checkbox" name="scheduleSourceAuto" value="1" checked />
-                      <span class="schedule-toggle-track"><span class="schedule-toggle-thumb"></span></span>
-                      <span class="schedule-toggle-label">AUTO</span>
-                    </label>
-                  </span>
-                  <select name="scheduleSource" disabled>
-                    <option value="playlist">Pasta da playlist</option>
-                    <option value="library">Library Media</option>
-                  </select>
-                  <small class="muted">AUTO = sorteia automatico. OFF = escolha manual.</small>
-                </div>
-                <div class="schedule-field schedule-field-wide">
-                  <span class="schedule-field-label">
-                    <span>Hora dos disparos</span>
-                    <label class="schedule-toggle-switch schedule-sub-toggle" data-schedule-sub="hour">
-                      <input type="checkbox" name="scheduleHourAuto" value="1" checked />
-                      <span class="schedule-toggle-track"><span class="schedule-toggle-thumb"></span></span>
-                      <span class="schedule-toggle-label">AUTO</span>
-                    </label>
-                  </span>
-                  <div id="schedule-hours-container" class="schedule-hours-container" data-disabled="true">
-                    <small class="muted">Defina o horario para cada disparo do dia.</small>
-                  </div>
-                  <small class="muted">AUTO = aleatorio. OFF = horario fixo para cada disparo do dia.</small>
-                </div>
-                <div class="schedule-field schedule-field-wide">
-                  <span class="schedule-field-label">
-                    <span>Dias com campanha</span>
-                    <span class="schedule-badge">manual</span>
-                  </span>
-                  <div id="schedule-dates-container" class="schedule-dates-container">
-                    <div class="schedule-dates-list" id="schedule-dates-list"></div>
-                    <div class="inline-actions">
-                      <input type="date" id="schedule-date-input" />
-                      <button type="button" class="button button-secondary" id="schedule-date-add">+ Adicionar dia</button>
-                    </div>
-                  </div>
-                  <small class="muted">Selecione um ou mais dias manualmente em que a campanha sera disparada.</small>
-                </div>
-                <div class="schedule-field schedule-field-wide">
-                  <span class="schedule-field-label">
-                    <span>Titulo aleatorio</span>
-                    <label class="schedule-toggle-switch schedule-sub-toggle" data-schedule-sub="title">
-                      <input type="checkbox" name="scheduleTitleEnabled" value="1" id="schedule-title-toggle" />
-                      <span class="schedule-toggle-track"><span class="schedule-toggle-thumb"></span></span>
-                      <span class="schedule-toggle-label">OFF</span>
-                    </label>
-                  </span>
-                  <input type="text" name="scheduleTitleSeed" id="schedule-title-seed" placeholder="Ex: Reels engracado de gato" disabled />
-                  <small class="muted">Quando ON, o "Campaign title" e desabilitado e cada disparo gera um titulo derivado do nome digitado, levando em conta o nome/duracao do video.</small>
-                  <div id="schedule-title-preview" class="schedule-title-preview" hidden></div>
-                </div>
-              </div>
-            </div>
-            <input type="hidden" name="schedulePattern" id="schedule-pattern-hidden" />
-          </fieldset>
-          ` : ''}
-          <label>
-            Target video title
-            <input name="videoTitle" required placeholder="Video title for selected channels" />
-          </label>
-          <label>
-            Target video description
-            <textarea name="videoDescription" required placeholder="Description for selected channels"></textarea>
-          </label>
-          <fieldset class="platform-target-options">
-            <legend>Instagram options <small class="muted">(Reels)</small></legend>
-            <label>
-              Reels caption
-              <textarea name="instagramCaption" maxlength="2200" placeholder="Defaults to target description"></textarea>
-            </label>
-            <label class="instagram-share-row">
-              <span>
-                Share Reel to feed
-                <small class="muted">Visible on profile feed</small>
-              </span>
-              <span class="schedule-toggle-switch">
-                <input type="checkbox" name="instagramShareToFeed" value="1" checked />
-                <span class="schedule-toggle-track" aria-hidden="true"><span class="schedule-toggle-thumb"></span></span>
-                <span class="schedule-toggle-label">ON</span>
-              </span>
-            </label>
-          </fieldset>
-          <label>
-            Tags (comma-separated)
-            <input name="tags" placeholder="news, update, launch" />
-          </label>
-          <label>
-            Publish at per target (optional)
-            <input name="publishAt" type="datetime-local" />
-          </label>
-          <label>
-            Privacy
-            <select name="privacy">
-              <option value="">Default</option>
-              <option value="public">public</option>
-              <option value="unlisted">unlisted</option>
-              <option value="private">private</option>
-            </select>
-          </label>
-          <label>
-            YouTube Playlist ID (opcional — ID da playlist do canal, nao da biblioteca)
-            <input name="youtubePlaylistId" placeholder="PL..." />
-          </label>
-          <div class="inline-actions">
-            <button class="button button-primary" type="submit" ${hasVideos ? '' : 'disabled'}>Save draft</button>
-            <a class="button button-secondary" data-link href="/workspace/campanhas">Cancel</a>
-          </div>
-        </form>
-      </section>
-    `,
-  });
-
-  const form = document.getElementById('campaign-create-form');
-  const videoSelect = form?.querySelector('select[name="videoAssetId"]');
-  const publishFormatSelect = form?.querySelector('select[name="publishFormat"]');
-  const instagramShareToggle = form?.querySelector('input[name="instagramShareToFeed"]');
-  if (instagramShareToggle) {
-    syncSwitchLabel(instagramShareToggle);
-    instagramShareToggle.addEventListener('change', () => syncSwitchLabel(instagramShareToggle));
-  }
-
-  function applyPublishFormatFilter() {
-    if (!(videoSelect instanceof HTMLSelectElement) || !(publishFormatSelect instanceof HTMLSelectElement)) {
-      return;
-    }
-    const selectedFormat = publishFormatSelect.value || 'standard';
-    Array.from(videoSelect.options).forEach((option, index) => {
-      if (index === 0) {
-        option.hidden = false;
-        option.disabled = false;
-        return;
-      }
-      const optionFormat = option.getAttribute('data-format') || 'standard';
-      const visible = optionFormat === selectedFormat;
-      option.hidden = !visible;
-      option.disabled = !visible;
-      if (!visible && option.selected) {
-        videoSelect.value = '';
-      }
-    });
-  }
-
-  applyPublishFormatFilter();
-  publishFormatSelect?.addEventListener('change', applyPublishFormatFilter);
-
-  // Auto-mode is implicit: any playlist selected → auto pick a random video. No toggle needed.
-  const autoToggle = form?.querySelector('#auto-mode-toggle');
-  const playlistSelect = form?.querySelector('select[name="playlistId"]');
-  if (playlistSelect) {
-    const videoAssetField = form?.querySelector('#video-asset-field');
-    const videoAssetSelect = form?.querySelector('select[name="videoAssetId"]');
-    const videoAssetHint = form?.querySelector('#video-asset-hint');
-    const tryPrefillPreset = async () => {
-      const selectedPlaylistId = playlistSelect.value;
-      if (!selectedPlaylistId) return;
-      const nextResult = await api.nextPlaylistVideo(selectedPlaylistId);
-      if (!nextResult.ok || !nextResult.body?.videoAssetId) return;
-      const presetResult = await api.getPreset(nextResult.body.videoAssetId);
-      if (!presetResult.ok || !presetResult.body?.preset) return;
-      const preset = presetResult.body.preset;
-      const titleInput = form.querySelector('input[name="videoTitle"]');
-      const descTextarea = form.querySelector('textarea[name="videoDescription"]');
-      const tagsInput = form.querySelector('input[name="tags"]');
-      const privacySelect = form.querySelector('select[name="privacy"]');
-      if (titleInput && !titleInput.value && preset.title) titleInput.value = preset.title;
-      if (descTextarea && !descTextarea.value && preset.description) descTextarea.value = preset.description;
-      if (tagsInput && !tagsInput.value && preset.tags?.length) tagsInput.value = preset.tags.join(', ');
-      if (privacySelect && preset.privacy) privacySelect.value = preset.privacy;
-    };
-    const refreshFromPlaylist = () => {
-      const hasPlaylist = !!playlistSelect.value;
-      if (autoToggle) autoToggle.value = hasPlaylist ? '1' : '';
-      if (videoAssetField) videoAssetField.setAttribute('data-disabled', hasPlaylist ? 'true' : 'false');
-      if (videoAssetSelect) {
-        videoAssetSelect.disabled = hasPlaylist;
-        if (hasPlaylist) videoAssetSelect.value = '';
-      }
-      if (videoAssetHint) {
-        videoAssetHint.textContent = hasPlaylist ? '— sera escolhido aleatoriamente da playlist' : '';
-      }
-      if (hasPlaylist) tryPrefillPreset();
-    };
-    playlistSelect.addEventListener('change', refreshFromPlaylist);
-    refreshFromPlaylist();
-  }
-
-  const scheduleMasterToggle = form?.querySelector('#schedule-pattern-toggle');
-  const schedulePanel = form?.querySelector('#schedule-pattern-panel');
-  const timesPerDayInput = form?.querySelector('#schedule-times-per-day');
-  const hoursContainer = form?.querySelector('#schedule-hours-container');
-  const datesList = form?.querySelector('#schedule-dates-list');
-  const dateInput = form?.querySelector('#schedule-date-input');
-  const dateAddBtn = form?.querySelector('#schedule-date-add');
-  const selectedDates = new Set();
-
-  function isHourAuto() {
-    return form?.querySelector('input[name="scheduleHourAuto"]')?.checked ?? true;
-  }
-  function isSourceAuto() {
-    return form?.querySelector('input[name="scheduleSourceAuto"]')?.checked ?? true;
-  }
-
-  function renderHourInputs() {
-    if (!hoursContainer) return;
-    const hourAuto = isHourAuto();
-    const masterOn = !!scheduleMasterToggle?.checked;
-    if (hourAuto || !masterOn) {
-      hoursContainer.innerHTML = `<small class="muted">${hourAuto ? 'Horarios serao sorteados aleatoriamente.' : 'Habilite o agendamento para configurar.'}</small>`;
-      hoursContainer.setAttribute('data-disabled', 'true');
-      return;
-    }
-    hoursContainer.setAttribute('data-disabled', 'false');
-    const n = Math.max(1, parseInt(String(timesPerDayInput?.value ?? '1'), 10) || 1);
-    const existingValues = Array.from(hoursContainer.querySelectorAll('input[type="time"]')).map((el) => el.value);
-    const inputs = [];
-    for (let i = 0; i < n; i++) {
-      const def = existingValues[i] ?? (i === 0 ? '18:00' : '');
-      inputs.push(`<label class="schedule-hour-row"><span class="schedule-hour-index">#${i + 1}</span><input type="time" name="scheduleHour" value="${escapeHtml(def)}" /></label>`);
-    }
-    hoursContainer.innerHTML = inputs.join('');
-  }
-
-  function renderDateChips() {
-    if (!datesList) return;
-    const arr = Array.from(selectedDates).sort();
-    if (arr.length === 0) {
-      datesList.innerHTML = '<small class="muted">Nenhum dia selecionado.</small>';
-      return;
-    }
-    datesList.innerHTML = arr.map((d) => `
-      <span class="schedule-date-chip">
-        ${escapeHtml(d)}
-        <button type="button" class="schedule-date-chip-remove" data-date="${escapeHtml(d)}" aria-label="Remover ${escapeHtml(d)}">×</button>
-      </span>
-    `).join('');
-    datesList.querySelectorAll('.schedule-date-chip-remove').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        selectedDates.delete(btn.getAttribute('data-date'));
-        renderDateChips();
-      });
-    });
-  }
-
-  dateAddBtn?.addEventListener('click', () => {
-    const v = String(dateInput?.value ?? '').trim();
-    if (!v) return;
-    selectedDates.add(v);
-    if (dateInput) dateInput.value = '';
-    renderDateChips();
-  });
-
-  timesPerDayInput?.addEventListener('input', renderHourInputs);
-
-  function refreshScheduleMaster() {
-    if (!scheduleMasterToggle || !schedulePanel) return;
-    const enabled = scheduleMasterToggle.checked;
-    schedulePanel.setAttribute('data-disabled', enabled ? 'false' : 'true');
-    const masterWrap = scheduleMasterToggle.closest('.schedule-toggle-switch');
-    masterWrap?.querySelector('.schedule-toggle-label')?.replaceChildren(document.createTextNode(enabled ? 'ON' : 'OFF'));
-    schedulePanel.querySelectorAll('input, select, button').forEach((el) => {
-      if (el === scheduleMasterToggle) return;
-      const isSubToggle = el.closest('.schedule-sub-toggle');
-      if (enabled) {
-        if (isSubToggle) {
-          el.disabled = false;
-        } else {
-          const subKey = el.closest('.schedule-field')?.querySelector('[data-schedule-sub]')?.getAttribute('data-schedule-sub');
-          if (subKey) {
-            const subInput = el.closest('.schedule-field')?.querySelector('[data-schedule-sub] input');
-            el.disabled = subInput?.checked ?? false;
-          } else {
-            el.disabled = false;
-          }
-        }
-      } else {
-        el.disabled = true;
-      }
-    });
-    renderHourInputs();
-    if (typeof syncTitleAutoState === 'function') syncTitleAutoState();
-  }
-  scheduleMasterToggle?.addEventListener('change', refreshScheduleMaster);
-
-  const campaignTitleInput = form?.querySelector('#campaign-title-input');
-  const campaignTitleField = form?.querySelector('#campaign-title-field');
-  const campaignTitleHint = form?.querySelector('#campaign-title-hint');
-  const titleSeedInput = form?.querySelector('#schedule-title-seed');
-  const titleToggle = form?.querySelector('#schedule-title-toggle');
-  const titlePreview = form?.querySelector('#schedule-title-preview');
-
-  function syncTitleAutoState() {
-    const masterOn = !!scheduleMasterToggle?.checked;
-    const titleOn = !!titleToggle?.checked && masterOn;
-    if (campaignTitleInput) {
-      campaignTitleInput.disabled = titleOn;
-      if (titleOn) campaignTitleInput.placeholder = 'Gerado automaticamente para cada disparo';
-      else campaignTitleInput.placeholder = 'My campaign';
-    }
-    if (campaignTitleField) campaignTitleField.setAttribute('data-disabled', titleOn ? 'true' : 'false');
-    if (campaignTitleHint) campaignTitleHint.textContent = titleOn ? '— gerado automaticamente por disparo' : '';
-    if (titleSeedInput) titleSeedInput.disabled = !titleOn;
-    if (titlePreview) updateTitlePreview();
-  }
-
-  function updateTitlePreview() {
-    if (!titlePreview || !titleSeedInput || !titleToggle?.checked) {
-      if (titlePreview) titlePreview.hidden = true;
-      return;
-    }
-    const seed = titleSeedInput.value.trim();
-    if (!seed) {
-      titlePreview.hidden = true;
-      return;
-    }
-    const sampleVideo = videos[0];
-    const samples = Array.from({ length: 3 }, () => generateRandomTitle(seed, sampleVideo));
-    titlePreview.hidden = false;
-    titlePreview.innerHTML = `
-      <small class="muted">Exemplos:</small>
-      <ul class="schedule-title-preview-list">
-        ${samples.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}
-      </ul>
-    `;
-  }
-  titleSeedInput?.addEventListener('input', updateTitlePreview);
-
-  form?.querySelectorAll('[data-schedule-sub]').forEach((wrap) => {
-    const subInput = wrap.querySelector('input[type="checkbox"]');
-    const label = wrap.querySelector('.schedule-toggle-label');
-    const subKey = wrap.getAttribute('data-schedule-sub');
-    const fieldEl = wrap.closest('.schedule-field');
-    const sync = () => {
-      if (!subInput) return;
-      const on = subInput.checked;
-      if (label) {
-        if (subKey === 'title') {
-          label.textContent = on ? 'ON' : 'OFF';
-        } else {
-          label.textContent = on ? 'AUTO' : 'OFF';
-        }
-      }
-      if (scheduleMasterToggle?.checked) {
-        if (subKey === 'hour') {
-          renderHourInputs();
-        } else if (subKey === 'title') {
-          syncTitleAutoState();
-        } else {
-          const valueInput = fieldEl?.querySelector('input:not([type="checkbox"]), select');
-          if (valueInput) valueInput.disabled = !on && subKey !== 'source' && subKey !== 'hour' ? false : on;
-          // For source: AUTO checked = disable select; OFF = enable
-          if (subKey === 'source') {
-            const valSel = fieldEl?.querySelector('select');
-            if (valSel) valSel.disabled = on;
-          }
-        }
-      }
-    };
-    sync();
-    subInput?.addEventListener('change', sync);
-  });
-
-  renderDateChips();
-  refreshScheduleMaster();
-  syncTitleAutoState();
-
-  const channelToggleInputs = Array.from(form?.querySelectorAll('.channel-toggle-input') ?? []);
-  const syncChannelToggleCards = () => {
-    channelToggleInputs.forEach((input) => {
-      const card = input.closest('[data-channel-toggle-card]');
-      const switchLabel = card?.querySelector('.channel-toggle-switch-label');
-      card?.classList.toggle('selected', input.checked);
-      if (switchLabel) {
-        switchLabel.textContent = input.checked ? 'ON' : 'OFF';
-      }
-    });
-  };
-
-  syncChannelToggleCards();
-  channelToggleInputs.forEach((input) => {
-    input.addEventListener('change', syncChannelToggleCards);
-  });
-
-  form?.querySelector('[data-action="select-all-campaign-channels"]')?.addEventListener('click', () => {
-    channelToggleInputs.forEach((input) => {
-      input.checked = true;
-    });
-    syncChannelToggleCards();
-  });
-
-  form?.querySelector('[data-action="clear-campaign-channels"]')?.addEventListener('click', () => {
-    channelToggleInputs.forEach((input) => {
-      input.checked = false;
-    });
-    syncChannelToggleCards();
-  });
-
-  form?.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const data = new FormData(form);
-    const submitButton = form.querySelector('button[type="submit"]');
-    const selectedFormat = String(data.get('publishFormat') ?? 'standard');
-    const selectedPlaylistId = String(data.get('playlistId') ?? '').trim();
-    const isAutoMode = data.get('autoMode') === '1';
-
-    let resolvedVideoAssetId = String(data.get('videoAssetId') ?? '');
-
-    if (isAutoMode && selectedPlaylistId) {
-      const next = await api.nextPlaylistVideo(selectedPlaylistId);
-      if (!next.ok || !next.body?.videoAssetId) {
-        setUiNotice('warning', 'Playlist vazia', 'Nao foi possivel selecionar um video da playlist (vazia ou todos ja postados).');
-        return;
-      }
-      resolvedVideoAssetId = next.body.videoAssetId;
-    } else if (!resolvedVideoAssetId) {
-      setUiNotice('warning', 'Video required', 'Selecione um video asset ou ative o modo Auto com uma playlist.');
-      return;
-    }
-
-    const selectedAsset = videos.find((asset) => asset.id === resolvedVideoAssetId);
-    if (!selectedAsset) {
-      setUiNotice('warning', 'Video required', 'Video asset invalido.');
-      return;
-    }
-    const actualFormat = getVideoPublishFormat(selectedAsset);
-    if (!isAutoMode && actualFormat !== selectedFormat) {
-      setUiNotice('warning', 'Format mismatch', `The selected media is classified as ${getVideoPublishFormatLabel(actualFormat)}. Choose a matching asset or switch the publish format.`);
-      return;
-    }
-
-    setButtonBusy(submitButton, true, 'Saving...');
-
-    let schedulePattern = '';
-    let scheduledLaunches = [];
-    const baseScheduledAtRaw = data.get('scheduledAt') ? new Date(String(data.get('scheduledAt'))).toISOString() : undefined;
-    if (data.get('schedulePatternEnabled') === '1') {
-      const timesPerDay = Math.max(1, parseInt(String(data.get('scheduleTimesPerDay') ?? '1'), 10) || 1);
-      const sourceAuto = data.get('scheduleSourceAuto') === '1';
-      const hourAuto = data.get('scheduleHourAuto') === '1';
-      const hours = hourAuto ? 'auto' : data.getAll('scheduleHour').map((v) => String(v)).filter(Boolean);
-      const days = Array.from(selectedDates).sort();
-      const cfg = {
-        timesPerDay,
-        source: sourceAuto ? 'auto' : (String(data.get('scheduleSource') ?? 'playlist')),
-        hours,
-        days,
-      };
-      schedulePattern = `random:${JSON.stringify(cfg)}`;
-
-      // Build (day, hour) combinations into ISO datetimes
-      const todayKey = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD in local TZ
-      const daysList = days.length > 0 ? days : [todayKey];
-      for (const day of daysList) {
-        const hoursForDay = hourAuto
-          ? generateSpacedHoursForDay(day, timesPerDay)
-          : (Array.isArray(hours) && hours.length > 0 ? hours : ['18:00']);
-        for (const hour of hoursForDay) {
-          const iso = new Date(`${day}T${hour}:00`).toISOString();
-          scheduledLaunches.push(iso);
-        }
-      }
-    }
-
-    const selectedDestinationRefs = data.getAll('destinationRef').map((entry) => String(entry));
-    const tags = String(data.get('tags') ?? '').split(',').map((t) => t.trim()).filter(Boolean);
-    const targetTemplate = {
-      videoTitle: String(data.get('videoTitle') ?? ''),
-      videoDescription: String(data.get('videoDescription') ?? ''),
-      tags: tags.length > 0 ? tags : undefined,
-      publishAt: data.get('publishAt') ? new Date(String(data.get('publishAt'))).toISOString() : undefined,
-      playlistId: String(data.get('youtubePlaylistId') ?? '').trim() || undefined,
-      privacy: String(data.get('privacy') ?? '').trim() || undefined,
-    };
-    const platformOptions = {
-      instagramCaption: String(data.get('instagramCaption') ?? '').trim(),
-      instagramShareToFeed: data.get('instagramShareToFeed') === '1',
-    };
-
-    const titleAutoEnabled = data.get('schedulePatternEnabled') === '1' && data.get('scheduleTitleEnabled') === '1';
-    const titleSeed = String(data.get('scheduleTitleSeed') ?? '').trim();
-
-    async function createOneCampaign(titleSuffix, scheduledAtIso, videoAssetIdForCampaign) {
-      const baseTitle = String(data.get('title') ?? '');
-      let resolvedTitle;
-      if (titleAutoEnabled && titleSeed) {
-        const assetForTitle = videos.find((a) => a.id === videoAssetIdForCampaign) ?? null;
-        resolvedTitle = generateRandomTitle(titleSeed, assetForTitle);
-      } else {
-        resolvedTitle = `${baseTitle}${titleSuffix}`;
-      }
-      const campaignPayload = {
-        title: resolvedTitle || `Campanha ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`,
-        videoAssetId: videoAssetIdForCampaign,
-        scheduledAt: scheduledAtIso ?? baseScheduledAtRaw,
-        playlistId: selectedPlaylistId || undefined,
-        autoMode: isAutoMode,
-        schedulePattern: schedulePattern || undefined,
-      };
-      const created = await api.createCampaign(campaignPayload);
-      if (!created.ok) return { ok: false, error: created.error };
-      const newId = created.body?.campaign?.id;
-      if (!newId) return { ok: false, error: 'Missing campaign id' };
-
-      if (selectedDestinationRefs.length > 0) {
-        const addTargetsResponse = await api.addTargetsBulk(
-          newId,
-          selectedDestinationRefs.map((destinationRef) => {
-            const [platform, destinationId] = destinationRef.split(':');
-            const destination = connectedChannels.find((entry) => entry.platform === platform && entry.destinationId === destinationId);
-            return buildCampaignTargetPayloadForDestination(destination ?? { platform, destinationId }, targetTemplate, platformOptions);
-          }),
-        );
-        if (!addTargetsResponse.ok) return { ok: false, error: addTargetsResponse.error || 'Failed to add campaign targets' };
-        const readyResponse = await api.markReady(newId);
-        if (!readyResponse.ok) return { ok: false, error: readyResponse.error || 'Failed to mark campaign ready' };
-      }
-      return { ok: true, id: newId };
-    }
-
-    let firstCampaignId = null;
-    if (scheduledLaunches.length <= 1) {
-      const r = await createOneCampaign('', scheduledLaunches[0], resolvedVideoAssetId);
-      if (!r.ok) {
-        setButtonBusy(submitButton, false);
-        setUiNotice('error', 'Campaign creation failed', r.error);
-        return;
-      }
-      firstCampaignId = r.id;
-    } else {
-      // Multiple scheduled launches → one campaign per launch, each with its own video pick when auto+playlist
-      let i = 0;
-      for (const iso of scheduledLaunches) {
-        i++;
-        let videoIdForThis = resolvedVideoAssetId;
-        if (isAutoMode && selectedPlaylistId && i > 1) {
-          const next = await api.nextPlaylistVideo(selectedPlaylistId);
-          if (next.ok && next.body?.videoAssetId) videoIdForThis = next.body.videoAssetId;
-        }
-        const suffix = ` #${i}/${scheduledLaunches.length} (${iso.slice(0, 16).replace('T', ' ')})`;
-        const r = await createOneCampaign(suffix, iso, videoIdForThis);
-        if (!r.ok) {
-          setButtonBusy(submitButton, false);
-          setUiNotice('warning', 'Algumas campanhas falharam', `Erro no disparo ${i}: ${r.error}`);
-          break;
-        }
-        if (!firstCampaignId) firstCampaignId = r.id;
-      }
-    }
-
-    setButtonBusy(submitButton, false);
-    if (scheduledLaunches.length > 1) {
-      setUiNotice('success', 'Campanhas criadas', `${scheduledLaunches.length} disparos agendados.`);
-    } else {
-      setUiNotice('success', 'Campaign created', 'The new campaign draft was created successfully.');
-    }
-    if (firstCampaignId) {
-      navigate(`/workspace/campanhas/${encodeURIComponent(firstCampaignId)}`);
-    } else {
-      navigate('/workspace/campanhas');
-    }
-  });
-}
-
-function randomTimeString() {
-  const h = Math.floor(Math.random() * 24);
-  const m = Math.floor(Math.random() * 60);
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 function minutesToHHMM(minutes) {
@@ -16086,16 +12636,6 @@ function renderCampaignLifecyclePanel(campaign, status, jobsByTarget) {
   `;
 }
 
-function formatConnectedChannelOptionLabel(channel) {
-  const title = String(channel?.title ?? channel?.id ?? 'Unknown channel');
-  const secondary = channel?.handle
-    ? channel.handle
-    : channel?.youtubeChannelId
-      ? `YT ${channel.youtubeChannelId}`
-      : channel?.id ?? 'Unknown id';
-  return `${title} (${secondary}) - ${channel?.id ?? 'unknown'}`;
-}
-
 function formatPublishDestinationOptionLabel(destination) {
   const providerLabel = getProviderLabel(destination?.platform);
   const title = String(destination?.destinationLabel ?? destination?.title ?? destination?.id ?? 'Unknown destination');
@@ -16146,61 +12686,6 @@ function buildCampaignTargetPayloadForDestination(destination, targetTemplate, p
   }
 
   return payload;
-}
-
-async function loadActiveConnectedChannels() {
-  const accountsResult = await api.accounts();
-  if (!accountsResult.ok) {
-    return {
-      ok: false,
-      status: accountsResult.status,
-      error: accountsResult.error,
-      channels: [],
-    };
-  }
-
-  const accounts = Array.isArray(accountsResult.body?.accounts)
-    ? accountsResult.body.accounts.filter((account) => isSupportedWorkspaceProvider(account.provider))
-    : [];
-  if (accounts.length === 0) {
-    return {
-      ok: true,
-      channels: [],
-    };
-  }
-
-  const channelResponses = await Promise.all(accounts.map((account) => api.accountChannels(account.id)));
-  const unauthorized = channelResponses.find((response) => !response.ok && response.status === 401);
-  if (unauthorized) {
-    return {
-      ok: false,
-      status: 401,
-      error: unauthorized.error,
-      channels: [],
-    };
-  }
-
-  const channels = channelResponses
-    .filter((response) => response.ok)
-    .flatMap((response) => Array.isArray(response.body?.channels) ? response.body.channels : [])
-    .filter((channel) => channel.isActive);
-
-  const failedResponse = channelResponses.find((response) => !response.ok);
-  if (failedResponse && channels.length === 0) {
-    return {
-      ok: false,
-      status: failedResponse.status,
-      error: failedResponse.error,
-      channels: [],
-    };
-  }
-
-  channels.sort((left, right) => formatConnectedChannelOptionLabel(left).localeCompare(formatConnectedChannelOptionLabel(right)));
-
-  return {
-    ok: true,
-    channels,
-  };
 }
 
 async function loadConnectedPublishDestinations() {
@@ -16322,7 +12807,7 @@ async function renderCampaignDetailPage(campaignId) {
 
   const actions = [];
   if (campaign.status === 'draft' && (campaign.targets?.length ?? 0) > 0) {
-    actions.push(`<button type="button" data-action="mark-ready" data-campaign-id="${escapeHtml(campaign.id)}">Marcar pronta</button>`);
+    actions.push(`<button class="button button-secondary" type="button" data-action="mark-ready" data-campaign-id="${escapeHtml(campaign.id)}">Marcar pronta</button>`);
   }
   if (campaign.status === 'ready' && (campaign.targets?.length ?? 0) > 0) {
     actions.push(`<button class="button button-primary" type="button" data-action="launch-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Lancar</button>`);
@@ -16330,7 +12815,7 @@ async function renderCampaignDetailPage(campaignId) {
   if (campaign.status === 'draft' || campaign.status === 'ready') {
     actions.push(`<button class="button button-danger" type="button" data-action="delete-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Excluir</button>`);
   }
-  actions.push(`<button type="button" data-action="clone-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Duplicar</button>`);
+  actions.push(`<button class="button button-secondary" type="button" data-action="clone-campaign" data-campaign-id="${escapeHtml(campaign.id)}">Duplicar</button>`);
   actions.push(`<a class="button button-secondary" data-link href="/workspace/campanhas">Voltar</a>`);
 
   const targets = Array.isArray(campaign.targets) ? campaign.targets : [];
@@ -16371,10 +12856,10 @@ async function renderCampaignDetailPage(campaignId) {
       const isReauthRequired = target.errorMessage === 'REAUTH_REQUIRED' || target.reauthRequired === true;
       const actionButtons = [];
       if (target.status === 'erro') {
-        actionButtons.push(`<button type="button" data-action="retry-target" data-campaign-id="${escapeHtml(campaign.id)}" data-target-id="${escapeHtml(target.id)}">Retry</button>`);
+        actionButtons.push(`<button class="button button-secondary button-sm" type="button" data-action="retry-target" data-campaign-id="${escapeHtml(campaign.id)}" data-target-id="${escapeHtml(target.id)}">Retry</button>`);
       }
       if (canMutateTargets) {
-        actionButtons.push(`<button type="button" data-action="edit-target" data-target-id="${escapeHtml(target.id)}">Edit</button>`);
+        actionButtons.push(`<button class="button button-secondary button-sm" type="button" data-action="edit-target" data-target-id="${escapeHtml(target.id)}">Edit</button>`);
         actionButtons.push(`<button class="button button-danger" type="button" data-action="remove-target" data-target-id="${escapeHtml(target.id)}">Remove</button>`);
       }
 
@@ -16560,7 +13045,7 @@ async function renderCampaignDetailPage(campaignId) {
             Target filter
             <select name="targetId">${targetOptions}</select>
           </label>
-          <button type="submit">Apply</button>
+          <button class="button button-primary" type="submit">Apply</button>
         </form>
         <table>
           <thead>
@@ -16902,36 +13387,32 @@ async function renderRoute() {
       const query = parseCurrentQuery();
       renderLoginPage({
         mode: query.get('mode') === 'register' ? 'register' : 'login',
-        initialSection: window.location.hash.replace(/^#/, ''),
+        initialSection: window.location.hash.replace(/^#/, '') || 'acesso',
+        accessFirst: false,
       });
       return;
     }
 
     if (path === '/privacy') {
-      renderLoginPage({ initialSection: 'privacy' });
+      renderPrivacyPolicyPage();
       return;
     }
 
     if (path === '/terms') {
-      renderLoginPage({ initialSection: 'terms' });
+      renderTermsOfServicePage();
       return;
     }
 
     if (path === '/data-deletion') {
-      renderLoginPage({ initialSection: 'data-deletion' });
+      renderDataDeletionPage();
       return;
     }
 
     if (path === '/login') {
-      const me = await ensureAuthenticated();
-      if (me) {
-        navigate(me.needsPlanSelection ? '/onboarding/plan' : '/workspace/dashboard', true);
-        return;
-      }
       const query = parseCurrentQuery();
       renderLoginPage({
         mode: query.get('mode') === 'register' ? 'register' : 'login',
-        initialSection: window.location.hash.replace(/^#/, ''),
+        initialSection: window.location.hash.replace(/^#/, '') || 'acesso',
       });
       return;
     }
@@ -17070,7 +13551,6 @@ async function renderRoute() {
 }
 
 applyBackgroundTheme(state.backgroundTheme);
-applyFontTheme(state.fontTheme);
 applyLocaleTranslations();
 attachGlobalNavigation();
 void renderRoute();

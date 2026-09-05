@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">Token / raio</title>
+<desc id="desc">Ícone PMP TOK em azul-ciano.</desc>
+
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#062E91"/>
+    <stop offset="58%" stop-color="#075EE4"/>
+    <stop offset="100%" stop-color="#04DDE8"/>
+  </linearGradient>
+  <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#35F5FF"/>
+    <stop offset="100%" stop-color="#00A9FF"/>
+  </linearGradient>
+  <linearGradient id="white" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#FFFFFF"/>
+    <stop offset="100%" stop-color="#DCEBFF"/>
+  </linearGradient>
+  <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+    <feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#001A49" flood-opacity=".38"/>
+  </filter>
+</defs>
+
+<circle cx="256" cy="208" r="164" fill="url(#bg)" stroke="url(#cyan)" stroke-width="14" filter="url(#shadow)"/>
+
+<g filter="url(#shadow)">
+  <ellipse cx="236" cy="215" rx="98" ry="36" fill="url(#cyan)" stroke="#FFFFFF" stroke-width="10"/>
+  <rect x="138" y="215" width="196" height="42" rx="18" fill="#0B70E6" stroke="#FFFFFF" stroke-width="8"/>
+  <ellipse cx="236" cy="257" rx="98" ry="36" fill="url(#cyan)" stroke="#FFFFFF" stroke-width="10"/>
+  <circle cx="300" cy="211" r="84" fill="url(#bg)" stroke="url(#white)" stroke-width="14"/>
+  <circle cx="300" cy="211" r="62" fill="url(#cyan)" opacity=".95"/>
+  <path d="M313 145l-55 82h38l-18 58 66-92h-40z" fill="#FFFFFF"/>
+</g>
+
+<rect x="116" y="382" width="280" height="86" rx="43" fill="#073A99" stroke="url(#cyan)" stroke-width="8" filter="url(#shadow)"/>
+<text x="256" y="440" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="50" font-weight="700" fill="#FFFFFF">TOK</text>
+</svg>

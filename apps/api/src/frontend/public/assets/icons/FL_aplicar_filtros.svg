@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img">
+<title>Aplicar filtros</title>
+<desc>Ícone FL em estilo PMP, fundo transparente.</desc>
+<defs>
+<linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0%" stop-color="#0636AE"/><stop offset="55%" stop-color="#0A68E8"/><stop offset="100%" stop-color="#18DEE9"/>
+</linearGradient>
+<linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0%" stop-color="#44F4FF"/><stop offset="100%" stop-color="#00B4FF"/>
+</linearGradient>
+<linearGradient id="white" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0%" stop-color="#FFFFFF"/><stop offset="100%" stop-color="#DDEEFF"/>
+</linearGradient>
+<filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+<feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#00194F" flood-opacity=".34"/>
+</filter>
+</defs>
+<g filter="url(#shadow)" stroke-linecap="round" stroke-linejoin="round">
+<path d="M136 116h240l-92 108v84l-56 34v-118z" fill="url(#blue)" stroke="url(#cyan)" stroke-width="12"/>
+<path d="M170 148h172" stroke="#FFFFFF" stroke-width="14"/>
+<circle cx="340" cy="296" r="46" fill="url(#cyan)" stroke="#FFFFFF" stroke-width="9"/>
+<path d="M340 272v48M316 296h48" stroke="#FFFFFF" stroke-width="14"/></g>
+<g filter="url(#shadow)">
+<rect x="116.0" y="390" width="280" height="82" rx="41" fill="#073A9F" stroke="url(#cyan)" stroke-width="8"/>
+<text x="256" y="446" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="700" fill="#FFFFFF">FL</text>
+</g>
+</svg>

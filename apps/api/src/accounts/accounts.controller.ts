@@ -1,4 +1,5 @@
 import { SessionGuard, type SessionRequestLike } from '../auth/session.guard';
+import { GoogleOauthConfigurationError } from '../integrations/google/google-oauth.service';
 import type { ConnectedAccountRecord, ChannelRecord, SupportedOauthProvider } from './accounts.service';
 import { AccountDeletionBlockedError, AccountsService } from './accounts.service';
 import { isValidToggleChannelDto } from './dto/toggle-channel.dto';
@@ -107,7 +108,7 @@ export class AccountsController {
       const label = getProviderLabel(provider);
       const message = error instanceof Error ? error.message : `${label} OAuth start failed.`;
       return {
-        status: 500,
+        status: error instanceof GoogleOauthConfigurationError ? 503 : 500,
         body: {
           error: message,
         },

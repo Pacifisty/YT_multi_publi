@@ -1,4 +1,5 @@
-import { readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { LEGAL_DOCUMENTS, type LegalDocument, type LegalDocumentKey } from './legal-documents';
 
 interface FrontendAsset {
@@ -6,17 +7,88 @@ interface FrontendAsset {
   body: string | Buffer;
 }
 
-const APP_JS_PATH = new URL('./public/app.js', import.meta.url);
-const APP_CSS_PATH = new URL('./public/app.css', import.meta.url);
-const I18N_JS_PATH = new URL('./public/i18n.js', import.meta.url);
+function preferBuiltAsset(builtPath: URL, sourcePath: URL): URL {
+  return existsSync(builtPath) ? builtPath : sourcePath;
+}
+
+const APP_JS_SOURCE_PATH = new URL('./public/app.js', import.meta.url);
+const APP_CSS_SOURCE_PATH = new URL('./public/app.css', import.meta.url);
+const I18N_JS_SOURCE_PATH = new URL('./public/i18n.js', import.meta.url);
+const APP_JS_PATH = preferBuiltAsset(new URL('./public/generated/app.min.js', import.meta.url), APP_JS_SOURCE_PATH);
+const APP_CSS_PATH = preferBuiltAsset(new URL('./public/generated/app.min.css', import.meta.url), APP_CSS_SOURCE_PATH);
+const I18N_JS_PATH = preferBuiltAsset(new URL('./public/generated/i18n.min.js', import.meta.url), I18N_JS_SOURCE_PATH);
 const UNI_BACKGROUND_PATH = new URL('./public/assets/UNI.png', import.meta.url);
 const PLANET_IMAGE_PATH = new URL('./public/assets/PLANETA.png', import.meta.url);
-const SATELLITE_IMAGE_PATH = new URL('./public/assets/sate.png', import.meta.url);
+const SATELLITE_IMAGE_PATH = new URL('./public/assets/SAT.png', import.meta.url);
 const SUN_IMAGE_PATH = new URL('./public/assets/SOL.png', import.meta.url);
 const MOON_IMAGE_PATH = new URL('./public/assets/LUA.png', import.meta.url);
 const PMP_LOGO_PATH = new URL('./public/assets/PMP.png', import.meta.url);
 const PMP_PRIMARY_LOGO_PATH = new URL('./public/assets/PMP-logo.png', import.meta.url);
 const PMP_TAGLINE_PATH = new URL('./public/assets/PMP-tagline.png', import.meta.url);
+const UNI_BACKGROUND_WEBP_PATH = new URL('./public/assets/optimized/UNI.webp', import.meta.url);
+const PLANET_IMAGE_WEBP_PATH = new URL('./public/assets/optimized/PLANETA.webp', import.meta.url);
+const SATELLITE_IMAGE_WEBP_PATH = new URL('./public/assets/optimized/SAT.webp', import.meta.url);
+const SUN_IMAGE_WEBP_PATH = new URL('./public/assets/optimized/SOL.webp', import.meta.url);
+const MOON_IMAGE_WEBP_PATH = new URL('./public/assets/optimized/LUA.webp', import.meta.url);
+const PMP_LOGO_WEBP_PATH = new URL('./public/assets/optimized/PMP.webp', import.meta.url);
+const PMP_PRIMARY_LOGO_WEBP_PATH = new URL('./public/assets/optimized/PMP-logo.webp', import.meta.url);
+const PMP_TAGLINE_WEBP_PATH = new URL('./public/assets/optimized/PMP-tagline.webp', import.meta.url);
+const ACC_ICON_PATH = new URL('./public/assets/icons/ACC_contas_vinculadas.svg', import.meta.url);
+const CAN_ICON_PATH = new URL('./public/assets/icons/CAN_canais_ativos.svg', import.meta.url);
+const COTA_ICON_PATH = new URL('./public/assets/icons/COTA_medidor_api.svg', import.meta.url);
+const CP_ICON_PATH = new URL('./public/assets/icons/CP_campanhas.svg', import.meta.url);
+const CFG_ICON_PATH = new URL('./public/assets/icons/CFG_configuracoes.svg', import.meta.url);
+const EU_ICON_PATH = new URL('./public/assets/icons/EU_usuario.svg', import.meta.url);
+const IDI_ICON_PATH = new URL('./public/assets/icons/IDI_idioma.svg', import.meta.url);
+const BG_ICON_PATH = new URL('./public/assets/icons/PMP_BG_Aparencia.svg', import.meta.url);
+const VIS_ICON_PATH = new URL('./public/assets/icons/PMP_VIS_Visibilidade.svg', import.meta.url);
+const RES_ICON_PATH = new URL('./public/assets/icons/PMP_RES_Preferencias_Salvas.svg', import.meta.url);
+const OK_ICON_PATH = new URL('./public/assets/icons/OK_check.svg', import.meta.url);
+const PRO_ICON_PATH = new URL('./public/assets/icons/PRO_cadeado_coroa.svg', import.meta.url);
+const TOK_ICON_PATH = new URL('./public/assets/icons/TOK_token_raio.svg', import.meta.url);
+const CTA_ICON_PATH = new URL('./public/assets/icons/CTA_atalhos_conta.svg', import.meta.url);
+const RISK_ICON_PATH = new URL('./public/assets/icons/RISCO_lixeira_alerta.svg', import.meta.url);
+const AUTH_ICON_PATH = new URL('./public/assets/icons/AUTH_escudo_oauth.svg', import.meta.url);
+const QUEUE_ICON_PATH = new URL('./public/assets/icons/FILA_fila_campanhas.svg', import.meta.url);
+const NEW_ICON_PATH = new URL('./public/assets/icons/NEW_adicionar.svg', import.meta.url);
+const DOWN_ICON_PATH = new URL('./public/assets/icons/DN_queda.svg', import.meta.url);
+const UP_ICON_PATH = new URL('./public/assets/icons/UP_crescimento.svg', import.meta.url);
+const FOCUS_ICON_PATH = new URL('./public/assets/icons/FOCO_alvo.svg', import.meta.url);
+const SYNC_ICON_PATH = new URL('./public/assets/icons/SYNC_sincronizacao.svg', import.meta.url);
+const ACCOUNT_VISIBILITY_ICON_PATH = new URL('./public/assets/icons/VIS_olho.svg', import.meta.url);
+const INSTAGRAM_ICON_PATH = new URL('./public/assets/icons/IG_instagram.svg', import.meta.url);
+const TIKTOK_ICON_PATH = new URL('./public/assets/icons/TT_tiktok.svg', import.meta.url);
+const YOUTUBE_ICON_PATH = new URL('./public/assets/icons/YT_youtube.svg', import.meta.url);
+const DIRECTORY_ICON_PATH = new URL('./public/assets/icons/DIR_pasta.svg', import.meta.url);
+const DURATION_ICON_PATH = new URL('./public/assets/icons/DUR_relogio.svg', import.meta.url);
+const IMAGE_ICON_PATH = new URL('./public/assets/icons/IMG_imagem.svg', import.meta.url);
+const LIBRARY_ICON_PATH = new URL('./public/assets/icons/LIB_biblioteca.svg', import.meta.url);
+const STORAGE_ICON_PATH = new URL('./public/assets/icons/STO_armazenamento.svg', import.meta.url);
+const VIDEO_ICON_PATH = new URL('./public/assets/icons/VID_video.svg', import.meta.url);
+const ADD_ICON_PATH = new URL('./public/assets/icons/ADD_adicionar.svg', import.meta.url);
+const PLAYLIST_ICON_PATH = new URL('./public/assets/icons/LIST_playlist.svg', import.meta.url);
+const PUBLISHED_ICON_PATH = new URL('./public/assets/icons/PUB_publicacao.svg', import.meta.url);
+const STAR_ICON_PATH = new URL('./public/assets/icons/TOP_estrela.svg', import.meta.url);
+const CAMPAIGN_ERROR_ICON_PATH = new URL('./public/assets/icons/ER_erro.svg', import.meta.url);
+const ALERT_ICON_PATH = new URL('./public/assets/icons/ALERTA_aviso.svg', import.meta.url);
+const BLOCKED_ICON_PATH = new URL('./public/assets/icons/BLOQ_cadeado.svg', import.meta.url);
+const NEW_CAMPAIGN_ICON_PATH = new URL('./public/assets/icons/NOVO_nova_campanha.svg', import.meta.url);
+const CAMPAIGN_SUCCESS_ICON_PATH = new URL('./public/assets/icons/OK_sucesso.svg', import.meta.url);
+const CAMPAIGN_PENDING_ICON_PATH = new URL('./public/assets/icons/PE_pendente.svg', import.meta.url);
+const NO_PLATFORM_ICON_PATH = new URL('./public/assets/icons/SP_sem_plataforma.svg', import.meta.url);
+const RECONNECT_ICON_PATH = new URL('./public/assets/icons/AU_chave_reconectar.svg', import.meta.url);
+const AUTHENTICATION_ICON_PATH = new URL('./public/assets/icons/AUTH_escudo_autenticacao.svg', import.meta.url);
+const ACTIVITY_ICON_PATH = new URL('./public/assets/icons/AT_atividade.svg', import.meta.url);
+const AUTOMATION_PLAYLIST_ICON_PATH = new URL('./public/assets/icons/AUTO_automacao_playlist.svg', import.meta.url);
+const FUTURE_CALENDAR_ICON_PATH = new URL('./public/assets/icons/D+_calendario_futuro.svg', import.meta.url);
+const TODAY_ICON_PATH = new URL('./public/assets/icons/HJ_hoje.svg', import.meta.url);
+const MEDIA_FILE_ICON_PATH = new URL('./public/assets/icons/MID_arquivo_video.svg', import.meta.url);
+const APPLY_FILTERS_ICON_PATH = new URL('./public/assets/icons/FL_aplicar_filtros.svg', import.meta.url);
+const SENDING_ICON_PATH = new URL('./public/assets/icons/FL_enviando.svg', import.meta.url);
+const READY_ICON_PATH = new URL('./public/assets/icons/PR_pronta.svg', import.meta.url);
+const DRAFT_ICON_PATH = new URL('./public/assets/icons/RA_rascunho.svg', import.meta.url);
+const GENERIC_STATUS_ICON_PATH = new URL('./public/assets/icons/ST_estado_generico.svg', import.meta.url);
+const CLEAR_FILTERS_ICON_PATH = new URL('./public/assets/icons/X_limpar_filtros.svg', import.meta.url);
 const SITE_NAME = 'Platform Multi Publisher';
 const DEFAULT_LOCALE = 'pt-BR';
 const SUPPORTED_LOCALES = new Set(['pt-BR', 'en']);
@@ -63,7 +135,7 @@ const SEO_METADATA = {
 
 const APP_JS = readFileSync(APP_JS_PATH, 'utf-8');
 const APP_CSS = readFileSync(APP_CSS_PATH, 'utf-8');
-const FRONTEND_ASSET_VERSION = [
+const FRONTEND_ASSET_VERSION = createHash('sha256').update([
   statSync(APP_JS_PATH).mtimeMs,
   statSync(APP_CSS_PATH).mtimeMs,
   statSync(I18N_JS_PATH).mtimeMs,
@@ -75,8 +147,93 @@ const FRONTEND_ASSET_VERSION = [
   statSync(PMP_LOGO_PATH).mtimeMs,
   statSync(PMP_PRIMARY_LOGO_PATH).mtimeMs,
   statSync(PMP_TAGLINE_PATH).mtimeMs,
-].map((value) => Math.round(value)).join('.');
+  statSync(ACC_ICON_PATH).mtimeMs,
+  statSync(CFG_ICON_PATH).mtimeMs,
+  statSync(EU_ICON_PATH).mtimeMs,
+  statSync(IDI_ICON_PATH).mtimeMs,
+  statSync(BG_ICON_PATH).mtimeMs,
+  statSync(VIS_ICON_PATH).mtimeMs,
+  statSync(RES_ICON_PATH).mtimeMs,
+  statSync(OK_ICON_PATH).mtimeMs,
+  statSync(PRO_ICON_PATH).mtimeMs,
+  statSync(TOK_ICON_PATH).mtimeMs,
+  statSync(CTA_ICON_PATH).mtimeMs,
+  statSync(RISK_ICON_PATH).mtimeMs,
+  statSync(AUTH_ICON_PATH).mtimeMs,
+  statSync(QUEUE_ICON_PATH).mtimeMs,
+  statSync(NEW_ICON_PATH).mtimeMs,
+  statSync(DOWN_ICON_PATH).mtimeMs,
+  statSync(UP_ICON_PATH).mtimeMs,
+  statSync(FOCUS_ICON_PATH).mtimeMs,
+  statSync(SYNC_ICON_PATH).mtimeMs,
+  statSync(ACCOUNT_VISIBILITY_ICON_PATH).mtimeMs,
+  statSync(INSTAGRAM_ICON_PATH).mtimeMs,
+  statSync(TIKTOK_ICON_PATH).mtimeMs,
+  statSync(YOUTUBE_ICON_PATH).mtimeMs,
+  statSync(DIRECTORY_ICON_PATH).mtimeMs,
+  statSync(DURATION_ICON_PATH).mtimeMs,
+  statSync(IMAGE_ICON_PATH).mtimeMs,
+  statSync(LIBRARY_ICON_PATH).mtimeMs,
+  statSync(STORAGE_ICON_PATH).mtimeMs,
+  statSync(VIDEO_ICON_PATH).mtimeMs,
+  statSync(ADD_ICON_PATH).mtimeMs,
+  statSync(PLAYLIST_ICON_PATH).mtimeMs,
+  statSync(PUBLISHED_ICON_PATH).mtimeMs,
+  statSync(STAR_ICON_PATH).mtimeMs,
+  statSync(CAMPAIGN_ERROR_ICON_PATH).mtimeMs,
+  statSync(ALERT_ICON_PATH).mtimeMs,
+  statSync(BLOCKED_ICON_PATH).mtimeMs,
+  statSync(NEW_CAMPAIGN_ICON_PATH).mtimeMs,
+  statSync(CAMPAIGN_SUCCESS_ICON_PATH).mtimeMs,
+  statSync(CAMPAIGN_PENDING_ICON_PATH).mtimeMs,
+  statSync(NO_PLATFORM_ICON_PATH).mtimeMs,
+  statSync(RECONNECT_ICON_PATH).mtimeMs,
+  statSync(AUTHENTICATION_ICON_PATH).mtimeMs,
+  statSync(ACTIVITY_ICON_PATH).mtimeMs,
+  statSync(AUTOMATION_PLAYLIST_ICON_PATH).mtimeMs,
+  statSync(FUTURE_CALENDAR_ICON_PATH).mtimeMs,
+  statSync(TODAY_ICON_PATH).mtimeMs,
+  statSync(MEDIA_FILE_ICON_PATH).mtimeMs,
+  statSync(APPLY_FILTERS_ICON_PATH).mtimeMs,
+  statSync(SENDING_ICON_PATH).mtimeMs,
+  statSync(READY_ICON_PATH).mtimeMs,
+  statSync(DRAFT_ICON_PATH).mtimeMs,
+  statSync(GENERIC_STATUS_ICON_PATH).mtimeMs,
+  statSync(CLEAR_FILTERS_ICON_PATH).mtimeMs,
+].map((value) => Math.round(value)).join('.')).digest('hex').slice(0, 16);
 const FRONTEND_STATIC_ASSETS = new Map<string, FrontendAsset>([
+  ['/assets/optimized/UNI.webp', {
+    contentType: 'image/webp',
+    body: readFileSync(UNI_BACKGROUND_WEBP_PATH),
+  }],
+  ['/assets/optimized/PLANETA.webp', {
+    contentType: 'image/webp',
+    body: readFileSync(PLANET_IMAGE_WEBP_PATH),
+  }],
+  ['/assets/optimized/SAT.webp', {
+    contentType: 'image/webp',
+    body: readFileSync(SATELLITE_IMAGE_WEBP_PATH),
+  }],
+  ['/assets/optimized/SOL.webp', {
+    contentType: 'image/webp',
+    body: readFileSync(SUN_IMAGE_WEBP_PATH),
+  }],
+  ['/assets/optimized/LUA.webp', {
+    contentType: 'image/webp',
+    body: readFileSync(MOON_IMAGE_WEBP_PATH),
+  }],
+  ['/assets/optimized/PMP.webp', {
+    contentType: 'image/webp',
+    body: readFileSync(PMP_LOGO_WEBP_PATH),
+  }],
+  ['/assets/optimized/PMP-logo.webp', {
+    contentType: 'image/webp',
+    body: readFileSync(PMP_PRIMARY_LOGO_WEBP_PATH),
+  }],
+  ['/assets/optimized/PMP-tagline.webp', {
+    contentType: 'image/webp',
+    body: readFileSync(PMP_TAGLINE_WEBP_PATH),
+  }],
   ['/assets/UNI.png', {
     contentType: 'image/png',
     body: readFileSync(UNI_BACKGROUND_PATH),
@@ -85,7 +242,7 @@ const FRONTEND_STATIC_ASSETS = new Map<string, FrontendAsset>([
     contentType: 'image/png',
     body: readFileSync(PLANET_IMAGE_PATH),
   }],
-  ['/assets/sate.png', {
+  ['/assets/SAT.png', {
     contentType: 'image/png',
     body: readFileSync(SATELLITE_IMAGE_PATH),
   }],
@@ -108,6 +265,230 @@ const FRONTEND_STATIC_ASSETS = new Map<string, FrontendAsset>([
   ['/assets/PMP-tagline.png', {
     contentType: 'image/png',
     body: readFileSync(PMP_TAGLINE_PATH),
+  }],
+  ['/assets/icons/ACC_contas_vinculadas.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(ACC_ICON_PATH),
+  }],
+  ['/assets/icons/CAN_canais_ativos.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(CAN_ICON_PATH),
+  }],
+  ['/assets/icons/COTA_medidor_api.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(COTA_ICON_PATH),
+  }],
+  ['/assets/icons/CP_campanhas.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(CP_ICON_PATH),
+  }],
+  ['/assets/icons/CFG_configuracoes.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(CFG_ICON_PATH),
+  }],
+  ['/assets/icons/EU_usuario.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(EU_ICON_PATH),
+  }],
+  ['/assets/icons/IDI_idioma.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(IDI_ICON_PATH),
+  }],
+  ['/assets/icons/PMP_BG_Aparencia.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(BG_ICON_PATH),
+  }],
+  ['/assets/icons/PMP_VIS_Visibilidade.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(VIS_ICON_PATH),
+  }],
+  ['/assets/icons/PMP_RES_Preferencias_Salvas.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(RES_ICON_PATH),
+  }],
+  ['/assets/icons/OK_check.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(OK_ICON_PATH),
+  }],
+  ['/assets/icons/PRO_cadeado_coroa.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(PRO_ICON_PATH),
+  }],
+  ['/assets/icons/TOK_token_raio.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(TOK_ICON_PATH),
+  }],
+  ['/assets/icons/CTA_atalhos_conta.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(CTA_ICON_PATH),
+  }],
+  ['/assets/icons/RISCO_lixeira_alerta.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(RISK_ICON_PATH),
+  }],
+  ['/assets/icons/AUTH_escudo_oauth.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(AUTH_ICON_PATH),
+  }],
+  ['/assets/icons/FILA_fila_campanhas.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(QUEUE_ICON_PATH),
+  }],
+  ['/assets/icons/NEW_adicionar.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(NEW_ICON_PATH),
+  }],
+  ['/assets/icons/DN_queda.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(DOWN_ICON_PATH),
+  }],
+  ['/assets/icons/UP_crescimento.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(UP_ICON_PATH),
+  }],
+  ['/assets/icons/FOCO_alvo.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(FOCUS_ICON_PATH),
+  }],
+  ['/assets/icons/SYNC_sincronizacao.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(SYNC_ICON_PATH),
+  }],
+  ['/assets/icons/VIS_olho.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(ACCOUNT_VISIBILITY_ICON_PATH),
+  }],
+  ['/assets/icons/IG_instagram.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(INSTAGRAM_ICON_PATH),
+  }],
+  ['/assets/icons/TT_tiktok.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(TIKTOK_ICON_PATH),
+  }],
+  ['/assets/icons/YT_youtube.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(YOUTUBE_ICON_PATH),
+  }],
+  ['/assets/icons/DIR_pasta.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(DIRECTORY_ICON_PATH),
+  }],
+  ['/assets/icons/DUR_relogio.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(DURATION_ICON_PATH),
+  }],
+  ['/assets/icons/IMG_imagem.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(IMAGE_ICON_PATH),
+  }],
+  ['/assets/icons/LIB_biblioteca.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(LIBRARY_ICON_PATH),
+  }],
+  ['/assets/icons/STO_armazenamento.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(STORAGE_ICON_PATH),
+  }],
+  ['/assets/icons/VID_video.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(VIDEO_ICON_PATH),
+  }],
+  ['/assets/icons/ADD_adicionar.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(ADD_ICON_PATH),
+  }],
+  ['/assets/icons/LIST_playlist.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(PLAYLIST_ICON_PATH),
+  }],
+  ['/assets/icons/PUB_publicacao.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(PUBLISHED_ICON_PATH),
+  }],
+  ['/assets/icons/TOP_estrela.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(STAR_ICON_PATH),
+  }],
+  ['/assets/icons/ER_erro.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(CAMPAIGN_ERROR_ICON_PATH),
+  }],
+  ['/assets/icons/ALERTA_aviso.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(ALERT_ICON_PATH),
+  }],
+  ['/assets/icons/BLOQ_cadeado.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(BLOCKED_ICON_PATH),
+  }],
+  ['/assets/icons/NOVO_nova_campanha.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(NEW_CAMPAIGN_ICON_PATH),
+  }],
+  ['/assets/icons/OK_sucesso.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(CAMPAIGN_SUCCESS_ICON_PATH),
+  }],
+  ['/assets/icons/PE_pendente.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(CAMPAIGN_PENDING_ICON_PATH),
+  }],
+  ['/assets/icons/SP_sem_plataforma.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(NO_PLATFORM_ICON_PATH),
+  }],
+  ['/assets/icons/AU_chave_reconectar.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(RECONNECT_ICON_PATH),
+  }],
+  ['/assets/icons/AUTH_escudo_autenticacao.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(AUTHENTICATION_ICON_PATH),
+  }],
+  ['/assets/icons/AT_atividade.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(ACTIVITY_ICON_PATH),
+  }],
+  ['/assets/icons/FL_aplicar_filtros.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(APPLY_FILTERS_ICON_PATH),
+  }],
+  ['/assets/icons/FL_enviando.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(SENDING_ICON_PATH),
+  }],
+  ['/assets/icons/PR_pronta.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(READY_ICON_PATH),
+  }],
+  ['/assets/icons/RA_rascunho.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(DRAFT_ICON_PATH),
+  }],
+  ['/assets/icons/ST_estado_generico.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(GENERIC_STATUS_ICON_PATH),
+  }],
+  ['/assets/icons/X_limpar_filtros.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(CLEAR_FILTERS_ICON_PATH),
+  }],
+  ['/assets/icons/AUTO_automacao_playlist.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(AUTOMATION_PLAYLIST_ICON_PATH),
+  }],
+  ['/assets/icons/D+_calendario_futuro.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(FUTURE_CALENDAR_ICON_PATH),
+  }],
+  ['/assets/icons/HJ_hoje.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(TODAY_ICON_PATH),
+  }],
+  ['/assets/icons/MID_arquivo_video.svg', {
+    contentType: 'image/svg+xml; charset=utf-8',
+    body: readFileSync(MEDIA_FILE_ICON_PATH),
   }],
 ]);
 
@@ -162,12 +543,6 @@ const LEGAL_PATH_TO_DOCUMENT_KEY: Partial<Record<string, LegalDocumentKey>> = {
   '/terms': 'terms',
   '/data-deletion': 'data-deletion',
 };
-const LEGAL_EN_TITLES: Record<LegalDocumentKey, string> = {
-  privacy: 'Privacy Policy',
-  terms: 'Terms of Service',
-  'data-deletion': 'User Data Deletion',
-};
-
 function normalizeFrontendPath(path: string): string {
   if (path.length > 1 && path.endsWith('/')) {
     return path.replace(/\/+$/, '');
@@ -186,17 +561,28 @@ function getLegalDocumentKeyForPath(path: string): LegalDocumentKey | null {
 
 function getLegalDocumentTitle(document: LegalDocument, locale: FrontendLocale): string {
   if (locale === 'en') {
-    return LEGAL_EN_TITLES[document.key] ?? document.title;
+    const englishTitles: Record<LegalDocumentKey, string> = {
+      privacy: 'Privacy Policy',
+      terms: 'Terms of Service',
+      'data-deletion': 'Data Deletion and Access Revocation',
+    };
+    return englishTitles[document.key];
   }
   return document.ptTitle || document.title;
 }
 
 function renderInitialLegalLinks(locale: FrontendLocale): string {
-  const links = ([
-    ['/privacy', locale === 'en' ? 'Privacy Policy' : 'Politica de Privacidade'],
-    ['/terms', locale === 'en' ? 'Terms of Service' : 'Termos de Servico'],
-    ['/data-deletion', locale === 'en' ? 'User Data Deletion' : 'Exclusao de Dados do Usuario'],
-  ] as const)
+  const links = (locale === 'en'
+    ? [
+      ['/privacy', 'Privacy Policy'],
+      ['/terms', 'Terms of Service'],
+      ['/data-deletion', 'User Data Deletion'],
+    ] as const
+    : [
+      ['/privacy', 'Política de Privacidade'],
+      ['/terms', 'Termos de Uso'],
+      ['/data-deletion', 'Exclusão de Dados'],
+    ] as const)
     .map(([href, label]) => `<a href="${href}">${escapeHtml(label)}</a>`)
     .join('\n          ');
   return `<nav aria-label="Legal links">
@@ -515,14 +901,21 @@ export function renderFrontendDocument(path: string, locale: FrontendLocale = DE
     : '';
   const structuredData = buildStructuredData(safeLocale);
   const initialContent = renderInitialAppContent(normalizedPath, safeLocale);
-  const legalDocumentsBootstrap = legalDocumentKey
+  const needsLegalDocuments = Boolean(legalDocumentKey)
+    || normalizedPath === '/'
+    || normalizedPath === '/login';
+  const legalDocumentsBootstrap = needsLegalDocuments
     ? `    <script>window.__PMP_LEGAL_DOCUMENTS__=${renderLegalDocumentsInlineJson()};</script>\n`
+    : '';
+  const criticalArtworkPreload = normalizedPath === '/' || normalizedPath === '/login'
+    ? '    <link rel="preload" href="/assets/optimized/UNI.webp" as="image" type="image/webp" fetchpriority="high" />\n'
     : '';
   return `<!doctype html>
 <html lang="${escapeHtml(safeLocale)}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
     <title>${escapeHtml(seo.title)}</title>
     <meta name="description" content="${escapeHtml(seo.description)}" />
     <meta name="keywords" content="${escapeHtml(seo.keywords.join(', '))}" />
@@ -539,7 +932,7 @@ export function renderFrontendDocument(path: string, locale: FrontendLocale = DE
     <meta name="twitter:title" content="${escapeHtml(seo.title)}" />
     <meta name="twitter:description" content="${escapeHtml(seo.description)}" />
 ${googleMetaTag}${tiktokMetaTag}    <script type="application/ld+json">${structuredData}</script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
+${criticalArtworkPreload}    <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/app.css?v=${FRONTEND_ASSET_VERSION}" />

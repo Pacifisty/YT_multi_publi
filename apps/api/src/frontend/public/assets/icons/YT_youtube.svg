@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">YouTube</title>
+<desc id="desc">Marca do YouTube em SVG e fundo transparente.</desc>
+
+<defs>
+  <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%">
+    <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#00194F" flood-opacity=".28"/>
+  </filter>
+</defs>
+
+<g transform="translate(40 124) scale(1.2)" filter="url(#shadow)">
+  <rect x="0" y="0" width="360" height="220" rx="62" fill="#FF0000"/>
+  <path d="M146 62 L146 158 L238 110 Z" fill="#FFFFFF"/>
+</g>
+</svg>

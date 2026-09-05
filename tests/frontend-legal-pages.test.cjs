@@ -38,28 +38,28 @@ function extractFunctionSource(source, functionName) {
 }
 
 test('public legal routes are served by the frontend shell and listed in the sitemap', () => {
-  assert.match(UI_SHELL, /PUBLIC_INDEXABLE_PATHS = \['\/', '\/privacy', '\/terms', '\/data-deletion'\]/);
+  assert.match(UI_SHELL, /PUBLIC_INDEXABLE_PATHS = \['\/', '\/login', '\/onboarding\/plan', '\/privacy', '\/terms', '\/data-deletion'\]/);
   assert.match(UI_SHELL, /normalizedPath === '\/privacy'/);
   assert.match(UI_SHELL, /normalizedPath === '\/terms'/);
   assert.match(UI_SHELL, /normalizedPath === '\/data-deletion'/);
   assert.match(UI_SHELL, /normalizeFrontendPath/);
   assert.match(UI_SHELL, /LEGAL_DOCUMENTS\[legalDocumentKey\]/);
-  assert.match(LEGAL_DOCS, /title: 'Politica de Privacidade'/);
-  assert.match(LEGAL_DOCS, /title: 'Termos de Servico'/);
-  assert.match(LEGAL_DOCS, /title: 'Exclusao de Dados do Usuario'/);
+  assert.match(LEGAL_DOCS, /title: 'Política de Privacidade'/);
+  assert.match(LEGAL_DOCS, /title: 'Termos de Uso'/);
+  assert.match(LEGAL_DOCS, /title: 'Exclusão de Dados e Revogação de Acesso'/);
 });
 
 test('privacy policy covers TikTok, YouTube, Instagram, data deletion, and reviewer-required topics', () => {
   [
-    'TikTok data we collect through TikTok APIs',
-    'What we do not do with TikTok data',
-    'Data retention',
-    'Data security',
-    'How users can disconnect TikTok or revoke access',
-    'How users can request access, correction, deletion, or export of data',
-    "Children's privacy / age restrictions",
-    'International data transfers, if applicable',
-    'qualified legal professional',
+    'Dados recebidos das APIs do TikTok',
+    'O que não fazemos com dados das plataformas',
+    'Retenção e eliminação',
+    'Segurança da informação',
+    'Como desconectar contas e revogar o acesso',
+    'Direitos do titular',
+    'Crianças e adolescentes',
+    'Transferências internacionais',
+    'profissional jurídico habilitado',
   ].forEach((needle) => assert.ok(LEGAL_DOCS.includes(needle), `missing privacy section: ${needle}`));
 
   [
@@ -70,19 +70,19 @@ test('privacy policy covers TikTok, YouTube, Instagram, data deletion, and revie
     'https://www.googleapis.com/auth/youtube.force-ssl',
     'instagram_business_basic',
     'instagram_business_content_publish',
-    'Google API Services User Data Policy, including the Limited Use requirements',
+    'requisitos de Uso Limitado (<em>Limited Use</em>)',
   ].forEach((needle) => assert.ok(LEGAL_DOCS.includes(needle), `missing platform scope/disclosure: ${needle}`));
 
   [
     'Lucas Domingues',
     'PlataformMultiPublisher@gmail.com',
     'Alameda dos Mutuns',
-    'Brazil',
+    'Brasil',
     'Cloudflare',
     'Mercado Pago',
-    'account deletion requests keep the account active for 24 hours',
-    'within 30 days',
-    'at least 18 years old',
+    'a conta permanece ativa por 24 horas',
+    'em até 30 dias',
+    'pelo menos 18 anos',
   ].forEach((needle) => assert.ok(LEGAL_DOCS.includes(needle) || UI_SHELL.includes(needle), `missing filled legal value: ${needle}`));
 
   assert.doesNotMatch(LEGAL_DOCS, /domingues_eu \[at\] hotmail \[dot\] com/i);
@@ -90,23 +90,25 @@ test('privacy policy covers TikTok, YouTube, Instagram, data deletion, and revie
 
 test('terms of service covers platform authorization and third-party publishing responsibilities', () => {
   [
-    'Acceptance of terms',
-    'TikTok integration',
-    'User authorization and permissions',
-    'Prohibited uses',
-    'Content ownership and licenses',
-    'TikTok content and third-party services',
-    'Limitation of liability',
-    'Governing law',
+    'Aceitação dos Termos',
+    'Integração com o TikTok',
+    'Conexões por OAuth e permissões',
+    'Usos proibidos',
+    'Conteúdo e licença operacional',
+    'Serviços e decisões de terceiros',
+    'Responsabilidade',
+    'Lei aplicável e solução de conflitos',
   ].forEach((needle) => assert.ok(LEGAL_DOCS.includes(needle), `missing terms section: ${needle}`));
 
-  assert.match(LEGAL_DOCS, /not owned by, endorsed by, sponsored by, or officially operated by TikTok, YouTube, Google, Instagram, Meta/);
+  assert.match(LEGAL_DOCS, /não pertence, não é endossado, patrocinado nem operado oficialmente por TikTok, YouTube, Google, Instagram, Meta/);
+  assert.match(LEGAL_DOCS, /direitos obrigatórios previstos na legislação de consumo/);
+  assert.doesNotMatch(LEGAL_DOCS, /Responsabilidade é limitada a R\$ 100|Liability is limited to BRL 100/);
 });
 
 test('legal links are visible from public website and styled', () => {
-  assert.match(APP_JS, /href="\/privacy" data-link>Politica de Privacidade/);
-  assert.match(APP_JS, /href="\/terms" data-link>Termos de Servico/);
-  assert.match(APP_JS, /href="\/data-deletion" data-link>Exclusao de Dados do Usuario/);
+  assert.match(APP_JS, /href="\/privacy" data-link>Política de Privacidade/);
+  assert.match(APP_JS, /href="\/terms" data-link>Termos de Uso/);
+  assert.match(APP_JS, /href="\/data-deletion" data-link>Exclusão de Dados/);
   assert.doesNotMatch(APP_JS, /href="\/privacy" data-link>Privacy Policy/);
   assert.doesNotMatch(APP_JS, /href="\/terms" data-link>Terms of Service/);
   assert.doesNotMatch(APP_JS, /href="\/data-deletion" data-link>User Data Deletion/);
@@ -155,6 +157,74 @@ test('SPA legal navigation reloads when legal documents were not bootstrapped', 
   assert.deepEqual(result.calls, ['/privacy']);
   assert.equal(result.rootHtml, '');
   assert.equal(result.stored['pmp-legal-document-reload:/privacy'], '1');
+});
+
+test('published legal documents use clear Brazilian Portuguese consistently', () => {
+  assert.match(LEGAL_DOCS, /LEGAL_LAST_UPDATED = '4 de setembro de 2026'/);
+  assert.match(LEGAL_DOCS, /Bases legais/);
+  assert.match(LEGAL_DOCS, /peticionar perante a ANPD/);
+  assert.match(LEGAL_DOCS, /revogar acesso.*não exclui automaticamente toda a conta PMP/s);
+  assert.doesNotMatch(LEGAL_DOCS, /heading: '(Introduction|Acceptance of terms|Data retention|Governing law)'/);
+  assert.doesNotMatch(LEGAL_DOCS, /This document should be reviewed|How Platform Multi Publisher handles/);
+});
+
+test('SPA login navigation reloads once to hydrate embedded legal documents', () => {
+  const result = Function(`
+    const LEGAL_DOCUMENT_PATHS = Object.freeze({
+      privacy: '/privacy',
+      terms: '/terms',
+      'data-deletion': '/data-deletion',
+    });
+    const calls = [];
+    const document = { body: { dataset: { initialPath: '/workspace/dashboard' } } };
+    const window = {
+      __PMP_LEGAL_DOCUMENTS__: {},
+      location: {
+        pathname: '/login',
+        assign(path) { calls.push(path); },
+      },
+    };
+    ${extractFunctionSource(APP_JS, 'getSharedLegalDocuments')}
+    ${extractFunctionSource(APP_JS, 'getLegalDocument')}
+    ${extractFunctionSource(APP_JS, 'ensureMerchantLegalDocumentsForLogin')}
+    const ready = ensureMerchantLegalDocumentsForLogin('register', 'planos');
+    return { calls, ready };
+  `)();
+
+  assert.equal(result.ready, false);
+  assert.deepEqual(result.calls, ['/login?mode=register#planos']);
+});
+
+test('direct login keeps rendering when all embedded legal documents are ready', () => {
+  const result = Function(`
+    const LEGAL_DOCUMENT_PATHS = Object.freeze({
+      privacy: '/privacy',
+      terms: '/terms',
+      'data-deletion': '/data-deletion',
+    });
+    const calls = [];
+    const document = { body: { dataset: { initialPath: '/login' } } };
+    const legalDocument = { sections: [] };
+    const window = {
+      __PMP_LEGAL_DOCUMENTS__: {
+        privacy: legalDocument,
+        terms: legalDocument,
+        'data-deletion': legalDocument,
+      },
+      location: {
+        pathname: '/login',
+        assign(path) { calls.push(path); },
+      },
+    };
+    ${extractFunctionSource(APP_JS, 'getSharedLegalDocuments')}
+    ${extractFunctionSource(APP_JS, 'getLegalDocument')}
+    ${extractFunctionSource(APP_JS, 'ensureMerchantLegalDocumentsForLogin')}
+    const ready = ensureMerchantLegalDocumentsForLogin('login', 'acesso');
+    return { calls, ready };
+  `)();
+
+  assert.equal(result.ready, true);
+  assert.deepEqual(result.calls, []);
 });
 
 test('legal pages keep reviewer hierarchy ahead of conversion actions', () => {

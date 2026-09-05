@@ -19,7 +19,7 @@ import { ScheduledLaunchChecker } from './campaigns/scheduled-launch-checker';
 import { PublicMediaUrlService } from './media/public-media-url.service';
 import { AccountPlanService, type AccountPlanStore } from './account-plan/account-plan.service';
 import { AccountPlanController } from './account-plan/account-plan.controller';
-import { PaymentService } from './account-plan/payment.service';
+import { PaymentService, type PaymentRepository } from './account-plan/payment.service';
 import { MercadoPagoPaymentProviderAdapter } from './account-plan/mercadopago-payment.adapter';
 import type { WebhookDeduplicator } from './account-plan/webhook-deduplication';
 import { validatePaymentConfig } from './startup/payment-startup-validator';
@@ -27,6 +27,8 @@ import { SessionGuard } from './auth/session.guard';
 import { EmailService, selectEmailProvider } from './integrations/email/email-service';
 import { GrowthScriptController } from './growth/growth-script.controller';
 import { GrowthScriptService } from './growth/growth-script.service';
+import { createServiceRequestModule } from './service-requests/service-request.module';
+import type { ServiceRequestRepository } from './service-requests/service-request.repository';
 
 const optionalRequire = createRequire(import.meta.url);
 
@@ -48,6 +50,8 @@ export interface AppConfig {
   mediaModuleOptions?: MediaModuleOptions;
   accountPlanStore?: AccountPlanStore;
   paymentWebhookDeduplicator?: WebhookDeduplicator | null;
+  paymentRepository?: PaymentRepository;
+  serviceRequestRepository?: ServiceRequestRepository;
 }
 
 export interface HttpRequest {
@@ -110,10 +114,10 @@ export function createApp(config: AppConfig = {}): AppInstance {
   // Validate payment config early; abort startup if critical vars missing
   validatePaymentConfig(env as Record<string, string | undefined>, nodeEnv);
 
-  const publicMediaUrlService = createPublicMediaUrlService(config.env);
-  const emailProvider = selectEmailProvider();
+  const publicMediaUrlService = createPublicMediaUrlService(env);
+  const emailProvider = selectEmailProvider(undefined, env);
   const emailService = new EmailService({ provider: emailProvider });
-  const emailProviderType = config.env?.EMAIL_PROVIDER || 'mock';
+  const emailProviderType = env.EMAIL_PROVIDER || 'mock';
   console.log(`[api] email provider: ${emailProviderType}`);
   const authModule = createAuthModule({
     env: config.env,
@@ -123,12 +127,12 @@ export function createApp(config: AppConfig = {}): AppInstance {
   const accountPlanService = new AccountPlanService({
     store: config.accountPlanStore,
   });
-  const mercadopagoAccessToken = config.env?.MERCADOPAGO_ACCESS_TOKEN;
+  const mercadopagoAccessToken = env.MERCADOPAGO_ACCESS_TOKEN;
   const MERCADOPAGO_TIMEOUT_MS = 10000;
   const paymentProvider = mercadopagoAccessToken
     ? new MercadoPagoPaymentProviderAdapter({
         accessToken: mercadopagoAccessToken,
-        webhookSecret: config.env?.MERCADOPAGO_WEBHOOK_SECRET,
+        webhookSecret: env.MERCADOPAGO_WEBHOOK_SECRET,
         timeoutMs: MERCADOPAGO_TIMEOUT_MS,
       })
     : undefined;
@@ -140,12 +144,13 @@ export function createApp(config: AppConfig = {}): AppInstance {
 
   const paymentService = new PaymentService({
     provider: paymentProvider,
+    repository: config.paymentRepository,
     webhookDeduplicator: paymentWebhookDeduplicator,
     emailService,
     accountPlanService,
-    defaultSuccessUrl: config.env?.PAYMENT_SUCCESS_URL,
-    defaultCancelUrl: config.env?.PAYMENT_CANCEL_URL,
-    defaultNotificationUrl: config.env?.PAYMENT_WEBHOOK_URL,
+    defaultSuccessUrl: env.PAYMENT_SUCCESS_URL,
+    defaultCancelUrl: env.PAYMENT_CANCEL_URL,
+    defaultNotificationUrl: env.PAYMENT_WEBHOOK_URL,
   });
   const accountPlanController = new AccountPlanController(
     accountPlanService,
@@ -153,6 +158,11 @@ export function createApp(config: AppConfig = {}): AppInstance {
     authModule.authController,
     paymentService,
   );
+  const serviceRequestModule = createServiceRequestModule({
+    repository: config.serviceRequestRepository,
+    emailService,
+    env,
+  });
   const accountsModule = createAccountsModule(config.accountsModuleOptions);
   const campaignsModule = createCampaignsModule({
     ...config.campaignsModuleOptions,
@@ -258,6 +268,7 @@ export function createApp(config: AppConfig = {}): AppInstance {
     backgroundProcessor,
     accountPlanController,
     growthScriptController,
+    serviceRequestController: serviceRequestModule.controller,
   });
 
   async function handleRequest(request: HttpRequest): Promise<HttpResponse> {

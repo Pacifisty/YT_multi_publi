@@ -112,6 +112,7 @@ export class MercadoPagoPaymentProviderAdapter implements PaymentProviderAdapter
     // so we rely on external_reference (set by us at preference creation).
     // Webhook event is identified by x-request-id header for deduplication
     return {
+      providerIntentId: String(result.id ?? dataIdString),
       providerEventId: requestId,
       externalReference: result.external_reference ?? undefined,
       status: mapMercadoPagoStatus(result.status ?? 'pending'),

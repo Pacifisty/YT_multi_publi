@@ -164,6 +164,7 @@ describe('MercadoPagoPaymentProviderAdapter — verifyWebhook', () => {
     );
 
     expect(result).toEqual({
+      providerIntentId: '999',
       providerEventId: requestId,
       externalReference: 'pay_abc',
       status: 'paid',

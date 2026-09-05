@@ -9,6 +9,7 @@ import {
 } from '../../apps/api/src/accounts/accounts.service';
 import { TokenCryptoService } from '../../apps/api/src/common/crypto/token-crypto.service';
 import { SessionGuard } from '../../apps/api/src/auth/session.guard';
+import { GoogleOauthConfigurationError } from '../../apps/api/src/integrations/google/google-oauth.service';
 import type { YouTubeChannelsListResult } from '../../apps/api/src/integrations/youtube/youtube-channels.service';
 
 const TEST_KEY = '12345678901234567890123456789012';
@@ -406,6 +407,23 @@ describe('AccountsController', () => {
       const res = await controller.startYouTubeOauth(authedRequest());
       expect(res.status).toBe(200);
       expect(res.body.redirectUrl).toContain('google');
+    });
+
+    it('returns 503 with setup guidance when Google OAuth is not configured', async () => {
+      const service = new AccountsService({
+        tokenCryptoService: crypto,
+        createAuthorizationRedirect: async () => {
+          throw new GoogleOauthConfigurationError(
+            'http://127.0.0.1:3000/workspace/accounts/callback',
+          );
+        },
+      });
+      const controller = new AccountsController(service, new SessionGuard());
+
+      const res = await controller.startYouTubeOauth(authedRequest());
+      expect(res.status).toBe(503);
+      expect(res.body.error).toContain('GOOGLE_CLIENT_ID');
+      expect(res.body.error).toContain('/workspace/accounts/callback');
     });
   });
 

@@ -8,32 +8,29 @@ const test = require('node:test');
 const ROOT = path.join(__dirname, '..');
 const APP_JS = fs.readFileSync(path.join(ROOT, 'apps', 'api', 'src', 'frontend', 'public', 'app.js'), 'utf8');
 const CSS = fs.readFileSync(path.join(ROOT, 'apps', 'api', 'src', 'frontend', 'public', 'app.css'), 'utf8');
+const ERROR_SVG = fs.readFileSync(
+  path.join(ROOT, 'apps', 'api', 'src', 'frontend', 'public', 'assets', 'icons', 'ER_erro.svg'),
+  'utf8',
+);
 
-test('neon error icon uses transparent failed-folder artwork', () => {
-  assert.match(APP_JS, /const NEON_MEDIA_ICON_KIND_ALIASES = \{/);
+test('media error mark uses the transparent PMP artwork asset', () => {
+  assert.match(APP_JS, /const MEDIA_MARK_KIND_ALIASES = \{/);
+  assert.match(APP_JS, /erro: 'error'/);
   assert.match(APP_JS, /falha: 'error'/);
   assert.match(APP_JS, /falhas: 'error'/);
   assert.match(APP_JS, /failed: 'error'/);
-  assert.match(APP_JS, /NEON_MEDIA_ERROR_SVG_KINDS = new Set\(\['error', 'erro', 'falha', 'falhas', 'failed', 'failure'\]\)/);
-  assert.match(APP_JS, /class="neon-media-error-svg"/);
-  assert.match(APP_JS, /const shouldRenderErrorSvg = safeKind === 'error' && NEON_MEDIA_ERROR_SVG_KINDS\.has\(requestedKind\)/);
-  assert.match(APP_JS, /const errorSvgHtml = shouldRenderErrorSvg/);
-  assert.match(APP_JS, /\$\{errorSvgHtml\}/);
-  assert.doesNotMatch(APP_JS, /falhou: 'error'/);
-  assert.doesNotMatch(APP_JS, /erros: 'error'/);
-  assert.doesNotMatch(APP_JS, /<span class="neon-media-icon-canvas">\s*<svg class="neon-media-error-svg"/);
-  assert.match(APP_JS, /viewBox="0 0 100 100"/);
-  assert.match(APP_JS, /M10 46C11 40 16 37 23 37H43C50 37 50 45 57 45H86/);
-  assert.match(APP_JS, /M40 60L60 80M60 60L40 80/);
+  assert.match(APP_JS, /failure: 'error'/);
+  assert.match(APP_JS, /error: '\/assets\/icons\/ER_erro\.svg'/);
+  assert.match(APP_JS, /const artworkSrc = MEDIA_MARK_ARTWORK\[safeKind\] \?\? ''/);
+  assert.match(APP_JS, /class="media-mark-artwork-image"/);
+  assert.match(APP_JS, /data-media-kind="\$\{escapeAttribute\(safeKind\)\}"/);
 
-  assert.match(CSS, /\.neon-media-icon-error\s*\{[\s\S]*background: transparent !important/);
-  assert.match(CSS, /\.neon-media-icon-error \.neon-media-icon-glow[\s\S]*rgba\(255, 23, 68, 0\.58\)/);
-  assert.match(CSS, /\.neon-media-icon-error \.neon-media-frame,[\s\S]*\.neon-media-icon-error \.neon-media-plus-y[\s\S]*display: none/);
-  assert.match(CSS, /\.neon-media-icon-error \.neon-media-icon-canvas[\s\S]*background: transparent !important/);
-  assert.match(CSS, /\.neon-media-error-svg[\s\S]*display: none[\s\S]*background: transparent/);
-  assert.match(CSS, /\.neon-media-icon-error \.neon-media-error-svg\s*\{[\s\S]*display: block;[\s\S]*fill: none/);
-  assert.match(CSS, /\.neon-media-error-stroke[\s\S]*fill: none/);
-  assert.match(CSS, /\.neon-media-error-stroke[\s\S]*vector-effect: non-scaling-stroke/);
-  assert.match(CSS, /\.neon-media-error-hot-stroke/);
-  assert.match(CSS, /\.neon-media-error-glow-stroke[\s\S]*stroke: #ff1744/);
+  assert.match(CSS, /\.media-mark-artwork\s*\{[\s\S]*?background: transparent/);
+  assert.match(CSS, /\.media-mark-artwork-image\s*\{[\s\S]*?object-fit: contain/);
+  assert.match(CSS, /\.media-mark\[data-tone="danger"\]/);
+
+  assert.match(ERROR_SVG, /viewBox="0 0 512 512"/);
+  assert.match(ERROR_SVG, /fundo transparente/);
+  assert.match(ERROR_SVG, /M220 174l72 72M292 174l-72 72/);
+  assert.doesNotMatch(ERROR_SVG, /<rect[^>]+x="0"[^>]+y="0"[^>]+width="512"[^>]+height="512"/);
 });

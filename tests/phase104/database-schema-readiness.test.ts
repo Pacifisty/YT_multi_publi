@@ -71,6 +71,9 @@ describe('database schema readiness', () => {
       'publish_jobs',
       'audit_events',
       'webhook_events',
+      'payment_intents',
+      'password_reset_tokens',
+      'service_requests',
     ]);
 
     const provider = createDatabaseProvider({
@@ -101,7 +104,7 @@ describe('database schema readiness', () => {
     });
 
     await expect(provider.connect()).rejects.toThrow(
-      'Database schema is missing required tables: account_plans, publish_jobs, audit_events, webhook_events. Run Prisma migrations before starting the server.',
+      'Database schema is missing required tables: account_plans, publish_jobs, audit_events, webhook_events, payment_intents, password_reset_tokens, service_requests. Run Prisma migrations before starting the server.',
     );
 
     expect(prisma.$connect).toHaveBeenCalledOnce();

@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">Configurações</title>
+<desc id="desc">Ícone PMP CFG em azul-ciano.</desc>
+
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#063A9A"/>
+    <stop offset="55%" stop-color="#0968D8"/>
+    <stop offset="100%" stop-color="#08D8E8"/>
+  </linearGradient>
+  <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#1FE8F2"/>
+    <stop offset="100%" stop-color="#00A7F5"/>
+  </linearGradient>
+  <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+    <feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#001A49" flood-opacity=".35"/>
+  </filter>
+</defs>
+
+<circle cx="256" cy="220" r="164" fill="url(#bg)" stroke="url(#ring)" stroke-width="14" filter="url(#shadow)"/>
+
+<g transform="translate(256 220)" fill="#FFFFFF">
+  <path d="M-24-108h48l8 28c12 4 23 10 33 18l28-8 24 42-21 20c2 6 3 13 3 20s-1 14-3 20l21 20-24 42-28-8c-10 8-21 14-33 18l-8 28h-48l-8-28c-12-4-23-10-33-18l-28 8-24-42 21-20c-2-6-3-13-3-20s1-14 3-20l-21-20 24-42 28 8c10-8 21-14 33-18l8-28z"/>
+  <circle cx="0" cy="12" r="46" fill="#0A69D8"/>
+  <circle cx="0" cy="12" r="25" fill="#18DAE8"/>
+</g>
+
+<rect x="116" y="392" width="280" height="82" rx="41" fill="#063B96" stroke="#17DCEB" stroke-width="8"/>
+<text x="256" y="448" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="700" fill="#FFFFFF">CFG</text>
+</svg>

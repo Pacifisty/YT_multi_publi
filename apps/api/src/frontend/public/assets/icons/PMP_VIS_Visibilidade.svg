@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">VIS - Visibilidade</title>
+<desc id="desc">Olho estilizado em azul e ciano com identificação VIS.</desc>
+<defs>
+  <linearGradient id="eyeG" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#19E6F2"/>
+    <stop offset="1" stop-color="#1267FF"/>
+  </linearGradient>
+  <radialGradient id="irisG" cx="35%" cy="30%" r="70%">
+    <stop offset="0" stop-color="#19E6F2"/>
+    <stop offset=".55" stop-color="#1683FF"/>
+    <stop offset="1" stop-color="#123DD8"/>
+  </radialGradient>
+</defs>
+<path d="M57 237C99 150 169 105 256 105s157 45 199 132c-42 87-112 132-199 132S99 324 57 237z"
+      fill="#F8FCFF" stroke="url(#eyeG)" stroke-width="18"/>
+<circle cx="256" cy="237" r="86" fill="url(#irisG)" stroke="#1267FF" stroke-width="14"/>
+<circle cx="256" cy="237" r="42" fill="#09255F"/>
+<circle cx="222" cy="202" r="16" fill="#fff"/>
+<circle cx="287" cy="259" r="9" fill="#19E6F2"/>
+<rect x="171" y="383" width="170" height="70" rx="32" fill="url(#eyeG)"/>
+<text x="256" y="431" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="45" font-weight="700" fill="#fff">VIS</text>
+</svg>

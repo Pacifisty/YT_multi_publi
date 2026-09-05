@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">Campanha pendente</title>
+<desc id="desc">Relógio de campanha pendente em estilo PMP, com fundo transparente.</desc>
+
+<defs>
+  <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0636AE"/><stop offset="55%" stop-color="#0A68E8"/><stop offset="100%" stop-color="#18DEE9"/></linearGradient>
+  <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#44F4FF"/><stop offset="100%" stop-color="#00B4FF"/></linearGradient>
+  <linearGradient id="white" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFFFFF"/><stop offset="100%" stop-color="#DDEEFF"/></linearGradient>
+  <filter id="shadow" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#00194F" flood-opacity=".34"/></filter>
+</defs>
+
+<g transform="translate(-90 -28) scale(1.35)" filter="url(#shadow)" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="256" cy="210" r="132" fill="url(#blue)" stroke="url(#cyan)" stroke-width="12"/>
+  <circle cx="256" cy="210" r="86" fill="none" stroke="#FFFFFF" stroke-width="14"/>
+  <path d="M256 166v50l42 26" stroke="#FFFFFF" stroke-width="18"/>
+  <circle cx="256" cy="210" r="9" fill="#18DEE9"/>
+  <path d="M195 116l-22-22M317 116l22-22" stroke="#18DEE9" stroke-width="14"/>
+</g>
+</svg>

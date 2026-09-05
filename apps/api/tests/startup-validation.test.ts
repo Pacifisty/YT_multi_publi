@@ -2,6 +2,14 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { validatePaymentConfig } from '../src/startup/payment-startup-validator';
 import { createApp, type AppConfig } from '../src/app';
 
+const validProductionPaymentEnv = {
+  MERCADOPAGO_ACCESS_TOKEN: 'APP_USR-production-token-value',
+  MERCADOPAGO_WEBHOOK_SECRET: 'production-webhook-secret-value',
+  PAYMENT_SUCCESS_URL: 'https://app.example.com/workspace/planos?payment=success',
+  PAYMENT_CANCEL_URL: 'https://app.example.com/workspace/planos?payment=cancel',
+  PAYMENT_WEBHOOK_URL: 'https://app.example.com/api/account/payments/webhook',
+};
+
 // Test helper: ensures startup validation passes in test environment
 function createTestApp(overrides?: Partial<AppConfig>): ReturnType<typeof createApp> {
   const mockConfig: AppConfig = {
@@ -28,7 +36,7 @@ describe('Startup Validation', () => {
   });
 
   it('Test 2: Production with MERCADOPAGO_ACCESS_TOKEN passes validation', () => {
-    const result = validatePaymentConfig({ MERCADOPAGO_ACCESS_TOKEN: 'test-token' }, 'production');
+    const result = validatePaymentConfig(validProductionPaymentEnv, 'production');
     expect(result.isValid).toBe(true);
     expect(result.errors.length).toBe(0);
   });
@@ -51,14 +59,13 @@ describe('Startup Validation', () => {
     consoleWarnSpy.mockRestore();
   });
 
-  it('Test 5: Production without webhook secret logs warning', () => {
-    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const result = validatePaymentConfig({ MERCADOPAGO_ACCESS_TOKEN: 'token' }, 'production');
-    expect(result.isValid).toBe(true);
-    expect(consoleWarnSpy).toHaveBeenCalled();
-    const warningMessages = consoleWarnSpy.mock.calls.map((call) => call[0]);
-    expect(warningMessages.some((msg) => msg.includes('WEBHOOK_SECRET'))).toBe(true);
-    consoleWarnSpy.mockRestore();
+  it('Test 5: Production without webhook secret aborts startup', () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(() => validatePaymentConfig({
+      ...validProductionPaymentEnv,
+      MERCADOPAGO_WEBHOOK_SECRET: '',
+    }, 'production')).toThrow(/WEBHOOK_SECRET/);
+    consoleErrorSpy.mockRestore();
   });
 
   it('Test 6: createApp with production config and missing token throws error', () => {
@@ -82,7 +89,7 @@ describe('Startup Validation', () => {
   });
 
   it('Test 8: Validation result structure', () => {
-    const result = validatePaymentConfig({ MERCADOPAGO_ACCESS_TOKEN: 'token' }, 'production');
+    const result = validatePaymentConfig(validProductionPaymentEnv, 'production');
     expect(result).toHaveProperty('isValid');
     expect(result).toHaveProperty('errors');
     expect(result).toHaveProperty('warnings');

@@ -9,6 +9,9 @@ import { PrismaYouTubeChannelRepository } from '../channels/prisma-youtube-chann
 import { PrismaMediaAssetRepository } from '../media/prisma-media-asset.repository';
 import { PrismaPlaylistRepository, PrismaPresetRepository } from '../media/prisma-playlist.repository';
 import { PrismaWebhookDeduplicator } from '../account-plan/webhook-deduplication';
+import { PrismaPaymentRepository } from '../account-plan/prisma-payment.repository';
+import { PrismaPasswordResetRepository } from '../auth/prisma-password-reset.repository';
+import { PrismaServiceRequestRepository } from '../service-requests/prisma-service-request.repository';
 
 const require = createRequire(import.meta.url);
 
@@ -40,6 +43,9 @@ export interface DatabaseProviderInstance {
   playlistRepository: PrismaPlaylistRepository | null;
   presetRepository: PrismaPresetRepository | null;
   webhookDeduplicator: PrismaWebhookDeduplicator | null;
+  paymentRepository: PrismaPaymentRepository | null;
+  passwordResetRepository: PrismaPasswordResetRepository | null;
+  serviceRequestRepository: PrismaServiceRequestRepository | null;
   isConnected(): boolean;
   connect(): Promise<void>;
   disconnect(): Promise<void>;
@@ -56,6 +62,9 @@ const REQUIRED_POSTGRES_TABLES = [
   'publish_jobs',
   'audit_events',
   'webhook_events',
+  'payment_intents',
+  'password_reset_tokens',
+  'service_requests',
 ] as const;
 
 function createPrismaUnavailableMessage(): string {
@@ -144,6 +153,9 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
   let playlistRepository: PrismaPlaylistRepository | null = null;
   let presetRepository: PrismaPresetRepository | null = null;
   let webhookDeduplicator: PrismaWebhookDeduplicator | null = null;
+  let paymentRepository: PrismaPaymentRepository | null = null;
+  let passwordResetRepository: PrismaPasswordResetRepository | null = null;
+  let serviceRequestRepository: PrismaServiceRequestRepository | null = null;
   let startupIssue: string | null = null;
 
   if (databaseUrl) {
@@ -160,6 +172,9 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
       playlistRepository = new PrismaPlaylistRepository(prismaClient);
       presetRepository = new PrismaPresetRepository(prismaClient);
       webhookDeduplicator = new PrismaWebhookDeduplicator(prismaClient);
+      paymentRepository = new PrismaPaymentRepository(prismaClient);
+      passwordResetRepository = new PrismaPasswordResetRepository(prismaClient);
+      serviceRequestRepository = new PrismaServiceRequestRepository(prismaClient);
     } else {
       startupIssue = createPrismaUnavailableMessage();
     }
@@ -208,6 +223,18 @@ export function createDatabaseProvider(options: DatabaseProviderOptions): Databa
 
     get webhookDeduplicator() {
       return webhookDeduplicator;
+    },
+
+    get paymentRepository() {
+      return paymentRepository;
+    },
+
+    get passwordResetRepository() {
+      return passwordResetRepository;
+    },
+
+    get serviceRequestRepository() {
+      return serviceRequestRepository;
     },
 
     isConnected() {

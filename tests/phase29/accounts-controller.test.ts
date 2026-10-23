@@ -97,6 +97,11 @@ describe('AccountsController', () => {
       expect(res.status).toBe(200);
       expect(res.body.accounts).toHaveLength(1);
       expect(res.body.accounts[0].provider).toBe('google');
+      expect(res.body.accounts[0].email).toBe('op***@example.com');
+      expect(res.body.accounts[0]).not.toHaveProperty('accessTokenEnc');
+      expect(res.body.accounts[0]).not.toHaveProperty('refreshTokenEnc');
+      expect(res.body.accounts[0]).not.toHaveProperty('ownerEmail');
+      expect(res.body.accounts[0]).not.toHaveProperty('providerSubject');
     });
   });
 
@@ -130,6 +135,20 @@ describe('AccountsController', () => {
       const res = await controller.getAccount(authedRequest({ params: { accountId: account.id } }));
       expect(res.status).toBe(200);
       expect(res.body.account!.id).toBe(account.id);
+      expect(res.body.account).not.toHaveProperty('accessTokenEnc');
+    });
+
+    it('does not return an account owned by another user', async () => {
+      const account = createConnectedAccount(crypto, { ownerEmail: 'other@example.com' });
+      const service = new AccountsService({
+        tokenCryptoService: crypto,
+        getConnectedAccount: async () => account,
+      });
+      const controller = new AccountsController(service, new SessionGuard());
+
+      const res = await controller.getAccount(authedRequest({ params: { accountId: account.id } }));
+      expect(res.status).toBe(404);
+      expect(res.body.account).toBeUndefined();
     });
 
     it('returns 400 if accountId is missing', async () => {

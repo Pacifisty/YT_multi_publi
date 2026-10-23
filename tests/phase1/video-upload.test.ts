@@ -12,6 +12,9 @@ const AUTHENTICATED_SESSION = {
   },
 };
 
+const VALID_MP4 = Buffer.from([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
+const VALID_PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
 const tempRoots: string[] = [];
 
 afterEach(async () => {
@@ -42,7 +45,7 @@ describe('media upload API and local storage contracts', () => {
           {
             originalname: 'launch.mp4',
             mimetype: 'video/mp4',
-            buffer: Buffer.from('video-content'),
+            buffer: VALID_MP4,
             durationSeconds: 120,
           },
         ],
@@ -50,7 +53,7 @@ describe('media upload API and local storage contracts', () => {
           {
             originalname: 'launch.png',
             mimetype: 'image/png',
-            buffer: Buffer.from('thumbnail-content'),
+            buffer: VALID_PNG,
           },
         ],
       },

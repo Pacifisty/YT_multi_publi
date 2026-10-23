@@ -42,7 +42,7 @@ async function resolveSandboxToken(service: TikTokOauthService): Promise<TikTokT
   return {
     accessToken: process.env.TIKTOK_SANDBOX_ACCESS_TOKEN!,
     refreshToken: process.env.TIKTOK_SANDBOX_REFRESH_TOKEN,
-    scopes: ['user.info.basic', 'video.publish', 'video.upload'],
+    scopes: ['user.info.basic', 'video.publish'],
     tokenExpiresAt: null,
     profile: {
       providerSubject: process.env.TIKTOK_SANDBOX_TEST_USER_ID,
@@ -56,7 +56,7 @@ describe('TikTok sandbox E2E harness', () => {
     const service = new TikTokOauthService({
       env: {
         TIKTOK_CLIENT_KEY: 'sandbox-client-key',
-        TIKTOK_REDIRECT_URI: 'https://app.example.com/workspace/accounts/callback?provider=tiktok',
+        TIKTOK_REDIRECT_URI: 'https://app.example.com/api/accounts/oauth/tiktok/callback',
         TIKTOK_SANDBOX: 'true',
       },
     });
@@ -66,7 +66,7 @@ describe('TikTok sandbox E2E harness', () => {
 
     expect(url.origin).toBe('https://www.tiktok.com');
     expect(url.searchParams.get('client_key')).toBe('sandbox-client-key');
-    expect(url.searchParams.get('scope')).toBe('user.info.basic');
+    expect(url.searchParams.get('scope')).toBe('user.info.basic,video.publish');
     expect(session.oauthStateNonce).toBeTruthy();
     expect(session.tiktokCodeVerifier).toBeTruthy();
     expect(service.validateCallbackState(session, session.oauthStateNonce!)).toBe(true);

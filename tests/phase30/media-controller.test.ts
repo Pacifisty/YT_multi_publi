@@ -15,7 +15,7 @@ function fakeVideo(overrides: Partial<UploadedMediaFile> = {}): UploadedMediaFil
     originalname: 'clip.mp4',
     mimetype: 'video/mp4',
     size: 5000,
-    buffer: Buffer.from('fake'),
+    buffer: Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypisom'), Buffer.alloc(24)]),
     durationSeconds: 60,
     ...overrides,
   } as UploadedMediaFile;
@@ -26,7 +26,7 @@ function fakeThumbnail(overrides: Partial<UploadedMediaFile> = {}): UploadedMedi
     originalname: 'thumb.jpg',
     mimetype: 'image/jpeg',
     size: 200,
-    buffer: Buffer.from('fake'),
+    buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]),
     ...overrides,
   } as UploadedMediaFile;
 }

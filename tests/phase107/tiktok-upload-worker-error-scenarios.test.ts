@@ -120,6 +120,16 @@ async function getUpdatedTarget(campaignService: CampaignService, campaignId: st
 }
 
 describe('TikTokUploadWorker error scenarios with mock adapter', () => {
+  test('forwards the selected video frame as TikTok cover timestamp', async () => {
+    const setup = await setupTikTokJob({ tiktokCoverTimestampMs: 12_500 });
+    const worker = createWorker(setup);
+
+    await worker.worker.processPickedJob(setup.job, setup.target, setup.campaign.videoAssetId);
+
+    expect(worker.publishFn).toHaveBeenCalledWith(expect.objectContaining({
+      coverTimestampMs: 12_500,
+    }));
+  });
   test('marks expired TikTok token code 10002 as transient', async () => {
     const setup = await setupTikTokJob();
     const expiredTokenError = Object.assign(new Error('TikTok access token expired'), {

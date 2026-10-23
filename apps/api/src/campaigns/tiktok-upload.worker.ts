@@ -24,6 +24,7 @@ export interface TikTokPublishContext {
   disableComment: boolean;
   disableDuet: boolean;
   disableStitch: boolean;
+  coverTimestampMs?: number;
 }
 
 export interface TikTokPublishResult {
@@ -49,15 +50,22 @@ export interface TikTokUploadWorkerOptions {
   getPublicVideoUrl: (videoAssetId: string) => Promise<string>;
   quotaTracker?: TikTokPublishQuotaTracker;
   sleepMs?: (ms: number) => Promise<void>;
+  forcePrivatePublishing?: boolean;
 }
 
 function normalizePublishErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim()) {
-    return error.message.trim();
+  const rawMessage = error instanceof Error
+    ? error.message.trim()
+    : typeof error === 'string'
+      ? error.trim()
+      : '';
+
+  if (/content-sharing-guidelines|integration guidelines/i.test(rawMessage)) {
+    return 'O TikTok bloqueou a publicacao pelas regras de integracao. No Sandbox ou antes da auditoria, a conta TikTok deve estar privada e o video deve usar SELF_ONLY.';
   }
 
-  if (typeof error === 'string' && error.trim()) {
-    return error.trim();
+  if (rawMessage) {
+    return rawMessage;
   }
 
   return 'Unknown error';
@@ -86,6 +94,7 @@ export class TikTokUploadWorker {
   private readonly getPublicVideoUrl: (videoAssetId: string) => Promise<string>;
   private readonly quotaTracker?: TikTokPublishQuotaTracker;
   private readonly sleepMs: (ms: number) => Promise<void>;
+  private readonly forcePrivatePublishing: boolean;
 
   constructor(options: TikTokUploadWorkerOptions) {
     this.jobService = options.jobService;
@@ -98,6 +107,7 @@ export class TikTokUploadWorker {
     this.getPublicVideoUrl = options.getPublicVideoUrl;
     this.quotaTracker = options.quotaTracker;
     this.sleepMs = options.sleepMs ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.forcePrivatePublishing = options.forcePrivatePublishing ?? false;
   }
 
   async processPickedJob(
@@ -133,10 +143,13 @@ export class TikTokUploadWorker {
         accessToken,
         videoUrl,
         title: buildTikTokTitle(target.videoTitle, target.videoDescription, target.tags),
-        privacy: selectTikTokPrivacyLevel(target.tiktokPrivacyLevel ?? target.privacy, creatorInfo.privacyLevelOptions),
+        privacy: this.forcePrivatePublishing
+          ? selectTikTokPrivacyLevel('SELF_ONLY', creatorInfo.privacyLevelOptions)
+          : selectTikTokPrivacyLevel(target.tiktokPrivacyLevel ?? target.privacy, creatorInfo.privacyLevelOptions),
         disableComment: target.tiktokDisableComment ?? false,
         disableDuet: target.tiktokDisableDuet ?? false,
         disableStitch: target.tiktokDisableStitch ?? false,
+        coverTimestampMs: target.tiktokCoverTimestampMs ?? undefined,
       }));
 
       const completion = await this.waitForPublishCompletion(accessToken, publishResponse.publishId);
@@ -314,6 +327,7 @@ export async function tiktokDirectPostFromUrl(context: TikTokPublishContext): Pr
         disable_duet: context.disableDuet,
         disable_comment: context.disableComment,
         disable_stitch: context.disableStitch,
+        ...(context.coverTimestampMs !== undefined ? { video_cover_timestamp_ms: context.coverTimestampMs } : {}),
       },
       source_info: {
         source: 'PULL_FROM_URL',

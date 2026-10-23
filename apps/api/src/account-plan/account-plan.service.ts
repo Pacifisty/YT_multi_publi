@@ -244,6 +244,7 @@ export class AccountPlanService {
   private readonly now: () => Date;
   private readonly store: AccountPlanStore;
   private readonly creditedKeys = new Set<string>();
+  private readonly accountLocks = new Map<string, Promise<void>>();
 
   constructor(options: AccountPlanServiceOptions = {}) {
     this.now = options.now ?? (() => new Date());
@@ -251,6 +252,30 @@ export class AccountPlanService {
   }
 
   async creditTokens(email: string, amount: number, idempotencyKey: string): Promise<CreditTokensResult> {
+    return this.withAccountLock(email, () => this.creditTokensUnlocked(email, amount, idempotencyKey));
+  }
+
+  async claimDailyVisit(email: string): Promise<DailyVisitGrantResult> {
+    return this.withAccountLock(email, () => this.claimDailyVisitUnlocked(email));
+  }
+
+  async selectPlan(email: string, plan: AccountPlanType): Promise<PlanSelectionResult> {
+    return this.withAccountLock(email, () => this.selectPlanUnlocked(email, plan));
+  }
+
+  async claimMonthlyGrant(email: string): Promise<MonthlyGrantResult> {
+    return this.withAccountLock(email, () => this.claimMonthlyGrantUnlocked(email));
+  }
+
+  async chargeThumbnailUpload(email: string): Promise<CampaignLaunchAuthorizationResult> {
+    return this.withAccountLock(email, () => this.chargeThumbnailUploadUnlocked(email));
+  }
+
+  async authorizeCampaignLaunch(email: string, campaign: CampaignRecord): Promise<CampaignLaunchAuthorizationResult> {
+    return this.withAccountLock(email, () => this.authorizeCampaignLaunchUnlocked(email, campaign));
+  }
+
+  private async creditTokensUnlocked(email: string, amount: number, idempotencyKey: string): Promise<CreditTokensResult> {
     if (amount <= 0) {
       throw new Error('Token credit amount must be positive.');
     }
@@ -284,7 +309,7 @@ export class AccountPlanService {
     return this.toSummary(record);
   }
 
-  async claimDailyVisit(email: string): Promise<DailyVisitGrantResult> {
+  private async claimDailyVisitUnlocked(email: string): Promise<DailyVisitGrantResult> {
     const record = await this.getOrCreateRecord(email);
     const definition = ACCOUNT_PLAN_DEFINITIONS[record.plan];
     const today = this.getBusinessDate();
@@ -313,7 +338,7 @@ export class AccountPlanService {
     };
   }
 
-  async selectPlan(email: string, plan: AccountPlanType): Promise<PlanSelectionResult> {
+  private async selectPlanUnlocked(email: string, plan: AccountPlanType): Promise<PlanSelectionResult> {
     const current = await this.getOrCreateRecord(email);
     const definition = ACCOUNT_PLAN_DEFINITIONS[plan];
     const nowIso = this.now().toISOString();
@@ -339,7 +364,7 @@ export class AccountPlanService {
     return { account: this.toSummary(updated) };
   }
 
-  async claimMonthlyGrant(email: string): Promise<MonthlyGrantResult> {
+  private async claimMonthlyGrantUnlocked(email: string): Promise<MonthlyGrantResult> {
     const record = await this.getOrCreateRecord(email);
     const definition = ACCOUNT_PLAN_DEFINITIONS[record.plan];
     const thisMonth = this.getBusinessMonth();
@@ -374,7 +399,7 @@ export class AccountPlanService {
     );
   }
 
-  async chargeThumbnailUpload(email: string): Promise<CampaignLaunchAuthorizationResult> {
+  private async chargeThumbnailUploadUnlocked(email: string): Promise<CampaignLaunchAuthorizationResult> {
     const record = await this.getOrCreateRecord(email);
     const definition = ACCOUNT_PLAN_DEFINITIONS[record.plan];
     const chargedTokens = definition.thumbnailCostTokens;
@@ -399,7 +424,7 @@ export class AccountPlanService {
     return { ok: true, chargedTokens, account: this.toSummary(updated) };
   }
 
-  async authorizeCampaignLaunch(email: string, campaign: CampaignRecord): Promise<CampaignLaunchAuthorizationResult> {
+  private async authorizeCampaignLaunchUnlocked(email: string, campaign: CampaignRecord): Promise<CampaignLaunchAuthorizationResult> {
     const record = await this.getOrCreateRecord(email);
     const definition = ACCOUNT_PLAN_DEFINITIONS[record.plan];
 
@@ -465,6 +490,22 @@ export class AccountPlanService {
     }
 
     return existing;
+  }
+
+  private async withAccountLock<T>(email: string, operation: () => Promise<T>): Promise<T> {
+    const key = email.trim().toLowerCase();
+    const previous = this.accountLocks.get(key) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => { release = resolve; });
+    const queued = previous.then(() => current);
+    this.accountLocks.set(key, queued);
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (this.accountLocks.get(key) === queued) this.accountLocks.delete(key);
+    }
   }
 
   private isExpired(record: AccountPlanRecord): boolean {

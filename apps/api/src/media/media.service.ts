@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { resolve, sep } from 'node:path';
+import { resolve } from 'node:path';
 
 import type { CreateMediaAssetDto, MediaAssetResponseDto } from './dto/create-media-asset.dto';
 import { LocalStorageService, type LocalStorageServiceOptions, type UploadedMediaFile } from './storage/local-storage.service';
+import type { MediaStorageService } from './storage/media-storage.service';
 
 interface MediaAssetRecord {
   id: string;
@@ -10,6 +11,7 @@ interface MediaAssetRecord {
   asset_type: 'video' | 'thumbnail';
   original_name: string;
   storage_path: string;
+  source_path?: string | null;
   size_bytes: number;
   mime_type: string;
   duration_seconds: number;
@@ -24,8 +26,20 @@ export interface MediaAssetFileRecord {
 
 export interface MediaServiceOptions {
   storageRoot?: string;
+  storage?: MediaStorageService;
   now?: () => Date;
   repository?: MediaRepository;
+  orphanCleanupEnabled?: boolean;
+  orphanGracePeriodMs?: number;
+  orphanCleanupIntervalMs?: number;
+}
+
+export interface OrphanCleanupResult {
+  scanned: number;
+  deleted: number;
+  retained: number;
+  failed: number;
+  skipped: boolean;
 }
 
 export interface MediaRepository {
@@ -80,11 +94,15 @@ export class InMemoryMediaRepository implements MediaRepository {
 }
 
 export class MediaService {
-  private readonly storage: LocalStorageService;
+  private readonly storage: MediaStorageService;
   private readonly repository: MediaRepository;
   private readonly now: () => Date;
   private readonly storageRoot: string;
-  private readonly storageRootAbsolute: string;
+  private readonly orphanCleanupEnabled: boolean;
+  private readonly orphanGracePeriodMs: number;
+  private readonly orphanCleanupIntervalMs: number;
+  private lastOrphanCleanupAtMs = 0;
+  private orphanCleanupPromise: Promise<OrphanCleanupResult> | null = null;
 
   constructor(options: MediaServiceOptions = {}, repository?: MediaRepository) {
     this.storageRoot = options.storageRoot ?? process.cwd();
@@ -92,10 +110,16 @@ export class MediaService {
       rootDir: this.storageRoot,
     };
 
-    this.storage = new LocalStorageService(storageOptions);
+    this.storage = options.storage ?? new LocalStorageService(storageOptions);
     this.repository = repository ?? options.repository ?? new InMemoryMediaRepository();
     this.now = options.now ?? (() => new Date());
-    this.storageRootAbsolute = resolve(this.storageRoot);
+    this.orphanCleanupEnabled = options.orphanCleanupEnabled ?? false;
+    this.orphanGracePeriodMs = Math.max(0, options.orphanGracePeriodMs ?? 60_000);
+    this.orphanCleanupIntervalMs = Math.max(0, options.orphanCleanupIntervalMs ?? 60_000);
+  }
+
+  getStorageProviderName(): MediaStorageService['providerName'] {
+    return this.storage.providerName;
   }
 
   private normalizeOwnerEmail(value: string | null | undefined): string | null {
@@ -118,11 +142,6 @@ export class MediaService {
       return records;
     }
 
-    const hasOwnedAssets = records.some((record) => this.normalizeOwnerEmail(record.owner_email) !== null);
-    if (!hasOwnedAssets) {
-      return records;
-    }
-
     return records.filter((record) => this.matchesOwner(record, ownerEmail));
   }
 
@@ -131,41 +150,99 @@ export class MediaService {
     const normalizedOwnerEmail = this.normalizeOwnerEmail(ownerEmail);
 
     const persistedVideo = await this.storage.save('video', dto.video);
-    const videoRecord = await this.repository.create({
-      id: randomUUID(),
-      owner_email: normalizedOwnerEmail,
-      asset_type: 'video',
-      original_name: persistedVideo.original_name,
-      storage_path: persistedVideo.storage_path,
-      size_bytes: persistedVideo.size_bytes,
-      mime_type: persistedVideo.mime_type,
-      duration_seconds: extractDurationSeconds(dto.video),
-      linked_video_asset_id: null,
-      created_at: nowIso,
-    });
+    let videoRecord: MediaAssetRecord;
+    try {
+      videoRecord = await this.repository.create({
+        id: randomUUID(),
+        owner_email: normalizedOwnerEmail,
+        asset_type: 'video',
+        original_name: persistedVideo.original_name,
+        storage_path: persistedVideo.storage_path,
+        source_path: dto.video.keepSource && dto.video.filePath ? resolve(dto.video.filePath) : null,
+        size_bytes: persistedVideo.size_bytes,
+        mime_type: persistedVideo.mime_type,
+        duration_seconds: extractDurationSeconds(dto.video),
+        linked_video_asset_id: null,
+        created_at: nowIso,
+      });
+    } catch (error) {
+      await this.deletePersistedFile(persistedVideo.storage_path);
+      throw error;
+    }
 
     let thumbnailRecord: MediaAssetRecord | undefined;
 
     if (dto.thumbnail) {
       const persistedThumbnail = await this.storage.save('thumbnail', dto.thumbnail);
 
-      thumbnailRecord = await this.repository.create({
-        id: randomUUID(),
-        owner_email: normalizedOwnerEmail,
-        asset_type: 'thumbnail',
-        original_name: persistedThumbnail.original_name,
-        storage_path: persistedThumbnail.storage_path,
-        size_bytes: persistedThumbnail.size_bytes,
-        mime_type: persistedThumbnail.mime_type,
-        duration_seconds: 0,
-        linked_video_asset_id: videoRecord.id,
-        created_at: nowIso,
-      });
+      try {
+        thumbnailRecord = await this.repository.create({
+          id: randomUUID(),
+          owner_email: normalizedOwnerEmail,
+          asset_type: 'thumbnail',
+          original_name: persistedThumbnail.original_name,
+          storage_path: persistedThumbnail.storage_path,
+          source_path: dto.thumbnail.keepSource && dto.thumbnail.filePath ? resolve(dto.thumbnail.filePath) : null,
+          size_bytes: persistedThumbnail.size_bytes,
+          mime_type: persistedThumbnail.mime_type,
+          duration_seconds: 0,
+          linked_video_asset_id: videoRecord.id,
+          created_at: nowIso,
+        });
+      } catch (error) {
+        await this.deletePersistedFile(persistedThumbnail.storage_path);
+        throw error;
+      }
+      if (thumbnailRecord.linked_video_asset_id !== videoRecord.id) {
+        thumbnailRecord = await this.repository.update(thumbnailRecord.id, {
+          linked_video_asset_id: videoRecord.id,
+        }) ?? thumbnailRecord;
+      }
     }
 
     return {
       asset: toResponseDto(videoRecord, thumbnailRecord),
     };
+  }
+
+  async createThumbnailForVideo(
+    videoAssetId: string,
+    thumbnail: UploadedMediaFile,
+    ownerEmail?: string,
+  ): Promise<MediaAssetResponseDto | null> {
+    const video = await this.getAsset(videoAssetId, ownerEmail);
+    if (!video || video.asset_type !== 'video') {
+      return null;
+    }
+
+    const persistedThumbnail = await this.storage.save('thumbnail', thumbnail);
+    let thumbnailRecord: MediaAssetRecord;
+    try {
+      thumbnailRecord = await this.repository.create({
+        id: randomUUID(),
+        owner_email: this.normalizeOwnerEmail(ownerEmail),
+        asset_type: 'thumbnail',
+        original_name: persistedThumbnail.original_name,
+        storage_path: persistedThumbnail.storage_path,
+        source_path: thumbnail.keepSource && thumbnail.filePath ? resolve(thumbnail.filePath) : null,
+        size_bytes: persistedThumbnail.size_bytes,
+        mime_type: persistedThumbnail.mime_type,
+        duration_seconds: 0,
+        linked_video_asset_id: video.id,
+        created_at: this.now().toISOString(),
+      });
+    } catch (error) {
+      await this.deletePersistedFile(persistedThumbnail.storage_path);
+      throw error;
+    }
+
+    if (thumbnailRecord.linked_video_asset_id !== video.id) {
+      thumbnailRecord = await this.repository.update(thumbnailRecord.id, {
+        linked_video_asset_id: video.id,
+      }) ?? thumbnailRecord;
+    }
+
+    return toResponseDto(thumbnailRecord);
   }
 
   async listAssets(ownerEmail?: string): Promise<{ assets: MediaAssetResponseDto[] }> {
@@ -192,11 +269,7 @@ export class MediaService {
     }
 
     if (!this.matchesOwner(asset, ownerEmail)) {
-      const hasOwnedAssets = (await this.repository.findAllNewestFirst())
-        .some((record) => this.normalizeOwnerEmail(record.owner_email) !== null);
-      if (hasOwnedAssets || this.normalizeOwnerEmail(asset.owner_email) !== null) {
-        return null;
-      }
+      return null;
     }
 
     return asset;
@@ -223,15 +296,15 @@ export class MediaService {
     return toResponseDto(updated, thumbnail ?? undefined);
   }
 
-  async getAssetFile(id: string): Promise<MediaAssetFileRecord | null> {
-    const asset = await this.repository.findById(id);
+  async getAssetFile(id: string, ownerEmail?: string): Promise<MediaAssetFileRecord | null> {
+    const asset = await this.getAsset(id, ownerEmail);
     if (!asset) {
       return null;
     }
 
     return {
       asset,
-      absolute_path: this.resolveStoragePath(asset.storage_path),
+      absolute_path: await this.storage.materialize(asset.storage_path),
     };
   }
 
@@ -241,7 +314,35 @@ export class MediaService {
       return false;
     }
 
-    return this.repository.delete(asset.id);
+    const deleted = await this.repository.delete(asset.id);
+    if (!deleted) {
+      return false;
+    }
+
+    await this.deletePersistedFile(asset.storage_path);
+    return true;
+  }
+
+  async cleanupOrphanedFiles(options: { force?: boolean } = {}): Promise<OrphanCleanupResult> {
+    if (!this.orphanCleanupEnabled) {
+      return { scanned: 0, deleted: 0, retained: 0, failed: 0, skipped: true };
+    }
+
+    if (this.orphanCleanupPromise) {
+      return this.orphanCleanupPromise;
+    }
+
+    const nowMs = this.now().getTime();
+    if (!options.force && nowMs - this.lastOrphanCleanupAtMs < this.orphanCleanupIntervalMs) {
+      return { scanned: 0, deleted: 0, retained: 0, failed: 0, skipped: true };
+    }
+
+    this.orphanCleanupPromise = this.performOrphanCleanup(nowMs);
+    try {
+      return await this.orphanCleanupPromise;
+    } finally {
+      this.orphanCleanupPromise = null;
+    }
   }
 
   async linkThumbnail(thumbnailId: string, videoAssetId: string, ownerEmail?: string): Promise<boolean> {
@@ -253,15 +354,50 @@ export class MediaService {
     return updated !== null;
   }
 
-  private resolveStoragePath(storagePath: string): string {
-    const absolutePath = resolve(this.storageRootAbsolute, storagePath);
-    const expectedPrefix = `${this.storageRootAbsolute}${sep}`;
+  private async performOrphanCleanup(nowMs: number): Promise<OrphanCleanupResult> {
+    const assets = await this.repository.findAllNewestFirst();
+    const referencedPaths = new Set(assets.map((asset) => this.normalizeStoragePath(asset.storage_path)));
+    const managedFiles = await this.storage.listManagedFiles();
+    const result: OrphanCleanupResult = {
+      scanned: managedFiles.length,
+      deleted: 0,
+      retained: 0,
+      failed: 0,
+      skipped: false,
+    };
+    const deleteBeforeMs = Math.max(nowMs, this.now().getTime()) - this.orphanGracePeriodMs;
 
-    if (absolutePath !== this.storageRootAbsolute && !absolutePath.startsWith(expectedPrefix)) {
-      throw new Error('Media asset storage path escapes the configured storage root.');
+    for (const file of managedFiles) {
+      const isReferenced = referencedPaths.has(this.normalizeStoragePath(file.storagePath));
+      const isInsideGracePeriod = file.modifiedAtMs > deleteBeforeMs;
+      if (isReferenced || isInsideGracePeriod) {
+        result.retained += 1;
+        continue;
+      }
+
+      try {
+        if (await this.storage.delete(file.storagePath)) {
+          result.deleted += 1;
+        }
+      } catch {
+        result.failed += 1;
+      }
     }
 
-    return absolutePath;
+    this.lastOrphanCleanupAtMs = nowMs;
+    return result;
+  }
+
+  private normalizeStoragePath(storagePath: string): string {
+    return storagePath.replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
+  }
+
+  private async deletePersistedFile(storagePath: string): Promise<void> {
+    try {
+      await this.storage.delete(storagePath);
+    } catch (error) {
+      console.warn(`[media] Failed to delete managed file ${storagePath}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }
 

@@ -1,4 +1,17 @@
 const root = document.getElementById('app');
+const runtimeConfig = readEmbeddedJson('pmp-runtime-config');
+
+function readEmbeddedJson(id) {
+  const element = document.getElementById(id);
+  if (!element?.textContent) return {};
+  try {
+    const parsed = JSON.parse(element.textContent);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+const googleOnlyAuth = runtimeConfig.googleOnlyAuth === true;
 
 if (!root) {
   throw new Error('Missing app root container.');
@@ -203,7 +216,126 @@ function readVideoDurationFromUrl(sourceUrl) {
   });
 }
 
-async function uploadMediaFiles(videoFile, thumbnailFile) {
+const MEDIA_DIRECT_UPLOAD_MAX_BYTES = 90 * 1024 * 1024;
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+      const result = String(reader.result ?? '');
+      resolve(result.includes(',') ? result.slice(result.indexOf(',') + 1) : result);
+    });
+    reader.addEventListener('error', () => reject(reader.error ?? new Error('Falha ao ler a capa.')));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function parseUploadResponse(response) {
+  const contentType = response.headers.get('content-type') ?? '';
+  const payload = contentType.includes('application/json')
+    ? await response.json().catch(() => null)
+    : await response.text();
+  if (!response.ok) {
+    throw new Error(payload?.error ?? `Upload failed with ${response.status}`);
+  }
+  return payload;
+}
+
+function sendMediaChunk(uploadId, chunkIndex, chunk, uploadedBefore, totalSize, onProgress) {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('PUT', `/api/media/chunked/${encodeURIComponent(uploadId)}/${chunkIndex}`);
+    request.withCredentials = true;
+    request.setRequestHeader('Content-Type', 'application/octet-stream');
+    request.upload.addEventListener('progress', (event) => {
+      const chunkLoaded = event.lengthComputable ? event.loaded : 0;
+      const loadedBytes = Math.min(totalSize, uploadedBefore + chunkLoaded);
+      onProgress?.({
+        phase: 'uploading',
+        percent: Math.round((loadedBytes / totalSize) * 100),
+        loadedBytes,
+        totalBytes: totalSize,
+      });
+    });
+    request.addEventListener('load', () => {
+      let payload = null;
+      try {
+        payload = JSON.parse(request.responseText || 'null');
+      } catch {
+        payload = request.responseText;
+      }
+      if (request.status < 200 || request.status >= 300) {
+        reject(new Error(payload?.error ?? `Falha ao enviar parte ${chunkIndex + 1}.`));
+        return;
+      }
+      resolve(payload);
+    });
+    request.addEventListener('error', () => reject(new Error(`Falha de rede na parte ${chunkIndex + 1}.`)));
+    request.addEventListener('abort', () => reject(new Error('O envio foi cancelado.')));
+    request.send(chunk);
+  });
+}
+
+async function uploadMediaFilesInChunks(videoFile, thumbnailFile, durationSeconds, onProgress) {
+  const initResponse = await fetch('/api/media/chunked/init', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      originalName: videoFile.name,
+      mimeType: videoFile.type,
+      totalSize: videoFile.size,
+      durationSeconds,
+    }),
+  });
+  const init = await parseUploadResponse(initResponse);
+  const uploadId = String(init?.uploadId ?? '');
+  const chunkSize = Number(init?.chunkSize);
+  const totalChunks = Number(init?.totalChunks);
+  if (!uploadId || !Number.isInteger(chunkSize) || chunkSize <= 0 || !Number.isInteger(totalChunks)) {
+    throw new Error('O servidor nao iniciou o envio em partes corretamente.');
+  }
+
+  for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex += 1) {
+    const start = chunkIndex * chunkSize;
+    const end = Math.min(videoFile.size, start + chunkSize);
+    const chunk = videoFile.slice(start, end);
+    await sendMediaChunk(uploadId, chunkIndex, chunk, start, videoFile.size, onProgress);
+    onProgress?.({
+      phase: end >= videoFile.size ? 'processing' : 'uploading',
+      percent: Math.round((end / videoFile.size) * 100),
+      loadedBytes: end,
+      totalBytes: videoFile.size,
+      chunkIndex: chunkIndex + 1,
+      totalChunks,
+    });
+  }
+
+  const thumbnail = thumbnailFile
+    ? {
+        originalName: thumbnailFile.name,
+        mimeType: thumbnailFile.type,
+        base64Data: await readFileAsBase64(thumbnailFile),
+        sizeBytes: thumbnailFile.size,
+      }
+    : undefined;
+  const completeResponse = await fetch(`/api/media/chunked/${encodeURIComponent(uploadId)}/complete`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ thumbnail }),
+  });
+  const payload = await parseUploadResponse(completeResponse);
+  onProgress?.({
+    phase: 'complete',
+    percent: 100,
+    loadedBytes: videoFile.size,
+    totalBytes: videoFile.size,
+  });
+  return { ok: true, status: completeResponse.status, body: payload };
+}
+
+async function uploadMediaFiles(videoFile, thumbnailFile, onProgress) {
   const form = new FormData();
   form.append('video', videoFile, videoFile.name);
   if (thumbnailFile) {
@@ -214,24 +346,75 @@ async function uploadMediaFiles(videoFile, thumbnailFile) {
     form.append('videoDuration', String(durationSeconds));
   }
 
-  const response = await fetch('/api/media', {
-    method: 'POST',
-    credentials: 'include',
-    body: form,
+  if (videoFile.size > MEDIA_DIRECT_UPLOAD_MAX_BYTES) {
+    try {
+      return await uploadMediaFilesInChunks(videoFile, thumbnailFile, durationSeconds, onProgress);
+    } catch (error) {
+      return {
+        ok: false,
+        status: 0,
+        error: error instanceof Error ? error.message : 'Falha no envio em partes.',
+        body: null,
+      };
+    }
+  }
+
+  return new Promise((resolve) => {
+    const request = new XMLHttpRequest();
+    request.open('POST', '/api/media');
+    request.withCredentials = true;
+
+    request.upload.addEventListener('progress', (event) => {
+      if (!event.lengthComputable || event.total <= 0) return;
+      const percent = Math.min(100, Math.max(0, Math.round((event.loaded / event.total) * 100)));
+      onProgress?.({
+        phase: percent >= 100 ? 'processing' : 'uploading',
+        percent,
+        loadedBytes: event.loaded,
+        totalBytes: event.total,
+      });
+    });
+
+    request.addEventListener('load', () => {
+      const contentType = request.getResponseHeader('content-type') ?? '';
+      let payload = request.responseText;
+      if (contentType.includes('application/json')) {
+        try {
+          payload = JSON.parse(request.responseText);
+        } catch {
+          payload = null;
+        }
+      }
+
+      if (request.status < 200 || request.status >= 300) {
+        resolve({
+          ok: false,
+          status: request.status,
+          error: payload?.error ?? `Upload failed with ${request.status}`,
+          body: payload,
+        });
+        return;
+      }
+
+      onProgress?.({
+        phase: 'complete',
+        percent: 100,
+        loadedBytes: videoFile.size + (thumbnailFile?.size ?? 0),
+        totalBytes: videoFile.size + (thumbnailFile?.size ?? 0),
+      });
+      resolve({ ok: true, status: request.status, body: payload });
+    });
+
+    request.addEventListener('error', () => {
+      resolve({ ok: false, status: 0, error: 'Falha de rede durante o envio.', body: null });
+    });
+
+    request.addEventListener('abort', () => {
+      resolve({ ok: false, status: 0, error: 'O envio foi cancelado.', body: null });
+    });
+
+    request.send(form);
   });
-
-  let payload = null;
-  const ct = response.headers.get('content-type') ?? '';
-  if (ct.includes('application/json')) {
-    payload = await response.json();
-  } else {
-    payload = await response.text();
-  }
-
-  if (!response.ok) {
-    return { ok: false, status: response.status, error: payload?.error ?? `Upload failed with ${response.status}`, body: payload };
-  }
-  return { ok: true, status: response.status, body: payload };
 }
 
 const BACKGROUND_THEME_STORAGE_KEY = 'ytmp-workspace-background-theme';
@@ -239,6 +422,32 @@ const OAUTH_PROVIDER_STORAGE_KEY = 'ytmp-pending-oauth-provider';
 const CAMPAIGN_REAUTH_RETURN_KEY = 'ytmp-campaign-reauth-return';
 const MEDIA_PREVIEW_SIZE_STORAGE_KEY = 'ytmp-media-preview-sizes';
 const GROWTH_PREFERENCES_STORAGE_KEY = 'ytmp-growth-preferences-v1';
+let activeAccountStorageScope = 'anonymous';
+
+function normalizeAccountStorageScope(storageScope) {
+  const normalizedScope = String(storageScope ?? '').trim();
+  return /^[A-Za-z0-9_-]{16,64}$/.test(normalizedScope) ? normalizedScope : 'anonymous';
+}
+
+function getAccountScopedStorageKey(baseKey) {
+  return `${baseKey}:${activeAccountStorageScope}`;
+}
+
+function maskEmailForDisplay(email) {
+  const normalized = String(email ?? '').trim();
+  const atIndex = normalized.lastIndexOf('@');
+  if (atIndex <= 0 || atIndex === normalized.length - 1) return normalized ? '***' : '';
+  const local = normalized.slice(0, atIndex);
+  const visibleLength = local.length <= 2 ? 1 : 2;
+  return `${local.slice(0, visibleLength)}***@${normalized.slice(atIndex + 1)}`;
+}
+
+function setAccountStorageScope(storageScope) {
+  const nextScope = normalizeAccountStorageScope(storageScope);
+  if (nextScope === activeAccountStorageScope) return false;
+  activeAccountStorageScope = nextScope;
+  return true;
+}
 const GROWTH_PREFERENCE_OPTIONS = [
   { id: 'retentionAlerts', label: 'Receber alertas de queda de retencao' },
   { id: 'educationalTips', label: 'Mostrar dicas de conteudo educativo' },
@@ -723,7 +932,7 @@ const PLAN_BACKGROUND_THEME_MAP = {
 
 function readStoredBackgroundTheme() {
   try {
-    const value = localStorage.getItem(BACKGROUND_THEME_STORAGE_KEY);
+    const value = localStorage.getItem(getAccountScopedStorageKey(BACKGROUND_THEME_STORAGE_KEY));
     return BACKGROUND_THEME_OPTIONS.some((option) => option.id === value) ? value : null;
   } catch {
     return null;
@@ -748,7 +957,7 @@ function normalizeGrowthPreferences(value) {
 
 function readStoredGrowthPreferences() {
   try {
-    return normalizeGrowthPreferences(JSON.parse(localStorage.getItem(GROWTH_PREFERENCES_STORAGE_KEY) || '{}'));
+    return normalizeGrowthPreferences(JSON.parse(localStorage.getItem(getAccountScopedStorageKey(GROWTH_PREFERENCES_STORAGE_KEY)) || '{}'));
   } catch {
     return getDefaultGrowthPreferences();
   }
@@ -758,7 +967,7 @@ function writeStoredGrowthPreferences(preferences = state.growthPreferences) {
   const normalized = normalizeGrowthPreferences(preferences);
   state.growthPreferences = normalized;
   try {
-    localStorage.setItem(GROWTH_PREFERENCES_STORAGE_KEY, JSON.stringify(normalized));
+    localStorage.setItem(getAccountScopedStorageKey(GROWTH_PREFERENCES_STORAGE_KEY), JSON.stringify(normalized));
   } catch {
     // Ignore storage errors in private/sandboxed browsers.
   }
@@ -921,23 +1130,26 @@ const api = {
   accountInstagramOauthCallback: (code, stateParam) => apiRequest('GET', buildUrl('/api/accounts/oauth/instagram/callback', { code, state: stateParam })),
   generateGrowthScript: (payload) => apiRequest('POST', '/api/growth/script/generate', payload),
   accountChannels: (accountId) => apiRequest('GET', `/api/accounts/${encodeURIComponent(accountId)}/channels`),
+  youtubePlaylists: (channelId) => apiRequest('GET', `/api/channels/${encodeURIComponent(channelId)}/youtube-playlists`),
   syncAccountChannels: (accountId) => apiRequest('POST', `/api/accounts/${encodeURIComponent(accountId)}/channels/sync`),
   toggleChannel: (accountId, channelId, isActive) => apiRequest('PATCH', `/api/accounts/${encodeURIComponent(accountId)}/channels/${encodeURIComponent(channelId)}`, { isActive }),
   disconnectAccount: (accountId) => apiRequest('DELETE', `/api/accounts/${encodeURIComponent(accountId)}`, { confirm: 'DISCONNECT' }),
   deleteAccount: (accountId) => apiRequest('DELETE', `/api/accounts/${encodeURIComponent(accountId)}/permanent`, { confirm: 'DELETE' }),
   media: () => apiRequest('GET', '/api/media'),
   uploadMedia: (payload) => apiRequest('POST', '/api/media', payload),
+  createVideoThumbnail: (videoAssetId, thumbnail) => apiRequest('POST', `/api/media/${encodeURIComponent(videoAssetId)}/thumbnails`, { thumbnail }),
   updateMediaDuration: (id, durationSeconds) => apiRequest('PATCH', `/api/media/${encodeURIComponent(id)}`, { durationSeconds }),
   deleteMedia: (id) => apiRequest('DELETE', `/api/media/${encodeURIComponent(id)}`),
-  // Playlist
-  playlists: () => apiRequest('GET', '/api/playlists'),
-  getPlaylist: (id) => apiRequest('GET', `/api/playlists/${encodeURIComponent(id)}`),
-  createPlaylist: (name, folderPath) => apiRequest('POST', '/api/playlists', { name, folderPath }),
-  deletePlaylist: (id) => apiRequest('DELETE', `/api/playlists/${encodeURIComponent(id)}`),
-  scanFolderForPlaylists: (rootPath) => apiRequest('POST', '/api/playlists/scan', { rootPath }),
-  addPlaylistItem: (playlistId, videoAssetId) => apiRequest('POST', `/api/playlists/${encodeURIComponent(playlistId)}/items`, { videoAssetId }),
-  removePlaylistItem: (playlistId, videoAssetId) => apiRequest('DELETE', `/api/playlists/${encodeURIComponent(playlistId)}/items/${encodeURIComponent(videoAssetId)}`),
-  nextPlaylistVideo: (playlistId) => apiRequest('GET', `/api/playlists/${encodeURIComponent(playlistId)}/next`),
+  // Filas internas de conteudo (rotas /api/playlists continuam no backend por compatibilidade)
+  playlists: () => apiRequest('GET', '/api/content-queues'),
+  getPlaylist: (id) => apiRequest('GET', `/api/content-queues/${encodeURIComponent(id)}`),
+  createPlaylist: (name, folderPath) => apiRequest('POST', '/api/content-queues', { name, folderPath }),
+  deletePlaylist: (id) => apiRequest('DELETE', `/api/content-queues/${encodeURIComponent(id)}`),
+  scanFolderForPlaylists: (rootPath) => apiRequest('POST', '/api/content-queues/scan', { rootPath }),
+  addPlaylistItem: (playlistId, videoAssetId) => apiRequest('POST', `/api/content-queues/${encodeURIComponent(playlistId)}/items`, { videoAssetId }),
+  removePlaylistItem: (playlistId, videoAssetId) => apiRequest('DELETE', `/api/content-queues/${encodeURIComponent(playlistId)}/items/${encodeURIComponent(videoAssetId)}`),
+  reserveQueueVideo: (playlistId, options) => apiRequest('POST', `/api/content-queues/${encodeURIComponent(playlistId)}/reservations`, options),
+  releaseQueueVideo: (playlistId, itemId, reservationToken) => apiRequest('DELETE', `/api/content-queues/${encodeURIComponent(playlistId)}/reservations/${encodeURIComponent(itemId)}`, { reservationToken }),
   // Presets
   getPreset: (videoAssetId) => apiRequest('GET', `/api/media/${encodeURIComponent(videoAssetId)}/preset`),
   upsertPreset: (videoAssetId, data) => apiRequest('PUT', `/api/media/${encodeURIComponent(videoAssetId)}/preset`, data),
@@ -959,11 +1171,40 @@ const state = {
   growthWorkspaceData: null,
   growthMetricFilters: { date: 'all', platform: 'all' },
   mediaDurationBackfillInFlight: new Set(),
+  videoMetadata: {},
   uiNotice: null,
   autoRefreshTimer: null,
   dashboardClockTimer: null,
   pulseRotateTimer: null,
 };
+
+function setAuthenticatedUser(user) {
+  const nextUser = user ?? null;
+  const scopeChanged = setAccountStorageScope(nextUser?.storageScope);
+  state.me = nextUser;
+
+  const runtime = getI18nRuntime();
+  if (runtime?.setStorageScope) {
+    state.locale = runtime.setStorageScope(nextUser?.storageScope, document.body?.dataset?.initialLocale);
+  } else if (scopeChanged) {
+    state.locale = readInitialLocale();
+  }
+
+  if (scopeChanged) {
+    state.backgroundTheme = readStoredBackgroundTheme() ?? getSystemBackgroundTheme();
+    state.mediaPreviewSizes = readStoredMediaPreviewSizes();
+    state.growthPreferences = readStoredGrowthPreferences();
+    state.growthConnectedAccounts = [];
+    state.growthChannelLoadId += 1;
+    state.growthWorkspaceData = null;
+    state.growthMetricFilters = { date: 'all', platform: 'all' };
+    state.videoMetadata = {};
+    applyBackgroundTheme(state.backgroundTheme);
+    applyLocaleTranslations();
+  }
+
+  return state.me;
+}
 
 function applyBackgroundTheme(backgroundThemeId) {
   const selectedTheme = BACKGROUND_THEME_OPTIONS.find((option) => option.id === backgroundThemeId) ?? BACKGROUND_THEME_OPTIONS[0];
@@ -1000,7 +1241,7 @@ function applyBackgroundTheme(backgroundThemeId) {
   document.body.style.setProperty('--text-on-accent', selectedTheme.onAccent);
   document.body.style.setProperty('--header-text', selectedTheme.text);
   try {
-    localStorage.setItem(BACKGROUND_THEME_STORAGE_KEY, selectedTheme.id);
+    localStorage.setItem(getAccountScopedStorageKey(BACKGROUND_THEME_STORAGE_KEY), selectedTheme.id);
   } catch {
     // noop: storage can be unavailable in hardened browser contexts
   }
@@ -1077,7 +1318,7 @@ function isValidMediaPreviewSize(value) {
 
 function readStoredMediaPreviewSizes() {
   try {
-    const raw = localStorage.getItem(MEDIA_PREVIEW_SIZE_STORAGE_KEY);
+    const raw = localStorage.getItem(getAccountScopedStorageKey(MEDIA_PREVIEW_SIZE_STORAGE_KEY));
     if (!raw) {
       return {};
     }
@@ -1097,7 +1338,7 @@ function readStoredMediaPreviewSizes() {
 
 function writeStoredMediaPreviewSizes(previewSizes) {
   try {
-    localStorage.setItem(MEDIA_PREVIEW_SIZE_STORAGE_KEY, JSON.stringify(previewSizes));
+    localStorage.setItem(getAccountScopedStorageKey(MEDIA_PREVIEW_SIZE_STORAGE_KEY), JSON.stringify(previewSizes));
   } catch {
     // Ignore storage errors in private/sandboxed browsers.
   }
@@ -1297,10 +1538,19 @@ function getAccountDeletionSchedule() {
 }
 
 function getAccountDeletionConfirmationMethod() {
+  if (state.me?.accountDeletionConfirmationMethod === 'google_reauth') return 'google_reauth';
   return state.me?.accountDeletionConfirmationMethod === 'email_code' ? 'email_code' : 'password';
 }
 
 function getAccountDeletionConfirmationCopy(method = getAccountDeletionConfirmationMethod()) {
+  if (method === 'google_reauth') {
+    return {
+      short: 'Google + confirmacao',
+      panel: 'Esta conta confirma a exclusao com uma sessao Google recente e a palavra EXCLUIR.',
+      detail: 'Por seguranca, entre novamente com o Google se sua sessao tiver mais de 10 minutos e digite EXCLUIR.',
+    };
+  }
+
   if (method === 'email_code') {
     return {
       short: 'Codigo no e-mail',
@@ -1405,6 +1655,9 @@ function bindAccountDeletionRequest() {
 
 async function showAccountDeletionConfirmationModal({ errorMessage = '' } = {}) {
   const method = getAccountDeletionConfirmationMethod();
+  if (method === 'google_reauth') {
+    return showAccountDeletionGoogleModal({ errorMessage });
+  }
   return method === 'email_code'
     ? showAccountDeletionEmailCodeModal({ errorMessage })
     : showAccountDeletionPasswordModal({ errorMessage });
@@ -1461,7 +1714,7 @@ async function showAccountDeletionEmailCodeModal({ errorMessage = '' } = {}) {
   const expiresAt = challenge.body?.expiresAt ? formatDate(challenge.body.expiresAt) : 'em 10 minutos';
   const result = await showModal({
     title: 'Digite o codigo recebido',
-    message: `Enviamos um codigo de 6 digitos para ${state.me?.email || 'o e-mail da conta'}. Ele expira ${expiresAt}.`,
+    message: `Enviamos um codigo de 6 digitos para ${maskEmailForDisplay(state.me?.email) || 'o e-mail da conta'}. Ele expira ${expiresAt}.`,
     fields: [
       {
         name: 'confirmationCode',
@@ -2034,7 +2287,7 @@ function renderWorkspaceShell(options) {
             ${settingsPicker}
             <a class="header-account-chip" data-link href="/workspace/perfil" title="${escapeHtml(accountTitle)}" aria-label="Abrir perfil">
               <div class="header-user-block">
-                <span class="user-email">${escapeHtml(state.me?.email ?? '')}</span>
+                <span class="user-email">${escapeHtml(maskEmailForDisplay(state.me?.email))}</span>
                 ${planLabel ? `<span class="header-plan-badge">Plano ${escapeHtml(planLabel)}</span>` : ''}
               </div>
             </a>
@@ -2062,7 +2315,7 @@ function renderWorkspaceShell(options) {
   if (logoutBtn) {
     logoutBtn.addEventListener('click', async () => {
       await api.logout();
-      state.me = null;
+      setAuthenticatedUser(null);
       state.account = null;
       navigate('/login', true);
     });
@@ -2324,7 +2577,7 @@ function renderMerchantLegalPanel(documentKey) {
 }
 
 function renderMerchantLoginPage(options = {}) {
-  const mode = options.mode === 'register' ? 'register' : 'login';
+  const mode = googleOnlyAuth ? 'login' : (options.mode === 'register' ? 'register' : 'login');
   const verifying = options.verifying === true;
   const initialSection = String(options.initialSection ?? '').replace(/[^a-z0-9_-]/gi, '');
   if (!ensureMerchantLegalDocumentsForLogin(mode, initialSection)) {
@@ -2334,20 +2587,22 @@ function renderMerchantLoginPage(options = {}) {
   const draft = {
     fullName: String(options.draft?.fullName ?? ''),
     email: String(options.draft?.email ?? ''),
-    password: String(options.draft?.password ?? ''),
+    password: '',
   };
   const publicPlanOptions = mergePlanDisplayOptions();
   const planCardsHtml = publicPlanOptions.map((plan) => renderPublicPlanCard(plan)).join('');
   const errorHtml = options.error ? `<div class="merchant-alert" role="alert">${escapeHtml(options.error)}</div>` : '';
   const query = parseCurrentQuery();
   const resetToken = String(query.get('reset_token') ?? '').trim();
-  const authView = resetToken ? 'reset' : query.get('view') === 'forgot' ? 'forgot' : 'credentials';
+  const authView = googleOnlyAuth ? 'credentials' : (resetToken ? 'reset' : query.get('view') === 'forgot' ? 'forgot' : 'credentials');
   const recoveryMessage = options.recoveryMessage
     || (query.get('reset') === 'success' ? 'Senha atualizada com sucesso. Entre com sua nova senha.' : '');
   const recoveryMessageHtml = recoveryMessage
     ? `<div class="merchant-success" role="status">${escapeHtml(recoveryMessage)}</div>`
     : '';
-  const authFormHtml = authView === 'forgot'
+  const authFormHtml = googleOnlyAuth
+    ? ''
+    : authView === 'forgot'
     ? `
       <form id="password-reset-request-form" class="merchant-form" novalidate>
         <label><span>Email da conta</span><input name="email" type="email" required autocomplete="email" value="${escapeHtml(draft.email)}" placeholder="voce@empresa.com" /></label>
@@ -2369,14 +2624,16 @@ function renderMerchantLoginPage(options = {}) {
           <label>
             <span>Senha</span>
             <div class="merchant-password-wrap">
-              <input name="password" type="password" required autocomplete="${mode === 'register' ? 'new-password' : 'current-password'}" value="${escapeHtml(draft.password)}" placeholder="${mode === 'register' ? 'minimo 6 caracteres' : 'sua senha'}" minlength="6" />
+              <input name="password" type="password" required autocomplete="${mode === 'register' ? 'new-password' : 'current-password'}" placeholder="${mode === 'register' ? 'minimo 6 caracteres' : 'sua senha'}" minlength="6" />
               <button type="button" data-action="toggle-password" aria-label="Mostrar ou ocultar senha">ver</button>
             </div>
           </label>
           ${mode === 'login' ? '<div class="merchant-form-meta"><button type="button" class="merchant-text-button" data-action="forgot-password">Esqueci minha senha</button></div>' : ''}
           <button type="submit" class="merchant-primary">${mode === 'register' ? 'Criar conta' : 'Entrar no workspace'}</button>
         </form>`;
-  const authFootnote = authView === 'forgot'
+  const authFootnote = googleOnlyAuth
+    ? 'O Google confirma sua identidade. O PMP nao recebe nem armazena sua senha do Google.'
+    : authView === 'forgot'
     ? 'Por seguranca, a resposta sera a mesma mesmo que o email nao esteja cadastrado. O link expira em 30 minutos.'
     : authView === 'reset'
       ? 'Este link e individual, expira em 30 minutos e deixa de funcionar depois da alteracao.'
@@ -2409,9 +2666,11 @@ function renderMerchantLoginPage(options = {}) {
           <button class="merchant-nav-cta merchant-nav-cta-secondary" type="button" data-auth-mode="login">
             <span>Login</span><span class="merchant-nav-cta-icon" aria-hidden="true">↗</span>
           </button>
-          <button class="merchant-nav-cta" type="button" data-auth-mode="register">
-            <span>Criar conta</span><span class="merchant-nav-cta-icon" aria-hidden="true">↗</span>
-          </button>
+          ${googleOnlyAuth ? '' : `
+            <button class="merchant-nav-cta" type="button" data-auth-mode="register">
+              <span>Criar conta</span><span class="merchant-nav-cta-icon" aria-hidden="true">↗</span>
+            </button>
+          `}
         </div>
       </header>
 
@@ -2438,9 +2697,9 @@ function renderMerchantLoginPage(options = {}) {
             </div>
             <div class="merchant-water"></div>
             <div class="merchant-copy">
-              <span>publica&ccedil;&atilde;o multiplataforma</span>
-              <h1>Transforme cada v&iacute;deo em uma campanha pronta para crescer.</h1>
-              <p>O PMP centraliza m&iacute;dia, contas conectadas, agendamentos e desempenho em um s&oacute; lugar. Planeje, revise e publique no YouTube, TikTok e Instagram com uma opera&ccedil;&atilde;o clara, consistente e preparada para escalar.</p>
+              <span>primeiro painel</span>
+              <h1>Publique v&iacute;deos em canais diferentes sem reconstruir a opera&ccedil;&atilde;o e publique em massa.</h1>
+              <p>Campanhas, m&iacute;dia, destinos OAuth, fila, logs e revis&atilde;o em um &uacute;nico workspace.</p>
             </div>
           </div>
 
@@ -2473,7 +2732,7 @@ function renderMerchantLoginPage(options = {}) {
             <p>${mode === 'register' ? 'Cadastre seus dados, escolha o plano e prepare um workspace central para toda a operação de vídeo.' : 'Retome campanhas, canais conectados e publicações exatamente de onde parou.'}</p>
             <div class="merchant-access-benefits">
               <article><strong>Operação central</strong><span>Campanhas, mídia, destinos e fila no mesmo ambiente.</span></article>
-              <article><strong>Acesso protegido</strong><span>Entre com sua conta PMP ou continue pelo Google OAuth.</span></article>
+              <article><strong>Acesso protegido</strong><span>${googleOnlyAuth ? 'Entre exclusivamente com sua conta Google, sem senha armazenada pelo PMP.' : 'Entre com sua conta PMP ou continue pelo Google OAuth.'}</span></article>
               <article><strong>Continuidade real</strong><span>Sua sessão restaura o workspace e o plano associados.</span></article>
             </div>
             <div class="merchant-access-flow" aria-label="Etapas para começar">
@@ -2490,21 +2749,23 @@ function renderMerchantLoginPage(options = {}) {
             ${recoveryMessageHtml}
             <header class="merchant-login-card-head">
               <div class="merchant-login-default-heading">
-                <span>Conta PMP</span>
-                <h3>${mode === 'register' ? 'Comece sua operação' : 'Bem-vindo de volta'}</h3>
+                <span>${googleOnlyAuth ? 'Conta Google' : 'Conta PMP'}</span>
+                <h3>${googleOnlyAuth ? 'Acesso único e seguro' : mode === 'register' ? 'Comece sua operação' : 'Bem-vindo de volta'}</h3>
               </div>
               ${authView !== 'credentials' ? `<div class="merchant-recovery-heading"><span>Recuperacao segura</span><h3>${authView === 'reset' ? 'Crie uma nova senha' : 'Recupere seu acesso'}</h3></div>` : ''}
               <span class="merchant-secure-badge"><i aria-hidden="true"></i> Ambiente seguro</span>
             </header>
-            <div class="merchant-tabs" role="tablist">
-              <button type="button" role="tab" aria-selected="${mode === 'login'}" data-auth-mode="login" class="${mode === 'login' ? 'is-active' : ''}">Entrar</button>
-              <button type="button" role="tab" aria-selected="${mode === 'register'}" data-auth-mode="register" class="${mode === 'register' ? 'is-active' : ''}">Criar conta</button>
-            </div>
+            ${googleOnlyAuth ? '' : `
+              <div class="merchant-tabs" role="tablist">
+                <button type="button" role="tab" aria-selected="${mode === 'login'}" data-auth-mode="login" class="${mode === 'login' ? 'is-active' : ''}">Entrar</button>
+                <button type="button" role="tab" aria-selected="${mode === 'register'}" data-auth-mode="register" class="${mode === 'register' ? 'is-active' : ''}">Criar conta</button>
+              </div>
+            `}
             <button id="google-auth-btn" type="button" class="merchant-google">
               ${renderGoogleGlyph('small')}
               <span>Continuar com Google</span>
             </button>
-            <div class="merchant-divider"><span>ou por email</span></div>
+            ${googleOnlyAuth ? '' : '<div class="merchant-divider"><span>ou por email</span></div>'}
             ${authFormHtml}
             <p class="merchant-footnote">${escapeHtml(authFootnote)}</p>
             <div class="merchant-auth-notes" aria-label="Informações de segurança">
@@ -2522,7 +2783,7 @@ function renderMerchantLoginPage(options = {}) {
             <p>Use este canal para acesso, problemas tecnicos, cobranca, privacidade ou conta. Ao enviar, voce recebe um protocolo e uma chave privada de acompanhamento.</p>
             <div class="merchant-support-promises" aria-label="Compromissos de atendimento">
               <span>Protocolo imediato</span>
-              <span>Confirmacao por email</span>
+              <span>${googleOnlyAuth ? 'Protocolo exibido na tela' : 'Confirmacao por email'}</span>
               <span>Acompanhamento protegido</span>
             </div>
           </div>
@@ -2533,7 +2794,7 @@ function renderMerchantLoginPage(options = {}) {
                 <div class="merchant-protocol-result" role="status">
                   <span>Solicitacao registrada</span>
                   <strong>${escapeHtml(options.serviceRequestResult.protocol)}</strong>
-                  <p>Guarde o protocolo. O link privado de acompanhamento tambem foi enviado para seu email.</p>
+                  <p>${googleOnlyAuth ? 'Guarde o protocolo e o link privado exibido nesta tela para acompanhar a solicitacao.' : 'Guarde o protocolo. O link privado de acompanhamento tambem foi enviado para seu email.'}</p>
                   <a href="${escapeAttribute(options.serviceRequestResult.trackingUrl)}">Acompanhar agora</a>
                 </div>
               ` : `
@@ -2562,7 +2823,7 @@ function renderMerchantLoginPage(options = {}) {
             </article>
             <article class="merchant-support-card merchant-tracking-card">
               <h3>Acompanhar protocolo</h3>
-              <p>Informe o protocolo e a chave privada recebida por email.</p>
+              <p>${googleOnlyAuth ? 'Informe o protocolo e a chave privada exibida na abertura da solicitacao.' : 'Informe o protocolo e a chave privada recebida por email.'}</p>
               <form id="merchant-tracking-form" class="merchant-form" novalidate>
                 <label><span>Protocolo</span><input name="protocol" type="text" required value="${escapeHtml(query.get('protocol') ?? '')}" placeholder="PMP-AAAAMMDD-XXXXXXXXXXXX" /></label>
                 <label><span>Chave de acompanhamento</span><input name="key" type="password" required value="${escapeHtml(query.get('tracking_key') ?? '')}" placeholder="Chave privada" /></label>
@@ -2891,7 +3152,7 @@ function animatePlaylistCockpit() {
 
 
 function handleAuthenticatedNavigation(user) {
-  state.me = user ?? null;
+  setAuthenticatedUser(user);
   if (!user?.email) {
     navigate('/login', true);
     return;
@@ -3578,7 +3839,7 @@ async function renderPlanSelectionPage(options = {}) {
           <h1>Choose your account plan</h1>
           <p class="muted">Your account has already been created. Pick the plan you want to use before entering the workspace.</p>
           <div class="notice info">
-            Logged in as <strong>${escapeHtml(state.me?.fullName || state.me?.email || '')}</strong>.
+            Logged in as <strong>${escapeHtml(state.me?.fullName || maskEmailForDisplay(state.me?.email) || '')}</strong>.
           </div>
         </div>
         <section class="plan-grid">
@@ -3604,7 +3865,7 @@ async function renderPlanSelectionPage(options = {}) {
         return;
       }
 
-      state.me = selectResult.body?.user ?? { ...state.me, needsPlanSelection: false };
+      setAuthenticatedUser(selectResult.body?.user ?? { ...state.me, needsPlanSelection: false });
       state.account = selectResult.body?.account ?? state.account;
       applyRecommendedBackgroundForPlan(planId);
       setUiNotice('success', 'Plan selected', `The ${planId} plan is now active for your account.`);
@@ -3656,7 +3917,7 @@ async function ensureAuthenticated() {
   if (state.me?.email) return state.me;
   const meResult = await api.me();
   if (!meResult.ok) return null;
-  state.me = meResult.body?.user ?? null;
+  setAuthenticatedUser(meResult.body?.user ?? null);
   return state.me;
 }
 
@@ -3818,7 +4079,7 @@ function addLegalSectionIds(bodyHtml) {
 }
 
 function getSharedLegalDocuments() {
-  const documents = window.__PMP_LEGAL_DOCUMENTS__;
+  const documents = readEmbeddedJson('pmp-legal-documents');
   return documents && typeof documents === 'object' ? documents : {};
 }
 
@@ -4221,8 +4482,34 @@ function renderDataDeletionPage() {
   window.scrollTo(0, 0);
   }
 function unauthorizedRedirect() {
-  state.me = null;
+  setAuthenticatedUser(null);
+  state.account = null;
   navigate('/login', true);
+}
+
+async function showAccountDeletionGoogleModal({ errorMessage = '' } = {}) {
+  const confirmationCopy = getAccountDeletionConfirmationCopy('google_reauth');
+  const result = await showModal({
+    title: 'Confirmar exclusao da conta',
+    message: `${confirmationCopy.detail} A conta fica ativa por 24 horas e os dados aplicaveis sao removidos em ate 30 dias.`,
+    fields: [
+      {
+        name: 'confirmationText',
+        label: 'Digite EXCLUIR',
+        type: 'text',
+        required: true,
+        placeholder: 'EXCLUIR',
+        autocomplete: 'off',
+      },
+    ],
+    bodyHtml: renderAccountDeletionModalBody(errorMessage),
+    confirmLabel: 'Confirmar exclusao',
+    cancelLabel: 'Cancelar',
+    tone: 'danger',
+    cardClassName: 'account-deletion-modal-card',
+  });
+  const confirmationText = typeof result?.confirmationText === 'string' ? result.confirmationText.trim() : '';
+  return confirmationText ? { confirmationText } : null;
 }
 
 function bindPublicContactForm() {
@@ -7672,8 +7959,6 @@ async function renderAccountsPage() {
       account.displayName,
       account.email,
       account.id,
-      account.googleSubject,
-      account.providerSubject,
       ...accountChannels.flatMap((channel) => [
         channel.title,
         channel.handle,
@@ -8630,11 +8915,13 @@ function renderMediaPipelineMark(kind, label, tone = 'info') {
   return `${renderMediaMark(kind, 'chip', tone, 'media-pipeline-mark')} ${escapeHtml(label)}`;
 }
 
-function renderVideosViewSwitcher({ activeView, libraryHref, playlistsHref, libraryCount, playlistsCount }) {
+function renderVideosViewSwitcher({ activeView, libraryHref, playlistsHref, publicationsHref = '/workspace/videos?view=publications', libraryCount, playlistsCount, publicationsCount }) {
   const libraryActive = activeView === 'library';
   const playlistsActive = activeView === 'playlists';
+  const publicationsActive = activeView === 'publications';
   const libCountHtml = Number.isFinite(libraryCount) ? `<span class="videos-view-tab-count">${formatNumber(libraryCount)}</span>` : '';
   const plCountHtml = Number.isFinite(playlistsCount) ? `<span class="videos-view-tab-count">${formatNumber(playlistsCount)}</span>` : '';
+  const pubCountHtml = Number.isFinite(publicationsCount) ? `<span class="videos-view-tab-count">${formatNumber(publicationsCount)}</span>` : '';
 
   return `
     <nav class="videos-view-switcher" role="tablist" aria-label="Visualizacao de videos">
@@ -8645,8 +8932,13 @@ function renderVideosViewSwitcher({ activeView, libraryHref, playlistsHref, libr
       </a>
       <a class="videos-view-tab ${playlistsActive ? 'is-active' : ''}" role="tab" aria-selected="${playlistsActive ? 'true' : 'false'}" data-link href="${escapeHtml(playlistsHref)}">
         <span class="videos-view-tab-icon" aria-hidden="true">${renderMediaMark('playlist', 'tab', 'info')}</span>
-        <span class="videos-view-tab-label">Playlists</span>
+        <span class="videos-view-tab-label">Filas</span>
         ${plCountHtml}
+      </a>
+      <a class="videos-view-tab ${publicationsActive ? 'is-active' : ''}" role="tab" aria-selected="${publicationsActive ? 'true' : 'false'}" data-link href="${escapeHtml(publicationsHref)}">
+        <span class="videos-view-tab-icon" aria-hidden="true">${renderMediaMark('video', 'tab', 'success')}</span>
+        <span class="videos-view-tab-label">Publicações</span>
+        ${pubCountHtml}
       </a>
     </nav>
   `;
@@ -8654,13 +8946,99 @@ function renderVideosViewSwitcher({ activeView, libraryHref, playlistsHref, libr
 
 async function renderVideosPage() {
   const query = parseCurrentQuery();
-  const view = query.get('view') === 'playlists' ? 'playlists' : 'library';
+  const requestedView = query.get('view');
+  const view = requestedView === 'playlists' || requestedView === 'publications' ? requestedView : 'library';
   const videosCtx = { view };
   if (view === 'playlists') {
     await renderPlaylistsPage({ videosCtx });
+  } else if (view === 'publications') {
+    await renderPublicationsPage({ videosCtx });
   } else {
     await renderMediaPage({ videosCtx });
   }
+}
+
+function getVideoSuitability(asset) {
+  const cached = state?.videoMetadata?.[asset?.id] ?? {};
+  const duration = Number(cached.duration ?? asset?.duration_seconds ?? 0);
+  const width = Number(cached.width ?? 0);
+  const height = Number(cached.height ?? 0);
+  const dimensionsKnown = width > 0 && height > 0;
+  const verticalOrSquare = dimensionsKnown && height >= width;
+  return {
+    duration,
+    width,
+    height,
+    dimensionsKnown,
+    verticalOrSquare,
+    youtubeShort: verticalOrSquare && duration > 0 && duration <= SHORT_FORM_MAX_DURATION_SECONDS,
+    instagramReel: verticalOrSquare && duration >= 3 && duration <= 900,
+    horizontal: dimensionsKnown && width > height,
+  };
+}
+
+function renderVideoSuitabilityBadges(asset) {
+  const suitability = getVideoSuitability(asset);
+  if (!suitability.dimensionsKnown) {
+    return '<span class="campaign-video-classification" data-tone="pending">Analisando formato...</span>';
+  }
+  if (suitability.horizontal) {
+    return '<span class="campaign-video-classification" data-tone="warning">Formato horizontal — será vídeo normal</span>';
+  }
+  const badges = [];
+  if (suitability.youtubeShort) badges.push('<span class="campaign-video-classification" data-tone="success">Apto para YouTube Short</span>');
+  if (suitability.instagramReel) badges.push('<span class="campaign-video-classification" data-tone="success">Apto para Instagram Reel</span>');
+  if (badges.length === 0) badges.push('<span class="campaign-video-classification" data-tone="warning">Formato vertical fora dos limites de vídeo curto</span>');
+  return badges.join('');
+}
+
+async function renderPublicationsPage() {
+  const [campaignsResult, mediaResult, queuesResult] = await Promise.all([
+    api.campaigns({ limit: 100 }),
+    api.media(),
+    api.playlists(),
+  ]);
+  if (!campaignsResult.ok) {
+    if (campaignsResult.status === 401) { unauthorizedRedirect(); return; }
+    renderWorkspaceShell({ title: 'Vídeos', subtitle: 'Publicações por destino.', noticeHtml: `<div class="notice error">${escapeHtml(campaignsResult.error)}</div>`, contentHtml: '' });
+    return;
+  }
+  const campaigns = campaignsResult.body?.campaigns ?? [];
+  const assets = mediaResult.ok ? mediaResult.body?.assets ?? [] : [];
+  const queues = queuesResult.ok ? queuesResult.body?.playlists ?? [] : [];
+  const assetsById = new Map(assets.map((asset) => [asset.id, asset]));
+  const queuesById = new Map(queues.map((queue) => [queue.id, queue]));
+  const publications = campaigns.flatMap((campaign) => (campaign.targets ?? []).map((target) => ({ campaign, target })));
+  const publishedCount = publications.filter(({ target }) => target.status === 'publicado').length;
+  const errorCount = publications.filter(({ target }) => target.status === 'erro').length;
+  const rows = publications.map(({ campaign, target }) => {
+    const asset = assetsById.get(campaign.videoAssetId);
+    const queue = queuesById.get(campaign.contentQueueId ?? campaign.playlistId);
+    const externalId = target.externalPublishId ?? target.youtubeVideoId;
+    const externalUrl = target.platform === 'youtube' && externalId ? `https://www.youtube.com/watch?v=${encodeURIComponent(externalId)}` : '';
+    return `<tr>
+      <td><strong>${escapeHtml(asset?.original_name ?? campaign.title)}</strong><small class="muted">${escapeHtml(campaign.id)}</small></td>
+      <td>${escapeHtml(getProviderLabel(target.platform))}<small class="muted">${escapeHtml(target.destinationLabel ?? target.destinationId)}</small></td>
+      <td>${statusPill(target.status)}</td>
+      <td>${queue ? escapeHtml(queue.name) : '—'}</td>
+      <td>${escapeHtml(formatDate(target.publishAt ?? target.updatedAt))}</td>
+      <td><div class="inline-actions"><a class="button button-secondary button-sm" data-link href="/workspace/campanhas/${encodeURIComponent(campaign.id)}">Detalhes</a>${externalUrl ? `<a class="button button-secondary button-sm" href="${escapeHtml(externalUrl)}" target="_blank" rel="noopener">Abrir publicação</a>` : ''}</div></td>
+    </tr>`;
+  }).join('');
+  renderWorkspaceShell({
+    title: 'Vídeos',
+    subtitle: 'Relação entre arquivos, filas, campanhas e publicações.',
+    contentHtml: `
+      ${renderVideosViewSwitcher({ activeView: 'publications', libraryHref: '/workspace/videos?view=library', playlistsHref: '/workspace/videos?view=playlists', publicationsCount: publications.length, libraryCount: assets.length, playlistsCount: queues.length })}
+      <section class="platform-dashboard-stats">
+        <article class="platform-dashboard-stat" data-tone="info"><span class="platform-dashboard-stat-label">Destinos</span><strong>${formatNumber(publications.length)}</strong><span class="platform-dashboard-stat-detail">Tentativas de publicação</span></article>
+        <article class="platform-dashboard-stat" data-tone="success"><span class="platform-dashboard-stat-label">Publicadas</span><strong>${formatNumber(publishedCount)}</strong><span class="platform-dashboard-stat-detail">Com identificador externo</span></article>
+        <article class="platform-dashboard-stat" data-tone="warning"><span class="platform-dashboard-stat-label">Com erro</span><strong>${formatNumber(errorCount)}</strong><span class="platform-dashboard-stat-detail">Precisam de revisão</span></article>
+      </section>
+      <section class="card"><div class="section-heading"><div><span class="eyebrow">Relações</span><h2>Publicações por vídeo e destino</h2></div></div>
+        ${publications.length ? `<div class="table-wrap"><table><thead><tr><th>Vídeo</th><th>Destino</th><th>Status</th><th>Fila interna</th><th>Data</th><th>Ações</th></tr></thead><tbody>${rows}</tbody></table></div>` : renderEmptyStateCard({ title: 'Nenhuma publicação ainda', message: 'Quando uma campanha for enviada, cada destino aparecerá aqui com seu status e vínculo ao vídeo.', tone: 'info' })}
+      </section>`,
+  });
 }
 
 async function renderMediaPage(options = {}) {
@@ -8674,7 +9052,11 @@ async function renderMediaPage(options = {}) {
     ? 'Sua biblioteca de videos e organizacao de playlists em um so lugar.'
     : 'Uploaded reusable assets.';
 
-  const result = await api.media();
+  const [result, campaignsResult, queuesResult] = await Promise.all([
+    api.media(),
+    api.campaigns({ limit: 100 }),
+    api.playlists(),
+  ]);
   if (!result.ok) {
     if (result.status === 401) {
       unauthorizedRedirect();
@@ -8690,6 +9072,8 @@ async function renderMediaPage(options = {}) {
   }
 
   const assets = Array.isArray(result.body?.assets) ? result.body.assets : [];
+  const relatedCampaigns = campaignsResult.ok ? campaignsResult.body?.campaigns ?? [] : [];
+  const relatedQueues = queuesResult.ok ? queuesResult.body?.playlists ?? [] : [];
   const query = parseCurrentQuery();
   const searchInput = (query.get('search') ?? '').trim();
   const search = searchInput.toLowerCase();
@@ -8773,6 +9157,7 @@ async function renderMediaPage(options = {}) {
         <td>
           <div class="inline-actions">
             ${renderMediaFileActionLinks(asset)}
+            ${asset.asset_type === 'video' ? `<button class="button button-secondary button-sm" type="button" data-action="media-relations" data-media-id="${escapeHtml(asset.id)}">Detalhes</button><button class="button button-secondary button-sm" type="button" data-action="edit-media-preset" data-media-id="${escapeHtml(asset.id)}">Metadados</button>` : ''}
             <button class="button button-secondary button-sm" type="button" data-action="copy-media-id" data-media-id="${escapeHtml(asset.id)}">Copiar ID</button>
             <button class="button button-danger" type="button" data-action="delete-media" data-media-id="${escapeHtml(asset.id)}">Excluir</button>
           </div>
@@ -8846,6 +9231,7 @@ async function renderMediaPage(options = {}) {
         </div>
         <div class="platform-media-card-actions inline-actions">
           ${renderMediaFileActionLinks(asset)}
+          ${asset.asset_type === 'video' ? `<button class="button button-secondary" type="button" data-action="media-relations" data-media-id="${escapeHtml(asset.id)}">Detalhes</button><button class="button button-secondary" type="button" data-action="edit-media-preset" data-media-id="${escapeHtml(asset.id)}">Metadados</button>` : ''}
           <button class="button button-secondary" type="button" data-action="copy-media-id" data-media-id="${escapeHtml(asset.id)}">Copiar ID</button>
           <button class="button button-danger" type="button" data-action="delete-media" data-media-id="${escapeHtml(asset.id)}">Excluir</button>
         </div>
@@ -8981,6 +9367,16 @@ async function renderMediaPage(options = {}) {
                   <input name="thumbnail" type="file" accept="image/jpeg,image/png" />
                 </label>
               </div>
+              <div class="media-upload-progress" data-upload-progress hidden role="progressbar" aria-label="Progresso do envio" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div class="media-upload-progress-head">
+                  <strong data-upload-progress-label>Preparando envio...</strong>
+                  <span data-upload-progress-percent>0%</span>
+                </div>
+                <div class="media-upload-progress-track" aria-hidden="true">
+                  <span data-upload-progress-fill></span>
+                </div>
+                <small data-upload-progress-detail>Calculando o tamanho do arquivo.</small>
+              </div>
             </div>
             <div class="inline-actions">
               <button class="button button-primary" type="submit">Enviar midia</button>
@@ -9061,6 +9457,11 @@ async function renderMediaPage(options = {}) {
     const videoInput = mediaUploadForm.querySelector('input[name="video"]');
     const thumbnailInput = mediaUploadForm.querySelector('input[name="thumbnail"]');
     const submitButton = mediaUploadForm.querySelector('button[type="submit"]');
+    const progressPanel = mediaUploadForm.querySelector('[data-upload-progress]');
+    const progressLabel = mediaUploadForm.querySelector('[data-upload-progress-label]');
+    const progressPercent = mediaUploadForm.querySelector('[data-upload-progress-percent]');
+    const progressFill = mediaUploadForm.querySelector('[data-upload-progress-fill]');
+    const progressDetail = mediaUploadForm.querySelector('[data-upload-progress-detail]');
     if (!(videoInput instanceof HTMLInputElement)) return;
     if (!(thumbnailInput instanceof HTMLInputElement)) return;
     if (!(submitButton instanceof HTMLButtonElement)) return;
@@ -9073,21 +9474,69 @@ async function renderMediaPage(options = {}) {
       return;
     }
 
-    setButtonBusy(submitButton, true, 'Enviando...');
+    const updateUploadProgress = ({ phase = 'uploading', percent = 0, loadedBytes = 0, totalBytes = 0 } = {}) => {
+      const safePercent = Math.min(100, Math.max(0, Math.round(percent)));
+      if (progressPanel instanceof HTMLElement) {
+        progressPanel.hidden = false;
+        progressPanel.dataset.state = phase;
+        progressPanel.setAttribute('aria-valuenow', String(safePercent));
+      }
+      if (progressFill instanceof HTMLElement) progressFill.style.width = `${safePercent}%`;
+      if (progressPercent) progressPercent.textContent = `${safePercent}%`;
+      if (progressLabel) {
+        progressLabel.textContent = phase === 'complete'
+          ? 'Envio concluido'
+          : phase === 'processing'
+            ? 'Arquivo enviado. Processando...'
+            : phase === 'preparing'
+              ? 'Preparando arquivo...'
+              : 'Enviando video...';
+      }
+      if (progressDetail) {
+        progressDetail.textContent = phase === 'processing'
+          ? 'Aguarde enquanto o servidor finaliza e adiciona o video a biblioteca.'
+          : phase === 'complete'
+            ? 'O arquivo foi recebido e cadastrado com sucesso.'
+            : totalBytes > 0
+              ? `${formatBytes(loadedBytes)} de ${formatBytes(totalBytes)}`
+              : 'Lendo os dados do video antes do envio.';
+      }
+    };
+
+    updateUploadProgress({ phase: 'preparing', percent: 0 });
+    setButtonBusy(submitButton, true, 'Enviando 0%');
     try {
-      const uploadResult = await uploadMediaFiles(videoFile, thumbnailFile ?? null);
+      const uploadResult = await uploadMediaFiles(videoFile, thumbnailFile ?? null, (progress) => {
+        updateUploadProgress(progress);
+        setButtonBusy(
+          submitButton,
+          true,
+          progress.phase === 'processing' ? 'Processando...' : `Enviando ${progress.percent}%`,
+        );
+      });
       if (!uploadResult.ok) {
+        if (progressPanel instanceof HTMLElement) progressPanel.dataset.state = 'error';
+        if (progressLabel) progressLabel.textContent = 'Falha no envio';
+        if (progressDetail) progressDetail.textContent = uploadResult.error;
         setUiNotice('error', 'Falha no envio', uploadResult.error);
-        await reRender();
         return;
       }
 
+      updateUploadProgress({
+        phase: 'complete',
+        percent: 100,
+        loadedBytes: videoFile.size + (thumbnailFile?.size ?? 0),
+        totalBytes: videoFile.size + (thumbnailFile?.size ?? 0),
+      });
       setUiNotice('success', 'Midia enviada', 'O novo arquivo foi adicionado a biblioteca.');
+      await new Promise((resolve) => window.setTimeout(resolve, 650));
       await reRender();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Falha no envio.';
+      if (progressPanel instanceof HTMLElement) progressPanel.dataset.state = 'error';
+      if (progressLabel) progressLabel.textContent = 'Falha no envio';
+      if (progressDetail) progressDetail.textContent = message;
       setUiNotice('error', 'Falha no envio', message);
-      await reRender();
     } finally {
       setButtonBusy(submitButton, false);
     }
@@ -9186,13 +9635,61 @@ async function renderMediaPage(options = {}) {
 
   attachVideoPreviewListeners(new Map(assets.map((asset) => [asset.id, asset])));
 
+  document.querySelectorAll('[data-action="media-relations"]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const mediaId = button.getAttribute('data-media-id');
+      const asset = assets.find((item) => item.id === mediaId);
+      if (!asset) return;
+      const queues = relatedQueues.filter((queue) => (queue.items ?? []).some((item) => item.videoAssetId === mediaId));
+      const campaigns = relatedCampaigns.filter((campaign) => campaign.videoAssetId === mediaId);
+      const publicationCount = campaigns.reduce((sum, campaign) => sum + (campaign.targets?.length ?? 0), 0);
+      await showModal({
+        title: asset.original_name,
+        message: 'Relações deste vídeo no workspace.',
+        confirmLabel: 'Fechar',
+        cancelLabel: '',
+        tone: 'info',
+        bodyHtml: `<div class="stack">
+          <div class="platform-page-summary-grid"><article class="platform-page-summary-card"><span>Filas internas</span><strong>${formatNumber(queues.length)}</strong></article><article class="platform-page-summary-card"><span>Campanhas</span><strong>${formatNumber(campaigns.length)}</strong></article><article class="platform-page-summary-card"><span>Destinos</span><strong>${formatNumber(publicationCount)}</strong></article></div>
+          <div><strong>Filas</strong><p class="muted">${queues.length ? queues.map((queue) => escapeHtml(queue.name)).join(' · ') : 'Nenhuma fila vinculada.'}</p></div>
+          <div><strong>Campanhas e publicações</strong>${campaigns.length ? campaigns.map((campaign) => `<p><a data-link href="/workspace/campanhas/${encodeURIComponent(campaign.id)}">${escapeHtml(campaign.title)}</a> · ${escapeHtml(campaign.status)} · ${formatNumber(campaign.targets?.length ?? 0)} destino(s)</p>`).join('') : '<p class="muted">Nenhuma campanha vinculada.</p>'}</div>
+        </div>`,
+      });
+    });
+  });
+
+  document.querySelectorAll('[data-action="edit-media-preset"]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const videoAssetId = button.getAttribute('data-media-id');
+      const asset = assets.find((item) => item.id === videoAssetId);
+      if (!videoAssetId || !asset) return;
+      const existing = await api.getPreset(videoAssetId);
+      const preset = existing.ok ? existing.body?.preset : null;
+      const values = await showFormDialog({
+        title: `Metadados padrão · ${asset.original_name}`,
+        message: 'Estes valores serão carregados automaticamente no assistente de campanha.',
+        confirmLabel: 'Salvar metadados',
+        fields: [
+          { name: 'title', label: 'Título', value: preset?.title ?? '' },
+          { name: 'description', label: 'Descrição', type: 'textarea', value: preset?.description ?? '' },
+          { name: 'tags', label: 'Tags separadas por vírgula', value: (preset?.tags ?? []).join(', ') },
+          { name: 'privacy', label: 'Privacidade', type: 'select', options: ['private', 'unlisted', 'public'], value: preset?.privacy ?? 'private' },
+        ],
+      });
+      if (!values) return;
+      const saved = await api.upsertPreset(videoAssetId, { ...values, tags: String(values.tags ?? '').split(',').map((tag) => tag.trim()).filter(Boolean) });
+      setUiNotice(saved.ok ? 'success' : 'error', saved.ok ? 'Metadados salvos' : 'Falha ao salvar', saved.ok ? 'O preset já será usado nas próximas campanhas.' : saved.error);
+      await reRender();
+    });
+  });
+
   document.querySelectorAll('[data-action="delete-media"]').forEach((button) => {
     button.addEventListener('click', async () => {
       const mediaId = button.getAttribute('data-media-id');
       if (!mediaId) return;
       const confirmed = await showConfirmDialog({
         title: 'Excluir midia?',
-        message: 'Isso removera a midia selecionada da biblioteca.',
+        message: 'A exclusão só será concluída se não houver filas, campanhas, publicações ou thumbnails dependentes.',
         confirmLabel: 'Excluir midia',
         tone: 'warning',
       });
@@ -9603,10 +10100,10 @@ async function renderPlaylistsPage(options = {}) {
   const baseHref = videosCtx ? '/workspace/videos' : '/workspace/playlists';
   const playlistsHref = videosCtx ? '/workspace/videos?view=playlists' : '/workspace/playlists';
   const libraryHref = videosCtx ? '/workspace/videos?view=library' : '/workspace/media';
-  const pageTitle = videosCtx ? 'Videos' : 'Playlists';
+  const pageTitle = videosCtx ? 'Videos' : 'Filas de conteúdo';
   const pageSubtitle = videosCtx
     ? 'Sua biblioteca de videos e organizacao de playlists em um so lugar.'
-    : 'Organize videos em playlists a partir de pastas locais.';
+    : 'Organize vídeos em filas internas a partir de pastas locais.';
 
   const [playlistsResult, mediaResult] = await Promise.all([api.playlists(), api.media()]);
   if (!playlistsResult.ok) {
@@ -9636,8 +10133,8 @@ async function renderPlaylistsPage(options = {}) {
   const ringOffset = ringCircumference * (1 - usagePct / 100);
 
   const metricsHtml = [
-    { icon: 'playlist', label: 'Playlists', value: formatNumber(playlists.length), hint: 'Total de playlists criadas', tone: 'info' },
-    { icon: 'video', label: 'Videos', value: formatNumber(totalVideos), hint: 'Videos distribuidos em playlists', tone: 'info' },
+    { icon: 'playlist', label: 'Filas', value: formatNumber(playlists.length), hint: 'Total de filas internas', tone: 'info' },
+    { icon: 'video', label: 'Videos', value: formatNumber(totalVideos), hint: 'Vídeos distribuídos em filas', tone: 'info' },
     { icon: 'clock', label: 'Ja usados', value: formatNumber(totalUsed), hint: 'Videos que ja foram postados via Auto', tone: 'success' },
     { icon: 'folder', label: 'Disponiveis', value: formatNumber(totalVideos - totalUsed), hint: 'Ainda nao postados', tone: totalVideos - totalUsed > 0 ? 'info' : 'warning' },
   ].map((card) => `
@@ -9662,7 +10159,7 @@ async function renderPlaylistsPage(options = {}) {
               <div class="platform-media-card-titleline">
                 <span class="platform-media-card-kind-icon">${renderMediaMark('playlist', 'chip', 'info', 'platform-media-card-kind-mark')}</span>
                 <div>
-                  <span class="platform-dashboard-kicker">playlist</span>
+                  <span class="platform-dashboard-kicker">fila interna</span>
                   <h3>${escapeHtml(pl.name)}</h3>
                   <p>${escapeHtml(pl.folderPath || 'Pasta manual')} · ${escapeHtml(formatDate(pl.createdAt))}</p>
                 </div>
@@ -9733,15 +10230,15 @@ async function renderPlaylistsPage(options = {}) {
           <div class="playlist-cockpit-title-block">
             <span class="playlist-cockpit-kicker">
               <span class="playlist-cockpit-pulse-dot"></span>
-              COFRE DE PLAYLISTS
+              FILAS DE CONTEÚDO
             </span>
             <h2 class="playlist-cockpit-title">Organize, automatize, <span class="playlist-cockpit-title-accent">nao repita.</span></h2>
-            <p class="playlist-cockpit-subtitle">Pastas locais viram playlists. Cada video e publicado uma vez e o sistema escolhe o proximo automaticamente.</p>
+            <p class="playlist-cockpit-subtitle">Pastas locais viram filas internas. A reserva impede que o mesmo vídeo seja selecionado por duas campanhas ao mesmo tempo.</p>
           </div>
           <div class="playlist-cockpit-sync">
             <span class="playlist-cockpit-sync-status"><span class="playlist-cockpit-sync-dot"></span>LIVE SYNC</span>
             <strong class="playlist-cockpit-sync-time">${escapeHtml(liveClock)}</strong>
-            <span class="playlist-cockpit-sync-label">${formatNumber(playlists.length)} playlists ativas</span>
+            <span class="playlist-cockpit-sync-label">${formatNumber(playlists.length)} filas ativas</span>
           </div>
         </header>
 
@@ -9899,13 +10396,13 @@ async function renderPlaylistsPage(options = {}) {
             </div>
             <span class="platform-dashboard-panel-meta">${formatNumber(playlists.length)} criadas</span>
           </div>
-          <p class="muted">Crie uma playlist vazia e adicione videos manualmente depois.</p>
+          <p class="muted">Crie uma fila vazia e adicione vídeos manualmente depois.</p>
           <div class="inline-actions">
-            <button class="button button-primary" type="button" data-action="create-playlist-manual">+ Nova playlist</button>
+            <button class="button button-primary" type="button" data-action="create-playlist-manual">+ Nova fila</button>
           </div>
           <div class="platform-page-summary-grid">
             <article class="platform-page-summary-card">
-              <span>Playlists</span>
+              <span>Filas</span>
               <strong>${formatNumber(playlists.length)}</strong>
             </article>
             <article class="platform-page-summary-card">
@@ -9924,12 +10421,12 @@ async function renderPlaylistsPage(options = {}) {
       <section class="platform-surface platform-dashboard-panel">
         <div class="platform-dashboard-panel-head">
           <div>
-            <span class="platform-dashboard-kicker">Biblioteca de playlists</span>
-            <h3>Playlists (${formatNumber(playlists.length)})</h3>
+            <span class="platform-dashboard-kicker">Filas internas</span>
+            <h3>Filas (${formatNumber(playlists.length)})</h3>
           </div>
           <span class="platform-dashboard-panel-meta">Auto · Sem repeticao</span>
         </div>
-        ${playlistCardsHtml ? `<div class="platform-media-grid">${playlistCardsHtml}</div>` : '<p class="muted">Nenhuma playlist encontrada.</p>'}
+        ${playlistCardsHtml ? `<div class="platform-media-grid">${playlistCardsHtml}</div>` : '<p class="muted">Nenhuma fila encontrada.</p>'}
       </section>
     `,
   });
@@ -9949,14 +10446,14 @@ async function renderPlaylistsPage(options = {}) {
       setUiNotice('error', 'Erro ao escanear', result.error);
     } else {
       const { created, updated } = result.body ?? {};
-      setUiNotice('success', 'Scan concluido', `${created} playlists criadas, ${updated} atualizadas.`);
+      setUiNotice('success', 'Scan concluido', `${created} filas criadas, ${updated} atualizadas.`);
     }
     await reRender();
   });
 
   document.querySelector('[data-action="create-playlist-manual"]')?.addEventListener('click', async () => {
     const result = await showFormDialog({
-      title: 'Nova Playlist',
+      title: 'Nova fila de conteúdo',
       fields: [
         { name: 'name', label: 'Nome', type: 'text', required: true },
         { name: 'folderPath', label: 'Caminho da pasta (opcional)', type: 'text' },
@@ -9964,17 +10461,17 @@ async function renderPlaylistsPage(options = {}) {
     });
     if (!result) return;
     const r = await api.createPlaylist(result.name, result.folderPath ?? '');
-    if (!r.ok) { setUiNotice('error', 'Erro', r.error); } else { setUiNotice('success', 'Playlist criada', ''); }
+    if (!r.ok) { setUiNotice('error', 'Erro', r.error); } else { setUiNotice('success', 'Fila criada', ''); }
     await reRender();
   });
 
   document.querySelectorAll('[data-action="delete-playlist"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const playlistId = btn.getAttribute('data-playlist-id');
-      const confirmed = await showConfirmDialog({ title: 'Excluir playlist?', message: 'Os assets de video nao serao deletados, apenas a playlist.', tone: 'danger' });
+      const confirmed = await showConfirmDialog({ title: 'Excluir fila?', message: 'Os vídeos não serão excluídos. A operação será bloqueada se houver campanhas dependentes.', tone: 'danger' });
       if (!confirmed) return;
       const r = await api.deletePlaylist(playlistId);
-      if (!r.ok) { setUiNotice('error', 'Erro ao excluir', r.error); } else { setUiNotice('success', 'Playlist excluida', ''); }
+      if (!r.ok) { setUiNotice('error', 'Erro ao excluir', r.error); } else { setUiNotice('success', 'Fila excluída', ''); }
       await reRender();
     });
   });
@@ -10957,13 +11454,13 @@ async function renderCampaignsPage() {
 }
 
 const CAMPAIGN_FLOW_STORAGE_KEY = 'ytmp-campaign-flow-v2';
+const CAMPAIGN_FLOW_RESULT_KEY = 'ytmp-campaign-flow-result-v1';
 const CAMPAIGN_FLOW_STEPS = [
   { number: 1, label: 'Plataformas', path: '/workspace/campanhas/Etapa1' },
   { number: 2, label: 'Midia', path: '/workspace/campanhas/Etapa2' },
   { number: 3, label: 'Destinos', path: '/workspace/campanhas/Etapa3' },
   { number: 4, label: 'Metadados', path: '/workspace/campanhas/Etapa4' },
-  { number: 5, label: 'Revisao', path: '/workspace/campanhas/Etapa5' },
-  { number: 6, label: 'Salvar', path: '/workspace/campanhas/Etapa6' },
+  { number: 5, label: 'Confirmar', path: '/workspace/campanhas/Etapa5' },
 ];
 const CAMPAIGN_FLOW_PLATFORMS = ['youtube', 'tiktok', 'instagram'];
 
@@ -10985,6 +11482,7 @@ function getCampaignFlowDefaults() {
     scheduleHourAuto: true,
     scheduleHours: [],
     scheduleDays: [],
+    completionMode: 'draft',
     title: '',
     randomTitleEnabled: false,
     titleSeed: '',
@@ -10993,17 +11491,25 @@ function getCampaignFlowDefaults() {
     tags: '',
     privacy: '',
     youtubePlaylistId: '',
+    youtubePlaylistByDestination: {},
+    presetAppliedVideoAssetId: '',
+    presetAppliedData: null,
+    presetPreviousData: null,
     thumbnailAssetId: '',
+    youtubeThumbnailAssetId: '',
+    verticalThumbnailAssetId: '',
+    frameCaptureSecond: 0,
     thumbnailAssistantEnabled: false,
     thumbnailCoverPlatforms: [],
     instagramCaption: '',
     instagramShareToFeed: true,
+    submissionProgress: null,
   };
 }
 
 function readCampaignFlowState() {
   try {
-    const parsed = JSON.parse(localStorage.getItem(CAMPAIGN_FLOW_STORAGE_KEY) || '{}');
+    const parsed = JSON.parse(localStorage.getItem(getAccountScopedStorageKey(CAMPAIGN_FLOW_STORAGE_KEY)) || '{}');
     return {
       ...getCampaignFlowDefaults(),
       ...(parsed && typeof parsed === 'object' ? parsed : {}),
@@ -11011,8 +11517,12 @@ function readCampaignFlowState() {
       selectedDestinationRefs: Array.isArray(parsed?.selectedDestinationRefs) ? parsed.selectedDestinationRefs : [],
       thumbnailCoverPlatforms: Array.isArray(parsed?.thumbnailCoverPlatforms) ? parsed.thumbnailCoverPlatforms : [],
       perTargetPublishAt: parsed?.perTargetPublishAt && typeof parsed.perTargetPublishAt === 'object' ? parsed.perTargetPublishAt : {},
+      presetAppliedData: parsed?.presetAppliedData && typeof parsed.presetAppliedData === 'object' ? parsed.presetAppliedData : null,
+      presetPreviousData: parsed?.presetPreviousData && typeof parsed.presetPreviousData === 'object' ? parsed.presetPreviousData : null,
       scheduleHours: Array.isArray(parsed?.scheduleHours) ? parsed.scheduleHours : [],
       scheduleDays: Array.isArray(parsed?.scheduleDays) ? parsed.scheduleDays : [],
+      completionMode: ['draft', 'publish_now', 'schedule'].includes(parsed?.completionMode) ? parsed.completionMode : 'draft',
+      submissionProgress: parsed?.submissionProgress && typeof parsed.submissionProgress === 'object' ? parsed.submissionProgress : null,
     };
   } catch {
     return getCampaignFlowDefaults();
@@ -11020,7 +11530,7 @@ function readCampaignFlowState() {
 }
 
 function writeCampaignFlowState(nextState) {
-  localStorage.setItem(CAMPAIGN_FLOW_STORAGE_KEY, JSON.stringify({
+  localStorage.setItem(getAccountScopedStorageKey(CAMPAIGN_FLOW_STORAGE_KEY), JSON.stringify({
     ...getCampaignFlowDefaults(),
     ...nextState,
   }));
@@ -11036,7 +11546,52 @@ function patchCampaignFlowState(patch) {
 }
 
 function resetCampaignFlowState() {
-  localStorage.removeItem(CAMPAIGN_FLOW_STORAGE_KEY);
+  localStorage.removeItem(getAccountScopedStorageKey(CAMPAIGN_FLOW_STORAGE_KEY));
+}
+
+function readCampaignFlowResult() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(getAccountScopedStorageKey(CAMPAIGN_FLOW_RESULT_KEY)) || 'null');
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCampaignFlowResult(result) {
+  localStorage.setItem(getAccountScopedStorageKey(CAMPAIGN_FLOW_RESULT_KEY), JSON.stringify(result));
+}
+
+function resetCampaignFlowResult() {
+  localStorage.removeItem(getAccountScopedStorageKey(CAMPAIGN_FLOW_RESULT_KEY));
+}
+
+function getCampaignFlowCompletionMode(mode) {
+  if (mode === 'publish_now') {
+    return {
+      value: 'publish_now',
+      label: 'Publicar agora',
+      description: 'Cria, deixa pronta e inicia a publicacao imediatamente.',
+      buttonLabel: 'Publicar agora',
+      resultLabel: 'Publicacao iniciada',
+    };
+  }
+  if (mode === 'schedule') {
+    return {
+      value: 'schedule',
+      label: 'Agendar',
+      description: 'Cria, deixa pronta e publica automaticamente nos horarios definidos.',
+      buttonLabel: 'Agendar publicacoes',
+      resultLabel: 'Publicacoes agendadas',
+    };
+  }
+  return {
+    value: 'draft',
+    label: 'Salvar como rascunho',
+    description: 'Cria a campanha sem iniciar nenhuma publicacao.',
+    buttonLabel: 'Criar como rascunho',
+    resultLabel: 'Rascunho criado',
+  };
 }
 
 function getCampaignFlowPlatformLabel(platform) {
@@ -11060,7 +11615,7 @@ function getCampaignFlowPlatformMeta(platform) {
       tone: 'tiktok',
       title: 'TikTok',
       body: 'Contas conectadas para videos curtos e distribuicao rapida.',
-      helper: 'Pode exigir plano com acesso a TikTok no momento de salvar.',
+      helper: 'Disponivel nos planos Pro e Premium.',
     };
   }
   return {
@@ -11098,9 +11653,22 @@ function isPaidCampaignPlan(account) {
 }
 
 function isCampaignFlowPlatformAllowedByPlan(platform, account) {
-  const plan = String(account?.plan ?? 'FREE').toUpperCase();
-  if (platform === 'youtube') return true;
-  return plan === 'PRO' || plan === 'PREMIUM';
+  if (Array.isArray(account?.allowedPlatforms)) {
+    return account.allowedPlatforms.map((value) => String(value).toLowerCase()).includes(platform);
+  }
+  const plan = normalizePlanCode(account?.plan ?? account?.planCode);
+  const definition = ACCOUNT_PLAN_OPTIONS.find((option) => option.id === plan) ?? ACCOUNT_PLAN_OPTIONS[0];
+  return getPlanAllowedPlatforms(definition).includes(platform);
+}
+
+function campaignFlowPrivacyLabel(value) {
+  if (value === 'public') return 'Publico';
+  if (value === 'unlisted') return 'Nao listado';
+  return 'Privado';
+}
+
+function campaignFlowEffectivePrivacy(flowState) {
+  return campaignFlowPrivacyLabel(flowState.privacy || 'private');
 }
 
 function campaignFlowToIso(value) {
@@ -11119,8 +11687,10 @@ function campaignFlowFormatLocalDate(value) {
 
 function campaignFlowSelectedVideos(videos, flowState) {
   return videos.filter((video) => {
-    const format = getVideoPublishFormat(video);
-    return flowState.publishFormat === 'short' ? format === 'short' : format === 'standard';
+    const suitability = getVideoSuitability(video);
+    if (!suitability.dimensionsKnown) return true;
+    const isShort = suitability.verticalOrSquare && suitability.duration > 0 && suitability.duration <= SHORT_FORM_MAX_DURATION_SECONDS;
+    return flowState.publishFormat === 'short' ? isShort : !isShort;
   });
 }
 
@@ -11143,8 +11713,11 @@ function campaignFlowCoverFormat(platform) {
 }
 
 function getCampaignFlowThumbnailAssistantGate(flowState) {
-  const baseWordCount = countCampaignFlowWords(flowState.titleSeed);
-  const baseReady = baseWordCount >= 12;
+  const randomTitleAvailable = flowState.completionMode === 'schedule' && flowState.sourceType === 'playlist' && flowState.schedulePatternEnabled;
+  const baseText = randomTitleAvailable ? flowState.titleSeed : (flowState.videoTitle || flowState.title);
+  const minimumWords = randomTitleAvailable ? 12 : 1;
+  const baseWordCount = countCampaignFlowWords(baseText);
+  const baseReady = baseWordCount >= minimumWords;
   const coverPlatforms = (Array.isArray(flowState.thumbnailCoverPlatforms) ? flowState.thumbnailCoverPlatforms : [])
     .filter((platform) => CAMPAIGN_FLOW_PLATFORMS.includes(platform));
   const hasCoverPlatform = coverPlatforms.length > 0;
@@ -11159,9 +11732,14 @@ function getCampaignFlowThumbnailAssistantGate(flowState) {
   } else if (!hasCampaignPlatform || !hasDestination) {
     message = 'Selecione pelo menos uma plataforma e um destino antes de ativar o briefing de capa.';
   }
+  if (!baseReady && !randomTitleAvailable) {
+    message = 'Preencha o titulo que sera publicado para personalizar a thumbnail.';
+  }
   return {
     baseReady,
+    baseText,
     baseWordCount,
+    minimumWords,
     canEnable,
     coverPlatforms,
     hasCoverPlatform,
@@ -11180,10 +11758,10 @@ function buildCampaignFlowThumbnailBrief(context, flowState) {
     .filter(Boolean)
     .map((destination) => destination.destinationLabel ?? destination.title ?? destination.destinationId)
     .slice(0, 5);
-  const campaignTitle = flowState.titleSeed.trim();
+  const campaignTitle = gate.baseText.trim();
   const platformFormats = gate.coverPlatforms.map(campaignFlowCoverFormat);
   const sourceLabel = flowState.sourceType === 'playlist'
-    ? `playlist "${selectedPlaylist?.name ?? 'selecionada'}"`
+    ? `fila de conteudo "${selectedPlaylist?.name ?? 'selecionada'}"`
     : `video "${selectedVideo?.original_name ?? 'selecionado'}"`;
   const scheduleLabel = flowState.schedulePatternEnabled
     ? `${flowState.scheduleTimesPerDay} disparo${Number(flowState.scheduleTimesPerDay) === 1 ? '' : 's'} por dia com horarios ${flowState.scheduleHourAuto ? 'automaticos' : 'definidos manualmente'}`
@@ -11225,7 +11803,7 @@ function getCampaignFlowThumbnailChecklist(context, flowState) {
   return [
     {
       label: 'Base',
-      value: gate.baseReady ? `${formatNumber(gate.baseWordCount)} palavras` : `${formatNumber(gate.baseWordCount)}/12 palavras`,
+      value: gate.baseReady ? `${formatNumber(gate.baseWordCount)} palavras` : `${formatNumber(gate.baseWordCount)}/${formatNumber(gate.minimumWords)} palavras`,
       state: gate.baseReady ? 'ready' : 'attention',
     },
     {
@@ -11248,7 +11826,7 @@ function getCampaignFlowThumbnailChecklist(context, flowState) {
 
 function renderCampaignAutomationGuide(context, flowState) {
   const playlistAutomationOn = flowState.sourceType === 'playlist';
-  const scheduleAutomationOn = playlistAutomationOn && flowState.schedulePatternEnabled;
+  const scheduleAutomationOn = flowState.completionMode === 'schedule' && playlistAutomationOn && flowState.schedulePatternEnabled;
   const titleAutomationOn = scheduleAutomationOn && flowState.randomTitleEnabled;
   const thumbnailGate = getCampaignFlowThumbnailAssistantGate(flowState);
   const thumbnailAssistantOn = flowState.thumbnailAssistantEnabled && thumbnailGate.canEnable;
@@ -11256,7 +11834,7 @@ function renderCampaignAutomationGuide(context, flowState) {
     {
       label: 'Videos',
       state: playlistAutomationOn ? 'active' : 'manual',
-      value: playlistAutomationOn ? 'Playlist automatica' : 'Midia manual',
+      value: playlistAutomationOn ? 'Fila automatica' : 'Midia manual',
     },
     {
       label: 'Agenda',
@@ -11315,6 +11893,13 @@ async function loadCampaignFlowContext() {
   }
 
   const assets = Array.isArray(mediaResult.body?.assets) ? mediaResult.body.assets : [];
+  const flowState = readCampaignFlowState();
+  const youtubeDestinations = (destinationsResult.destinations ?? []).filter((destination) =>
+    destination.platform === 'youtube' && flowState.selectedDestinationRefs.includes(campaignFlowDestinationRef(destination)));
+  const youtubePlaylistEntries = await Promise.all(youtubeDestinations.map(async (destination) => {
+    const response = await api.youtubePlaylists(destination.destinationId ?? destination.id);
+    return [campaignFlowDestinationRef(destination), response.ok && Array.isArray(response.body?.playlists) ? response.body.playlists : []];
+  }));
   return {
     ok: true,
     assets,
@@ -11322,6 +11907,7 @@ async function loadCampaignFlowContext() {
     thumbnails: assets.filter((asset) => asset.asset_type === 'thumbnail'),
     playlists: Array.isArray(playlistsResult.body?.playlists) ? playlistsResult.body.playlists : [],
     destinations: Array.isArray(destinationsResult.destinations) ? destinationsResult.destinations : [],
+    youtubePlaylistsByDestination: Object.fromEntries(youtubePlaylistEntries),
     account: planResult.ok ? planResult.body?.account : state.account,
   };
 }
@@ -11349,6 +11935,7 @@ function renderCampaignFlowSummary(context, flowState) {
   const selectedVideo = context.videos.find((video) => video.id === flowState.videoAssetId);
   const selectedPlaylist = context.playlists.find((playlist) => playlist.id === flowState.playlistId);
   const selectedPlatformLabels = flowState.selectedPlatforms.map(getCampaignFlowPlatformLabel);
+  const completionMode = getCampaignFlowCompletionMode(flowState.completionMode);
   return `
     <aside class="campaign-flow-summary" aria-label="Resumo da campanha">
       <div class="campaign-flow-summary-head">
@@ -11359,11 +11946,12 @@ function renderCampaignFlowSummary(context, flowState) {
         <div><span>Plano</span><strong>${escapeHtml(context.account?.planLabel ?? context.account?.plan ?? 'Free')}</strong></div>
         <div><span>Tokens</span><strong>${formatNumber(context.account?.tokens ?? 0)}</strong></div>
         <div><span>Plataformas</span><strong>${selectedPlatformLabels.length ? escapeHtml(selectedPlatformLabels.join(', ')) : 'Nenhuma'}</strong></div>
-        <div><span>Origem</span><strong>${flowState.sourceType === 'playlist' ? 'Playlist' : 'Midia'}</strong></div>
+        <div><span>Origem</span><strong>${flowState.sourceType === 'playlist' ? 'Fila de conteúdo' : 'Midia'}</strong></div>
         <div><span>Formato</span><strong>${escapeHtml(getVideoPublishFormatLabel(flowState.publishFormat))}</strong></div>
         <div><span>Selecionado</span><strong>${escapeHtml(selectedPlaylist?.name ?? selectedVideo?.original_name ?? '-')}</strong></div>
         <div><span>Destinos</span><strong>${formatNumber(selectedDestinations.length)}</strong></div>
-        <div><span>Agendamento</span><strong>${flowState.schedulePatternEnabled ? 'Aleatorio' : (flowState.scheduledAt ? 'Data fixa' : 'Manual')}</strong></div>
+        <div><span>Agendamento</span><strong>${flowState.completionMode !== 'schedule' ? 'Nao agendado' : flowState.schedulePatternEnabled ? 'Aleatorio' : (flowState.scheduledAt ? 'Data fixa' : 'Pendente')}</strong></div>
+        <div><span>Conclusao</span><strong>${escapeHtml(completionMode.label)}</strong></div>
       </div>
       ${renderCampaignAutomationGuide(context, flowState)}
     </aside>
@@ -11377,7 +11965,7 @@ function renderCampaignFlowLayout(context, flowState, activeStep, bodyHtml) {
         <div>
           <span class="campaign-flow-eyebrow">Campanhas</span>
           <h1>Crie uma campanha em etapas claras</h1>
-          <p>Plataformas primeiro, depois midia, destinos, agenda, metadados e revisao. O fluxo fica salvo no navegador enquanto voce ajusta.</p>
+          <p>Plataformas, midia, destinos, metadados e uma confirmacao final. O fluxo fica salvo no navegador enquanto voce ajusta.</p>
         </div>
         <a class="button button-secondary" data-link href="/workspace/campanhas">Voltar para campanhas</a>
       </header>
@@ -11424,18 +12012,30 @@ function renderCampaignFlowPlatformStep(context, flowState) {
   const cards = CAMPAIGN_FLOW_PLATFORMS.map((platform) => {
     const meta = getCampaignFlowPlatformMeta(platform);
     const count = byPlatform[platform]?.length ?? 0;
-    const disabled = count === 0;
+    const planAllowed = isCampaignFlowPlatformAllowedByPlan(platform, context.account);
+    const disabled = count === 0 || !planAllowed;
     const selected = selectedSet.has(platform) && !disabled;
+    const status = !planAllowed
+      ? `Indisponivel no plano ${ACCOUNT_PLAN_LABELS[normalizePlanCode(context.account?.plan)]}`
+      : count === 0
+        ? 'Sem conta conectada'
+        : `${formatNumber(count)} destino${count === 1 ? '' : 's'}`;
+    const helper = !planAllowed
+      ? `${meta.title} exige plano Pro ou Premium. Altere o plano para habilitar.`
+      : count === 0
+        ? 'Conecte uma conta para habilitar esta opcao.'
+        : meta.helper;
     return `
       <label class="campaign-platform-card" data-tone="${meta.tone}" data-disabled="${disabled ? 'true' : 'false'}" data-selected="${selected ? 'true' : 'false'}">
         <input type="checkbox" data-platform-input="${platform}" value="${platform}" ${selected ? 'checked' : ''} ${disabled ? 'disabled' : ''} />
         <span class="campaign-platform-card-top">
           ${renderPlatformArtwork(platform, 36)}
-          <span class="campaign-platform-status">${disabled ? 'Sem conta conectada' : `${formatNumber(count)} destino${count === 1 ? '' : 's'}`}</span>
+          <span class="campaign-platform-status">${escapeHtml(status)}</span>
         </span>
         <strong>${escapeHtml(meta.title)}</strong>
         <span>${escapeHtml(meta.body)}</span>
-        <small>${escapeHtml(disabled ? 'Conecte uma conta para habilitar esta opcao.' : meta.helper)}</small>
+        <small>${escapeHtml(helper)}</small>
+        ${!planAllowed ? '<a class="campaign-platform-plan-link" data-link href="/workspace/planos">Ver planos</a>' : ''}
       </label>
     `;
   }).join('');
@@ -11445,7 +12045,7 @@ function renderCampaignFlowPlatformStep(context, flowState) {
       <div class="campaign-flow-panel-head">
         <span class="campaign-flow-eyebrow">Etapa 1</span>
         <h2>Criando nova campanha</h2>
-        <p>Escolha uma ou mais plataformas. As plataformas sem conta conectada ficam visiveis, mas bloqueadas.</p>
+        <p>Escolha uma ou mais plataformas. Contas desconectadas e plataformas fora do seu plano ja aparecem bloqueadas aqui.</p>
       </div>
       <div class="campaign-platform-grid">${cards}</div>
       ${renderCampaignFlowFooter({
@@ -11457,7 +12057,7 @@ function renderCampaignFlowPlatformStep(context, flowState) {
   `);
 }
 
-function attachCampaignFlowPlatformStep(flowState) {
+function attachCampaignFlowPlatformStep(context, flowState) {
   const selected = new Set(flowState.selectedPlatforms);
   const nextButton = document.querySelector('[data-next-href]');
   const sync = () => {
@@ -11468,7 +12068,8 @@ function attachCampaignFlowPlatformStep(flowState) {
       else selected.delete(platform);
       card?.setAttribute('data-selected', input.checked ? 'true' : 'false');
     });
-    const selectedPlatforms = Array.from(selected).filter((platform) => CAMPAIGN_FLOW_PLATFORMS.includes(platform));
+    const selectedPlatforms = Array.from(selected).filter((platform) =>
+      CAMPAIGN_FLOW_PLATFORMS.includes(platform) && isCampaignFlowPlatformAllowedByPlan(platform, context.account));
     patchCampaignFlowState({
       selectedPlatforms,
       selectedDestinationRefs: flowState.selectedDestinationRefs.filter((ref) => selectedPlatforms.includes(campaignFlowParseDestinationRef(ref).platform)),
@@ -11492,11 +12093,12 @@ function renderCampaignFlowMediaStep(context, flowState) {
   const videoCards = videos.length === 0
     ? `<div class="campaign-flow-empty-inline">Nenhum video encontrado para ${escapeHtml(getVideoPublishFormatLabel(flowState.publishFormat))}.</div>`
     : videos.map((video) => `
-      <label class="campaign-video-card" data-selected="${flowState.videoAssetId === video.id ? 'true' : 'false'}">
+      <label class="campaign-video-card" data-video-asset-id="${escapeHtml(video.id)}" data-selected="${flowState.videoAssetId === video.id ? 'true' : 'false'}">
         <input type="radio" name="campaignFlowVideo" value="${escapeHtml(video.id)}" ${flowState.videoAssetId === video.id ? 'checked' : ''} />
         <strong>${escapeHtml(video.original_name)}</strong>
         <span>${escapeHtml(formatDurationSeconds(video.duration_seconds))}</span>
         <small>${escapeHtml(getVideoPublishFormatLabel(getVideoPublishFormat(video)))}</small>
+        <div class="campaign-video-classifications" data-video-classifications="${escapeHtml(video.id)}">${renderVideoSuitabilityBadges(video)}</div>
       </label>
     `).join('');
   const playlistOptions = context.playlists.map((playlist) => `
@@ -11508,7 +12110,7 @@ function renderCampaignFlowMediaStep(context, flowState) {
       <div class="campaign-flow-panel-head">
         <span class="campaign-flow-eyebrow">Etapa 2</span>
         <h2>Selecionar video</h2>
-        <p>Defina se a campanha usa uma midia especifica ou uma playlist automatizada, e se o formato e video longo ou curto.</p>
+        <p>Defina se a campanha usa uma midia especifica ou uma fila de conteudo automatizada, e se o formato e video longo ou curto.</p>
       </div>
       <div class="campaign-segment-grid">
         <label class="campaign-segment" data-selected="${sourceType === 'media' ? 'true' : 'false'}">
@@ -11519,19 +12121,19 @@ function renderCampaignFlowMediaStep(context, flowState) {
         <label class="campaign-segment" data-selected="${sourceType === 'playlist' ? 'true' : 'false'}" data-disabled="${paidPlan ? 'false' : 'true'}">
           <input type="radio" name="campaignFlowSource" value="playlist" ${sourceType === 'playlist' ? 'checked' : ''} ${paidPlan ? '' : 'disabled'} />
           ${renderCampaignMark('AUTO', 'processing', 'campaign-segment-mark')}
-          <strong>Playlist</strong><span>${paidPlan ? 'Escolha automatica a partir de uma playlist.' : 'Liberado somente para planos pagos.'}</span>
+          <strong>Fila de conteúdo</strong><span>${paidPlan ? 'Reserva automática a partir de uma fila interna.' : 'Liberado somente para planos pagos.'}</span>
         </label>
       </div>
       <div class="campaign-format-row" role="radiogroup" aria-label="Formato do video">
-        <label data-selected="${flowState.publishFormat === 'standard' ? 'true' : 'false'}"><input type="radio" name="campaignFlowFormat" value="standard" ${flowState.publishFormat === 'standard' ? 'checked' : ''} />Video longo</label>
+        <label data-selected="${flowState.publishFormat === 'standard' ? 'true' : 'false'}"><input type="radio" name="campaignFlowFormat" value="standard" ${flowState.publishFormat === 'standard' ? 'checked' : ''} />Vídeo normal</label>
         <label data-selected="${flowState.publishFormat === 'short' ? 'true' : 'false'}"><input type="radio" name="campaignFlowFormat" value="short" ${flowState.publishFormat === 'short' ? 'checked' : ''} />Video curto</label>
       </div>
       ${sourceType === 'media' ? `<div class="campaign-video-grid">${videoCards}</div>` : `
         <div class="campaign-flow-field-grid">
           <label class="campaign-flow-field">
-            <span>Playlist</span>
+            <span>Fila interna</span>
             <select id="campaign-flow-playlist-select" ${paidPlan ? '' : 'disabled'}>
-              <option value="">Selecionar playlist</option>
+              <option value="">Selecionar fila de conteudo</option>
               ${playlistOptions}
             </select>
           </label>
@@ -11540,7 +12142,7 @@ function renderCampaignFlowMediaStep(context, flowState) {
           <div>
             <span class="campaign-flow-eyebrow">Padrao de agendamento aleatorio</span>
             <h3>Regras de escolha dos videos</h3>
-            <p>Este painel fica limitado ao comportamento da playlist. Horarios entram na Etapa 3 e titulos entram na Etapa 4.</p>
+            <p>Este painel fica limitado ao comportamento da fila. Horarios entram na Etapa 3 e titulos entram na Etapa 4.</p>
           </div>
           <div class="campaign-flow-field-grid">
             <label class="campaign-flow-field">
@@ -11552,7 +12154,7 @@ function renderCampaignFlowMediaStep(context, flowState) {
               </select>
             </label>
             <label class="campaign-flow-field">
-              <span>Quando a playlist acabar</span>
+              <span>Quando a fila acabar</span>
               <select id="campaign-flow-playlist-repeat">
                 <option value="no-repeat" ${flowState.playlistRepeatPolicy === 'no-repeat' ? 'selected' : ''}>Nao repetir ate todos sairem</option>
                 <option value="allow-repeat" ${flowState.playlistRepeatPolicy === 'allow-repeat' ? 'selected' : ''}>Permitir repeticao</option>
@@ -11576,15 +12178,56 @@ function renderCampaignFlowMediaStep(context, flowState) {
 }
 
 function attachCampaignFlowMediaStep(context) {
+  context.videos.forEach((asset) => {
+    if (state.videoMetadata[asset.id]) return;
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.muted = true;
+    video.addEventListener('loadedmetadata', () => {
+      state.videoMetadata[asset.id] = {
+        width: video.videoWidth,
+        height: video.videoHeight,
+        duration: Number.isFinite(video.duration) ? video.duration : Number(asset.duration_seconds ?? 0),
+      };
+      const target = document.querySelector(`[data-video-classifications="${CSS.escape(asset.id)}"]`);
+      if (target) target.innerHTML = renderVideoSuitabilityBadges(asset);
+      const card = target?.closest('.campaign-video-card');
+      if (card) {
+        const suitability = getVideoSuitability(asset);
+        card.dataset.format = suitability.youtubeShort ? 'short' : 'standard';
+        const current = readCampaignFlowState();
+        const isSelected = current.sourceType === 'media' && current.videoAssetId === asset.id;
+        const formatMatches = current.publishFormat === 'short' ? suitability.youtubeShort : !suitability.youtubeShort;
+        if (isSelected && !formatMatches) {
+          patchCampaignFlowState({ videoAssetId: '' });
+          const radio = card.querySelector('input[name="campaignFlowVideo"]');
+          if (radio instanceof HTMLInputElement) radio.checked = false;
+          card.setAttribute('data-selected', 'false');
+          const nextButton = document.querySelector('[data-next-href]');
+          if (nextButton instanceof HTMLButtonElement) nextButton.disabled = true;
+          setUiNotice('warning', 'Formato identificado automaticamente', suitability.horizontal
+            ? 'Este arquivo é horizontal e será tratado como vídeo normal. Selecione “Vídeo longo” para usá-lo.'
+            : 'Este arquivo não é compatível com o formato escolhido.');
+        }
+      }
+      video.removeAttribute('src');
+      video.load();
+    }, { once: true });
+    video.src = buildMediaAssetFileUrl(asset.id);
+    video.load();
+  });
   const collect = () => {
     const current = readCampaignFlowState();
     const sourceType = document.querySelector('input[name="campaignFlowSource"]:checked')?.value ?? current.sourceType;
     const publishFormat = document.querySelector('input[name="campaignFlowFormat"]:checked')?.value ?? current.publishFormat;
     const candidateVideoAssetId = document.querySelector('input[name="campaignFlowVideo"]:checked')?.value ?? (sourceType === 'media' ? current.videoAssetId : '');
     const candidateVideo = context.videos.find((video) => video.id === candidateVideoAssetId);
-    const videoAssetId = sourceType === 'media' && candidateVideo && getVideoPublishFormat(candidateVideo) === publishFormat
-      ? candidateVideoAssetId
-      : '';
+    const suitability = candidateVideo ? getVideoSuitability(candidateVideo) : null;
+    const candidateIsShort = suitability?.dimensionsKnown
+      ? suitability.verticalOrSquare && suitability.duration <= SHORT_FORM_MAX_DURATION_SECONDS
+      : candidateVideo && getVideoPublishFormat(candidateVideo) === 'short';
+    const formatMatches = publishFormat === 'short' ? candidateIsShort : !candidateIsShort;
+    const videoAssetId = sourceType === 'media' && candidateVideo && formatMatches ? candidateVideoAssetId : '';
     const next = patchCampaignFlowState({
       sourceType,
       publishFormat,
@@ -11609,8 +12252,8 @@ function attachCampaignFlowMediaStep(context) {
   attachCampaignFlowNextHandlers(() => {
     const next = readCampaignFlowState();
     if (next.sourceType === 'playlist') {
-      if (!isPaidCampaignPlan(context.account)) return { ok: false, title: 'Playlist bloqueada', message: 'Selecao por playlist esta liberada somente para planos pagos.' };
-      if (!next.playlistId) return { ok: false, title: 'Escolha uma playlist', message: 'Selecione uma playlist antes de avancar.' };
+      if (!isPaidCampaignPlan(context.account)) return { ok: false, title: 'Fila bloqueada', message: 'Selecao por fila de conteudo esta liberada somente para planos pagos.' };
+      if (!next.playlistId) return { ok: false, title: 'Escolha uma fila', message: 'Selecione uma fila de conteudo antes de avancar.' };
       return { ok: true };
     }
     return next.videoAssetId ? { ok: true } : { ok: false, title: 'Escolha uma midia', message: 'Selecione um video compativel com o formato escolhido.' };
@@ -11622,6 +12265,17 @@ function renderCampaignFlowDestinationStep(context, flowState) {
   const selectedPlatforms = new Set(flowState.selectedPlatforms);
   const destinations = context.destinations.filter((destination) => selectedPlatforms.has(destination.platform));
   const selectedRefs = new Set(flowState.selectedDestinationRefs);
+  const completionMode = getCampaignFlowCompletionMode(flowState.completionMode);
+  const completionModeCards = ['draft', 'publish_now', 'schedule'].map((mode) => {
+    const option = getCampaignFlowCompletionMode(mode);
+    const selected = completionMode.value === mode;
+    return `
+      <label class="campaign-completion-card" data-selected="${selected ? 'true' : 'false'}">
+        <input type="radio" name="campaign-flow-completion-mode" value="${mode}" ${selected ? 'checked' : ''} />
+        <strong>${escapeHtml(option.label)}</strong>
+        <span>${escapeHtml(option.description)}</span>
+      </label>`;
+  }).join('');
   const destinationCards = destinations.length === 0
     ? '<div class="campaign-flow-empty-inline">Nenhum destino ativo encontrado para as plataformas escolhidas.</div>'
     : destinations.map((destination) => {
@@ -11637,20 +12291,22 @@ function renderCampaignFlowDestinationStep(context, flowState) {
               <small>${escapeHtml(getProviderLabel(destination.platform))} - ${escapeHtml(destination.handle ?? destination.email ?? destination.youtubeChannelId ?? destination.destinationId)}</small>
             </span>
           </label>
-          <div class="campaign-destination-schedule">
-            <span>Horario deste destino</span>
-            <input type="datetime-local" data-target-publish-at="${escapeHtml(ref)}" value="${escapeHtml(flowState.perTargetPublishAt?.[ref] ?? '')}" />
-          </div>
+          ${completionMode.value === 'schedule' ? `
+            <div class="campaign-destination-schedule">
+              <span>Horario especifico deste destino</span>
+              <input type="datetime-local" data-target-publish-at="${escapeHtml(ref)}" value="${escapeHtml(flowState.perTargetPublishAt?.[ref] ?? '')}" />
+            </div>
+          ` : ''}
         </article>
       `;
     }).join('');
   const playlistMode = flowState.sourceType === 'playlist';
-  const schedulePanel = playlistMode && flowState.schedulePatternEnabled ? `
+  const schedulePanel = playlistMode && completionMode.value === 'schedule' && flowState.schedulePatternEnabled ? `
     <section class="campaign-random-panel">
       <div>
         <span class="campaign-flow-eyebrow">Padrao de agendamento aleatorio</span>
         <h3>Horarios e dias de disparo</h3>
-        <p>Use este bloco para transformar uma playlist em varios disparos. Titulos entram na etapa de metadados.</p>
+        <p>Use este bloco para transformar uma fila de conteudo em varios disparos. Titulos entram na etapa de metadados.</p>
       </div>
       <div class="campaign-flow-field-grid">
         <label class="campaign-flow-field"><span>Disparos por dia</span><input id="campaign-flow-times-per-day" type="number" min="1" max="48" value="${escapeHtml(flowState.scheduleTimesPerDay)}" /></label>
@@ -11674,20 +12330,31 @@ function renderCampaignFlowDestinationStep(context, flowState) {
         <h2>Selecionar destinos e agendamentos</h2>
         <p>Agora aparecem somente os canais e contas das plataformas escolhidas na Etapa 1.</p>
       </div>
-      <div class="campaign-destination-grid">${destinationCards}</div>
       <section class="campaign-flow-subpanel">
         <div class="campaign-flow-panel-head compact">
-          <h3>Entrada na fila</h3>
-          <p>Use um horario geral para a campanha e, se precisar, sobrescreva por destino.</p>
+          <h3>Como deseja concluir?</h3>
+          <p>Escolha agora o que deve acontecer quando voce confirmar a campanha.</p>
+        </div>
+        <div class="campaign-completion-grid">${completionModeCards}</div>
+      </section>
+      <div class="campaign-destination-grid">${destinationCards}</div>
+      ${completionMode.value === 'schedule' ? `<section class="campaign-flow-subpanel">
+        <div class="campaign-flow-panel-head compact">
+          <h3>Quando publicar?</h3>
+          <p>Use um horario geral e, se precisar, sobrescreva o horario em um destino.</p>
+          <div class="campaign-schedule-priority" role="note">
+            <strong>Prioridade dos horarios</strong>
+            <span>Horario do destino &gt; padrao automatico &gt; horario geral &gt; publicacao manual</span>
+          </div>
         </div>
         <div class="campaign-flow-field-grid">
           <label class="campaign-flow-field"><span>Horario geral da campanha</span><input id="campaign-flow-scheduled-at" type="datetime-local" value="${escapeHtml(flowState.scheduledAt)}" /></label>
           <label class="campaign-check-row" data-disabled="${playlistMode ? 'false' : 'true'}">
             <input id="campaign-flow-schedule-random" type="checkbox" ${flowState.schedulePatternEnabled ? 'checked' : ''} ${playlistMode ? '' : 'disabled'} />
-            <span>Usar padrao aleatorio de dias e horarios para playlist.</span>
+            <span>Usar padrao automatico de dias e horarios para a fila de conteudo.</span>
           </label>
         </div>
-      </section>
+      </section>` : `<div class="notice info"><strong>${escapeHtml(completionMode.label)}.</strong> ${escapeHtml(completionMode.description)}</div>`}
       ${schedulePanel}
       ${renderCampaignFlowFooter({
         backHref: '/workspace/campanhas/Etapa2',
@@ -11702,6 +12369,7 @@ function attachCampaignFlowDestinationStep(flowState) {
   const selectedRefs = new Set(flowState.selectedDestinationRefs);
   const selectedDates = new Set(flowState.scheduleDays);
   const collect = () => {
+    const current = readCampaignFlowState();
     document.querySelectorAll('[data-destination-input]').forEach((input) => {
       const ref = input.getAttribute('data-destination-input');
       const card = input.closest('.campaign-destination-card');
@@ -11709,20 +12377,28 @@ function attachCampaignFlowDestinationStep(flowState) {
       else selectedRefs.delete(ref);
       card?.setAttribute('data-selected', input.checked ? 'true' : 'false');
     });
-    const perTargetPublishAt = {};
+    const perTargetPublishAt = document.querySelector('[data-target-publish-at]') ? {} : current.perTargetPublishAt;
     document.querySelectorAll('[data-target-publish-at]').forEach((input) => {
       const ref = input.getAttribute('data-target-publish-at');
       if (ref && input.value) perTargetPublishAt[ref] = input.value;
     });
     const hours = Array.from(document.querySelectorAll('input[name="campaignFlowScheduleHour"]')).map((input) => input.value).filter(Boolean);
+    const completionMode = document.querySelector('input[name="campaign-flow-completion-mode"]:checked')?.value ?? current.completionMode;
     const next = patchCampaignFlowState({
       selectedDestinationRefs: Array.from(selectedRefs),
-      scheduledAt: document.querySelector('#campaign-flow-scheduled-at')?.value ?? '',
+      completionMode,
+      scheduledAt: document.querySelector('#campaign-flow-scheduled-at')?.value ?? current.scheduledAt,
       perTargetPublishAt,
-      schedulePatternEnabled: Boolean(document.querySelector('#campaign-flow-schedule-random')?.checked),
-      scheduleTimesPerDay: Math.max(1, parseInteger(document.querySelector('#campaign-flow-times-per-day')?.value, 1, 1, 48)),
-      scheduleHourAuto: Boolean(document.querySelector('#campaign-flow-hour-auto')?.checked ?? true),
-      scheduleHours: hours,
+      schedulePatternEnabled: document.querySelector('#campaign-flow-schedule-random')
+        ? Boolean(document.querySelector('#campaign-flow-schedule-random')?.checked)
+        : current.schedulePatternEnabled,
+      scheduleTimesPerDay: document.querySelector('#campaign-flow-times-per-day')
+        ? Math.max(1, parseInteger(document.querySelector('#campaign-flow-times-per-day')?.value, 1, 1, 48))
+        : current.scheduleTimesPerDay,
+      scheduleHourAuto: document.querySelector('#campaign-flow-hour-auto')
+        ? Boolean(document.querySelector('#campaign-flow-hour-auto')?.checked)
+        : current.scheduleHourAuto,
+      scheduleHours: document.querySelector('input[name="campaignFlowScheduleHour"]') ? hours : current.scheduleHours,
       scheduleDays: Array.from(selectedDates).sort(),
     });
     const nextButton = document.querySelector('[data-next-href]');
@@ -11760,6 +12436,12 @@ function attachCampaignFlowDestinationStep(flowState) {
     hoursContainer.querySelectorAll('input').forEach((input) => input.addEventListener('change', collect));
   };
   document.querySelectorAll('[data-destination-input], [data-target-publish-at], #campaign-flow-scheduled-at').forEach((input) => input.addEventListener('change', collect));
+  document.querySelectorAll('input[name="campaign-flow-completion-mode"]').forEach((input) => {
+    input.addEventListener('change', () => {
+      collect();
+      void renderCampaignFlowPage(3);
+    });
+  });
   document.querySelector('#campaign-flow-schedule-random')?.addEventListener('change', () => {
     collect();
     void renderCampaignFlowPage(3);
@@ -11792,23 +12474,103 @@ function attachCampaignFlowDestinationStep(flowState) {
   collect();
 }
 
+function renderCampaignCoverStudio(context, flowState, selectedVideo) {
+  if (flowState.sourceType !== 'media' || !selectedVideo) {
+    return `
+      <section class="campaign-cover-studio campaign-cover-studio-empty">
+        <div class="campaign-flow-panel-head compact">
+          <span class="campaign-flow-eyebrow">Capas</span>
+          <h3>Extrair um frame do vídeo</h3>
+          <p>Escolha um vídeo específico na etapa de mídia para selecionar o segundo e gerar capas automaticamente.</p>
+        </div>
+      </section>`;
+  }
+
+  const currentSecond = Math.max(0, Number(flowState.frameCaptureSecond ?? 0));
+  const duration = Math.max(0, Number(selectedVideo.duration_seconds ?? 0));
+  return `
+    <section class="campaign-cover-studio" data-video-asset-id="${escapeHtml(selectedVideo.id)}">
+      <div class="campaign-flow-panel-head compact">
+        <span class="campaign-flow-eyebrow">Capas</span>
+        <h3>Extrair um frame do vídeo</h3>
+        <p>Pare no segundo desejado, confira os cortes e salve uma versão horizontal ou vertical.</p>
+      </div>
+      <div class="campaign-cover-editor">
+        <div class="campaign-cover-source">
+          <video id="campaign-cover-video" controls playsinline preload="metadata" src="${escapeAttribute(buildMediaAssetFileUrl(selectedVideo.id))}"></video>
+          <label class="campaign-cover-timeline">
+            <span>Segundo da capa <output id="campaign-cover-time">${currentSecond.toFixed(1)}s</output></span>
+            <input id="campaign-cover-range" type="range" min="0" max="${Math.max(0.1, duration).toFixed(1)}" step="0.1" value="${Math.min(currentSecond, duration || currentSecond).toFixed(1)}" />
+          </label>
+          <div class="campaign-cover-actions">
+            <button class="button button-secondary" type="button" data-action="capture-video-frame" data-cover-output="youtube">Salvar capa YouTube 1280×720</button>
+            <button class="button button-primary" type="button" data-action="capture-video-frame" data-cover-output="vertical">Salvar capa Reels/TikTok 1080×1920</button>
+          </div>
+        </div>
+        <div class="campaign-cover-previews" aria-label="Prévia dos cortes da capa">
+          <figure><canvas data-cover-preview="reels" width="270" height="480"></canvas><figcaption><strong>Aba Reels</strong><span>9:16 vertical</span></figcaption></figure>
+          <figure><canvas data-cover-preview="feed" width="270" height="338"></canvas><figcaption><strong>Feed</strong><span>corte 4:5</span></figcaption></figure>
+          <figure><canvas data-cover-preview="profile" width="270" height="270"></canvas><figcaption><strong>Grade do perfil</strong><span>corte central 1:1</span></figcaption></figure>
+          <figure><canvas data-cover-preview="youtube" width="480" height="270"></canvas><figcaption><strong>YouTube</strong><span>16:9 horizontal</span></figcaption></figure>
+        </div>
+      </div>
+    </section>`;
+}
+
+function drawVideoFrameCover(video, canvas) {
+  if (!(video instanceof HTMLVideoElement) || !(canvas instanceof HTMLCanvasElement) || video.readyState < 2) return;
+  const context = canvas.getContext('2d');
+  if (!context || !video.videoWidth || !video.videoHeight) return;
+  const sourceRatio = video.videoWidth / video.videoHeight;
+  const targetRatio = canvas.width / canvas.height;
+  let sourceWidth = video.videoWidth;
+  let sourceHeight = video.videoHeight;
+  let sourceX = 0;
+  let sourceY = 0;
+  if (sourceRatio > targetRatio) {
+    sourceWidth = video.videoHeight * targetRatio;
+    sourceX = (video.videoWidth - sourceWidth) / 2;
+  } else {
+    sourceHeight = video.videoWidth / targetRatio;
+    sourceY = (video.videoHeight - sourceHeight) / 2;
+  }
+  context.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+}
+
+function canvasToThumbnailPayload(canvas, fileName) {
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+  return {
+    originalName: fileName,
+    mimeType: 'image/jpeg',
+    base64Data: dataUrl.slice(dataUrl.indexOf(',') + 1),
+  };
+}
+
 function renderCampaignFlowMetadataStep(context, flowState) {
   const selectedPlatforms = new Set(flowState.selectedPlatforms);
-  const thumbnailOptions = context.thumbnails.map((asset) => `
-    <option value="${escapeHtml(asset.id)}" ${flowState.thumbnailAssetId === asset.id ? 'selected' : ''}>${escapeHtml(asset.original_name)}</option>
+  const selectedQueue = context.playlists.find((queue) => queue.id === flowState.playlistId);
+  const sampleQueueItem = selectedQueue?.items?.find((item) => item.videoAssetId);
+  const sampleVideo = context.videos.find((video) => video.id === (sampleQueueItem?.videoAssetId ?? flowState.videoAssetId));
+  const thumbnailOptions = (selectedId) => context.thumbnails.map((asset) => `
+    <option value="${escapeHtml(asset.id)}" ${selectedId === asset.id ? 'selected' : ''}>${escapeHtml(asset.original_name)}</option>
   `).join('');
-  const randomTitleAvailable = flowState.sourceType === 'playlist' && flowState.schedulePatternEnabled;
+  const youtubeThumbnailAssetId = flowState.youtubeThumbnailAssetId || flowState.thumbnailAssetId || '';
+  const verticalThumbnailAssetId = flowState.verticalThumbnailAssetId || '';
+  const randomTitleAvailable = flowState.completionMode === 'schedule' && flowState.sourceType === 'playlist' && flowState.schedulePatternEnabled;
   const randomTitleOn = randomTitleAvailable && flowState.randomTitleEnabled;
+  const randomTitleExample = flowState.titleSeed.trim()
+    ? generateRandomTitle(flowState.titleSeed, sampleVideo)
+    : 'Preencha a base para visualizar um exemplo.';
   const thumbnailGate = getCampaignFlowThumbnailAssistantGate(flowState);
   const thumbnailAssistantEnabled = flowState.thumbnailAssistantEnabled && thumbnailGate.canEnable;
   const thumbnailBrief = buildCampaignFlowThumbnailBrief(context, flowState);
   const thumbnailChecklist = getCampaignFlowThumbnailChecklist(context, flowState);
   const thumbnailWarnings = [
-    !thumbnailGate.baseReady ? 'Preencha a Base para título aleatório com no mínimo 12 palavras para gerar um briefing melhor.' : '',
+    !thumbnailGate.baseReady ? thumbnailGate.message : '',
     !thumbnailGate.hasCoverPlatform ? 'Selecione pelo menos uma plataforma: YouTube, TikTok ou Instagram.' : '',
     (!thumbnailGate.hasCampaignPlatform || !thumbnailGate.hasDestination) ? 'Selecione pelo menos uma plataforma e um destino antes de ativar o briefing de capa.' : '',
   ].filter(Boolean);
-  const coverPlatformCards = CAMPAIGN_FLOW_PLATFORMS.map((platform) => {
+  const coverPlatformCards = flowState.selectedPlatforms.map((platform) => {
     const selected = thumbnailGate.coverPlatforms.includes(platform);
     return `
       <label class="campaign-cover-platform" data-selected="${selected ? 'true' : 'false'}">
@@ -11818,52 +12580,102 @@ function renderCampaignFlowMetadataStep(context, flowState) {
       </label>
     `;
   }).join('');
+  const youtubePlaylistFields = flowState.selectedDestinationRefs.map((ref) => {
+    const destination = campaignFlowFindDestination(context.destinations, ref);
+    if (!destination || destination.platform !== 'youtube') return '';
+    const playlists = context.youtubePlaylistsByDestination?.[ref] ?? [];
+    const selectedId = flowState.youtubePlaylistByDestination?.[ref] ?? flowState.youtubePlaylistId ?? '';
+    return `
+      <label class="campaign-flow-field">
+        <span>Playlist do YouTube · ${escapeHtml(destination.destinationLabel ?? destination.title ?? destination.destinationId)}</span>
+        <select data-campaign-flow-meta data-youtube-playlist-destination="${escapeHtml(ref)}">
+          <option value="">Não adicionar a uma playlist</option>
+          ${playlists.map((playlist) => `<option value="${escapeHtml(playlist.id)}" ${selectedId === playlist.id ? 'selected' : ''}>${escapeHtml(playlist.title)} (${formatNumber(playlist.itemCount)} vídeos)</option>`).join('')}
+        </select>
+        ${playlists.length === 0 ? '<small>Nenhuma playlist disponível ou a conta precisa ser reconectada com permissão de playlist.</small>' : ''}
+      </label>`;
+  }).join('');
+  const preset = flowState.presetAppliedData;
+  const presetNotice = preset ? `
+    <section class="campaign-preset-notice" aria-live="polite">
+      <div>
+        <span class="campaign-flow-eyebrow">Preset aplicado</span>
+        <strong>Preset do video ${escapeHtml(preset.assetName ?? 'selecionado')} aplicado</strong>
+      </div>
+      <details>
+        <summary>Ver alteracoes</summary>
+        <dl>
+          <div><dt>Titulo publicado</dt><dd>${escapeHtml(preset.videoTitle || 'Nao definido')}</dd></div>
+          <div><dt>Descricao</dt><dd>${escapeHtml(preset.videoDescription || 'Nao definida')}</dd></div>
+          <div><dt>Tags</dt><dd>${escapeHtml(preset.tags || 'Sem tags')}</dd></div>
+          <div><dt>Privacidade</dt><dd>${escapeHtml(campaignFlowPrivacyLabel(preset.privacy))}</dd></div>
+        </dl>
+      </details>
+      <button class="button button-secondary button-sm" type="button" data-action="undo-campaign-preset">Desfazer</button>
+    </section>` : '';
 
   return renderCampaignFlowLayout(context, flowState, 4, `
     <section class="campaign-flow-panel">
       <div class="campaign-flow-panel-head">
         <span class="campaign-flow-eyebrow">Etapa 4</span>
         <h2>Preencher metadados</h2>
-        <p>Metadados comuns ficam no topo. Campos especificos aparecem apenas para plataformas selecionadas.</p>
+        <p>Preencha primeiro o essencial. Configuracoes por plataforma e opcoes avancadas ficam separadas abaixo.</p>
       </div>
-      <div class="campaign-flow-field-grid">
-        <label class="campaign-flow-field"><span>Titulo da campanha</span><input id="campaign-flow-title" data-campaign-flow-meta value="${escapeHtml(flowState.title)}" placeholder="Ex: Lancamento Shorts Abril" ${randomTitleOn ? 'disabled' : ''} /></label>
-        <label class="campaign-check-row" data-disabled="${randomTitleAvailable ? 'false' : 'true'}"><input id="campaign-flow-random-title" data-campaign-flow-meta type="checkbox" ${randomTitleOn ? 'checked' : ''} ${randomTitleAvailable ? '' : 'disabled'} /><span>Gerar titulo da campanha por disparo da playlist.</span></label>
-        <label class="campaign-flow-field campaign-flow-field-wide">
-          <span>Base para titulo aleatorio</span>
-          <input id="campaign-flow-title-seed" data-campaign-flow-meta data-min-words="12" value="${escapeHtml(flowState.titleSeed)}" placeholder="Ex: estrategia completa para automatizar postagens em multiplas plataformas todos os dias" />
-          <small class="campaign-field-warning" data-state="${thumbnailGate.baseReady ? 'ok' : 'warning'}">${thumbnailGate.baseReady ? `${formatNumber(thumbnailGate.baseWordCount)} palavras. Base suficiente para briefing.` : `${formatNumber(thumbnailGate.baseWordCount)}/12 palavras. Preencha a Base para título aleatório com no mínimo 12 palavras para gerar um briefing melhor.`}</small>
-        </label>
-        <label class="campaign-flow-field"><span>Titulo do video</span><input id="campaign-flow-video-title" data-campaign-flow-meta value="${escapeHtml(flowState.videoTitle)}" placeholder="Titulo publicado nas plataformas" /></label>
+      ${presetNotice}
+      <section class="campaign-metadata-group">
+        <div class="campaign-flow-panel-head compact"><span class="campaign-flow-eyebrow">Obrigatorio</span><h3>Conteudo essencial</h3><p>Estes campos identificam a campanha internamente e definem o texto principal da publicacao.</p></div>
+        <div class="campaign-flow-field-grid">
+          <label class="campaign-flow-field"><span>Nome interno da campanha</span><input id="campaign-flow-title" data-campaign-flow-meta value="${escapeHtml(flowState.title)}" placeholder="Ex: Lancamento Shorts Abril" ${randomTitleOn ? 'disabled' : ''} /></label>
+          <label class="campaign-flow-field"><span>Titulo que sera publicado</span><input id="campaign-flow-video-title" data-campaign-flow-meta value="${escapeHtml(flowState.videoTitle)}" placeholder="Titulo exibido nas plataformas" /></label>
+          <label class="campaign-flow-field campaign-flow-field-wide"><span>Descricao que sera publicada</span><textarea id="campaign-flow-video-description" data-campaign-flow-meta rows="5" placeholder="Descricao base">${escapeHtml(flowState.videoDescription)}</textarea></label>
+        </div>
+      </section>
+      <section class="campaign-metadata-group">
+        <div class="campaign-flow-panel-head compact"><span class="campaign-flow-eyebrow">Por canal</span><h3>Configuracoes por plataforma</h3><p>Somente controles relevantes para os destinos escolhidos.</p></div>
+        <div class="campaign-flow-field-grid">
         <label class="campaign-flow-field">
           <span>Privacidade</span>
           <select id="campaign-flow-privacy" data-campaign-flow-meta>
-            <option value="" ${flowState.privacy === '' ? 'selected' : ''}>Padrao da plataforma</option>
-            <option value="public" ${flowState.privacy === 'public' ? 'selected' : ''}>public</option>
-            <option value="unlisted" ${flowState.privacy === 'unlisted' ? 'selected' : ''}>unlisted</option>
-            <option value="private" ${flowState.privacy === 'private' ? 'selected' : ''}>private</option>
+            <option value="" ${flowState.privacy === '' ? 'selected' : ''}>Privado (padrao efetivo)</option>
+            <option value="public" ${flowState.privacy === 'public' ? 'selected' : ''}>Publico</option>
+            <option value="unlisted" ${flowState.privacy === 'unlisted' ? 'selected' : ''}>Nao listado</option>
+            <option value="private" ${flowState.privacy === 'private' ? 'selected' : ''}>Privado</option>
           </select>
+          <small>Sem alteracao, todos os destinos serao criados como Privado.</small>
         </label>
-        <label class="campaign-flow-field campaign-flow-field-wide"><span>Descricao do video</span><textarea id="campaign-flow-video-description" data-campaign-flow-meta rows="5" placeholder="Descricao base">${escapeHtml(flowState.videoDescription)}</textarea></label>
-        <label class="campaign-flow-field"><span>Tags</span><input id="campaign-flow-tags" data-campaign-flow-meta value="${escapeHtml(flowState.tags)}" placeholder="tag1, tag2, tag3" /></label>
         ${selectedPlatforms.has('youtube') ? `
-          <label class="campaign-flow-field"><span>Playlist ID do YouTube</span><input id="campaign-flow-youtube-playlist-id" data-campaign-flow-meta value="${escapeHtml(flowState.youtubePlaylistId)}" placeholder="PL..." /></label>
-          <label class="campaign-flow-field"><span>Thumbnail</span><select id="campaign-flow-thumbnail-asset-id" data-campaign-flow-meta><option value="">Sem thumbnail</option>${thumbnailOptions}</select></label>
+          ${youtubePlaylistFields}
+          <label class="campaign-flow-field"><span>Capa do YouTube · 1280×720</span><select id="campaign-flow-youtube-thumbnail-asset-id" data-campaign-flow-meta><option value="">Sem capa horizontal</option>${thumbnailOptions(youtubeThumbnailAssetId)}</select><small>Usada nas superfícies do YouTube que aceitam thumbnail personalizada.</small></label>
+        ` : ''}
+        ${selectedPlatforms.has('instagram') || selectedPlatforms.has('tiktok') ? `
+          <label class="campaign-flow-field"><span>Capa de Reels/TikTok · 1080×1920</span><select id="campaign-flow-vertical-thumbnail-asset-id" data-campaign-flow-meta><option value="">Sem capa vertical</option>${thumbnailOptions(verticalThumbnailAssetId)}</select><small>Mantenha textos e rostos no centro para sobreviver aos cortes do feed e da grade.</small></label>
         ` : ''}
         ${selectedPlatforms.has('instagram') ? `
           <label class="campaign-flow-field campaign-flow-field-wide"><span>Caption do Instagram</span><textarea id="campaign-flow-instagram-caption" data-campaign-flow-meta rows="4" maxlength="2200" placeholder="Se vazio, usa a descricao">${escapeHtml(flowState.instagramCaption)}</textarea></label>
           <label class="campaign-check-row"><input id="campaign-flow-instagram-share" data-campaign-flow-meta type="checkbox" ${flowState.instagramShareToFeed ? 'checked' : ''} /><span>Compartilhar Reel no feed.</span></label>
         ` : ''}
-      </div>
-      <section class="campaign-thumbnail-panel">
-        <div class="campaign-thumbnail-head">
-          <div>
-            <span class="campaign-flow-eyebrow">Thumbnail</span>
-            <h3>Assistente de capa de video</h3>
-            <p>Monte uma direcao visual clara para a capa antes de salvar a campanha, usando a Base para titulo aleatorio como fonte principal.</p>
-          </div>
-          <span class="campaign-thumbnail-badge">Integrado ao fluxo</span>
         </div>
+      </section>
+      ${renderCampaignCoverStudio(context, flowState, sampleVideo)}
+      <details class="campaign-metadata-group campaign-metadata-advanced" ${randomTitleAvailable ? 'open' : ''}>
+        <summary><span><strong>Opcoes avancadas</strong><small>Tags e automacao de nomes internos</small></span></summary>
+        <div class="campaign-flow-field-grid">
+          <label class="campaign-flow-field"><span>Tags</span><input id="campaign-flow-tags" data-campaign-flow-meta value="${escapeHtml(flowState.tags)}" placeholder="tag1, tag2, tag3" /></label>
+          ${randomTitleAvailable ? `
+            <label class="campaign-check-row"><input id="campaign-flow-random-title" data-campaign-flow-meta type="checkbox" ${randomTitleOn ? 'checked' : ''} /><span>Gerar um nome interno diferente para cada disparo automatico.</span></label>
+            ${randomTitleOn ? `<label class="campaign-flow-field campaign-flow-field-wide">
+              <span>Base do titulo automatico</span>
+              <input id="campaign-flow-title-seed" data-campaign-flow-meta data-min-words="12" value="${escapeHtml(flowState.titleSeed)}" placeholder="Ex: estrategia completa para automatizar postagens em multiplas plataformas todos os dias" />
+              <small class="campaign-field-warning" data-state="${thumbnailGate.baseReady ? 'ok' : 'warning'}">${formatNumber(thumbnailGate.baseWordCount)}/12 palavras. Minimo necessario para variar os titulos com contexto.</small>
+              <output class="campaign-random-title-example"><strong>Exemplo</strong><span>${escapeHtml(randomTitleExample)}</span></output>
+            </label>` : ''}
+          ` : '<p class="campaign-advanced-standby">A geracao automatica de nomes aparece quando a fila de conteudo e o padrao automatico de agenda estao ativos.</p>'}
+        </div>
+      </details>
+      <details class="campaign-thumbnail-panel" ${thumbnailAssistantEnabled ? 'open' : ''}>
+        <summary><span><strong>Briefing para criar capa</strong><small>Opcional · prepara instruções, mas não gera a imagem</small></span></summary>
+        <div class="campaign-thumbnail-body">
+        <div class="campaign-thumbnail-head"><div><span class="campaign-flow-eyebrow">Briefing</span><h3>Briefing para criar capa</h3><p>Prepare instruções opcionais usando o título publicado, as plataformas e os destinos.</p></div></div>
         <div class="campaign-cover-platform-wrap">
           <div class="campaign-flow-panel-head compact">
             <h3>Plataforma da capa</h3>
@@ -11893,33 +12705,114 @@ function renderCampaignFlowMetadataStep(context, flowState) {
             <a class="button button-secondary" data-link href="/workspace/videos">Enviar thumbnail</a>
           </div>
         ` : `
-          <div class="campaign-thumbnail-standby">
-            Ative para transformar a base de titulo aleatorio, plataformas, agendamento e destinos em um briefing de capa pronto para producao.
-          </div>
+          <div class="campaign-thumbnail-standby">Ative para transformar o titulo publicado, plataformas, agendamento e destinos em um briefing de capa.</div>
         `}
-      </section>
+        </div>
+      </details>
       ${renderCampaignFlowFooter({ backHref: '/workspace/campanhas/Etapa3', nextHref: '/workspace/campanhas/Etapa5' })}
     </section>
   `);
 }
 
-function attachCampaignFlowMetadataStep() {
+function attachCampaignCoverStudio(context) {
+  const video = document.querySelector('#campaign-cover-video');
+  const range = document.querySelector('#campaign-cover-range');
+  const timeOutput = document.querySelector('#campaign-cover-time');
+  if (!(video instanceof HTMLVideoElement) || !(range instanceof HTMLInputElement)) return;
+
+  const selectedVideo = context.videos.find((asset) => asset.id === readCampaignFlowState().videoAssetId);
+  if (!selectedVideo) return;
+
+  const previews = Array.from(document.querySelectorAll('[data-cover-preview]'));
+  const drawPreviews = () => previews.forEach((canvas) => drawVideoFrameCover(video, canvas));
+  const syncTime = (persist = false) => {
+    const second = Math.max(0, Number(video.currentTime || 0));
+    range.value = String(second);
+    if (timeOutput) timeOutput.textContent = `${second.toFixed(1)}s`;
+    if (persist) patchCampaignFlowState({ frameCaptureSecond: Number(second.toFixed(1)) });
+    drawPreviews();
+  };
+
+  video.addEventListener('loadedmetadata', () => {
+    const duration = Number(video.duration || selectedVideo.duration_seconds || 0);
+    range.max = String(Math.max(0.1, duration));
+    state.videoMetadata[selectedVideo.id] = {
+      width: video.videoWidth,
+      height: video.videoHeight,
+      duration,
+    };
+    const requestedSecond = Math.min(Number(readCampaignFlowState().frameCaptureSecond ?? 0), Math.max(0, duration - 0.05));
+    video.currentTime = requestedSecond;
+    if (requestedSecond === 0) drawPreviews();
+  }, { once: true });
+  video.addEventListener('seeked', () => syncTime(true));
+  video.addEventListener('pause', () => syncTime(true));
+  range.addEventListener('input', () => {
+    video.pause();
+    video.currentTime = Math.min(Number(range.value), Number(video.duration || range.max));
+    if (timeOutput) timeOutput.textContent = `${Number(range.value).toFixed(1)}s`;
+  });
+
+  document.querySelectorAll('[data-action="capture-video-frame"]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      if (!(button instanceof HTMLButtonElement) || video.readyState < 2) return;
+      const output = button.dataset.coverOutput === 'vertical' ? 'vertical' : 'youtube';
+      const canvas = document.createElement('canvas');
+      canvas.width = output === 'vertical' ? 1080 : 1280;
+      canvas.height = output === 'vertical' ? 1920 : 720;
+      drawVideoFrameCover(video, canvas);
+      const second = Number(video.currentTime || 0);
+      const fileName = `${output === 'vertical' ? 'capa-vertical' : 'capa-youtube'}-${second.toFixed(1).replace('.', '-') }s.jpg`;
+      setButtonBusy(button, true, 'Salvando capa...');
+      try {
+        const response = await api.createVideoThumbnail(selectedVideo.id, canvasToThumbnailPayload(canvas, fileName));
+        if (!response.ok || !response.body?.thumbnail?.id) {
+          throw new Error(response.error || 'Não foi possível salvar a capa.');
+        }
+        const thumbnailId = response.body.thumbnail.id;
+        patchCampaignFlowState(output === 'vertical'
+          ? { verticalThumbnailAssetId: thumbnailId, frameCaptureSecond: second }
+          : { youtubeThumbnailAssetId: thumbnailId, thumbnailAssetId: thumbnailId, frameCaptureSecond: second });
+        setUiNotice('success', 'Capa criada a partir do vídeo', `${fileName} foi salva e selecionada para esta campanha.`);
+        await renderCampaignFlowPage(4);
+      } catch (error) {
+        setUiNotice('error', 'Falha ao criar capa', error instanceof Error ? error.message : 'Não foi possível extrair este frame.');
+      } finally {
+        setButtonBusy(button, false);
+      }
+    });
+  });
+}
+
+function attachCampaignFlowMetadataStep(context) {
   const readLiveMetadataState = () => {
     const current = readCampaignFlowState();
+    const youtubePlaylistByDestination = { ...(current.youtubePlaylistByDestination ?? {}) };
+    document.querySelectorAll('[data-youtube-playlist-destination]').forEach((input) => {
+      youtubePlaylistByDestination[input.getAttribute('data-youtube-playlist-destination')] = input.value;
+    });
     return {
       ...current,
-      title: document.querySelector('#campaign-flow-title')?.value ?? '',
-      randomTitleEnabled: Boolean(document.querySelector('#campaign-flow-random-title')?.checked),
-      titleSeed: document.querySelector('#campaign-flow-title-seed')?.value ?? '',
-      videoTitle: document.querySelector('#campaign-flow-video-title')?.value ?? '',
-      videoDescription: document.querySelector('#campaign-flow-video-description')?.value ?? '',
-      tags: document.querySelector('#campaign-flow-tags')?.value ?? '',
-      privacy: document.querySelector('#campaign-flow-privacy')?.value ?? '',
-      youtubePlaylistId: document.querySelector('#campaign-flow-youtube-playlist-id')?.value ?? '',
-      thumbnailAssetId: document.querySelector('#campaign-flow-thumbnail-asset-id')?.value ?? '',
-      thumbnailCoverPlatforms: Array.from(document.querySelectorAll('input[name="campaign-flow-cover-platform"]:checked')).map((input) => input.value),
-      thumbnailAssistantEnabled: Boolean(document.querySelector('#campaign-flow-thumbnail-assistant-enabled')?.checked),
-      instagramCaption: document.querySelector('#campaign-flow-instagram-caption')?.value ?? '',
+      title: document.querySelector('#campaign-flow-title')?.value ?? current.title,
+      randomTitleEnabled: document.querySelector('#campaign-flow-random-title')
+        ? Boolean(document.querySelector('#campaign-flow-random-title')?.checked)
+        : current.randomTitleEnabled,
+      titleSeed: document.querySelector('#campaign-flow-title-seed')?.value ?? current.titleSeed,
+      videoTitle: document.querySelector('#campaign-flow-video-title')?.value ?? current.videoTitle,
+      videoDescription: document.querySelector('#campaign-flow-video-description')?.value ?? current.videoDescription,
+      tags: document.querySelector('#campaign-flow-tags')?.value ?? current.tags,
+      privacy: document.querySelector('#campaign-flow-privacy')?.value ?? current.privacy,
+      youtubePlaylistByDestination,
+      youtubeThumbnailAssetId: document.querySelector('#campaign-flow-youtube-thumbnail-asset-id')?.value ?? current.youtubeThumbnailAssetId ?? current.thumbnailAssetId,
+      verticalThumbnailAssetId: document.querySelector('#campaign-flow-vertical-thumbnail-asset-id')?.value ?? current.verticalThumbnailAssetId,
+      thumbnailAssetId: document.querySelector('#campaign-flow-youtube-thumbnail-asset-id')?.value ?? current.thumbnailAssetId,
+      thumbnailCoverPlatforms: document.querySelector('input[name="campaign-flow-cover-platform"]')
+        ? Array.from(document.querySelectorAll('input[name="campaign-flow-cover-platform"]:checked')).map((input) => input.value)
+        : current.thumbnailCoverPlatforms,
+      thumbnailAssistantEnabled: document.querySelector('#campaign-flow-thumbnail-assistant-enabled')
+        ? Boolean(document.querySelector('#campaign-flow-thumbnail-assistant-enabled')?.checked)
+        : current.thumbnailAssistantEnabled,
+      instagramCaption: document.querySelector('#campaign-flow-instagram-caption')?.value ?? current.instagramCaption,
       instagramShareToFeed: Boolean(document.querySelector('#campaign-flow-instagram-share')?.checked ?? true),
     };
   };
@@ -11935,7 +12828,7 @@ function attachCampaignFlowMetadataStep() {
     const next = readLiveMetadataState();
     const gate = getCampaignFlowThumbnailAssistantGate(next);
     const warnings = [
-      !gate.baseReady ? 'Preencha a Base para título aleatório com no mínimo 12 palavras para gerar um briefing melhor.' : '',
+      !gate.baseReady ? gate.message : '',
       !gate.hasCoverPlatform ? 'Selecione pelo menos uma plataforma: YouTube, TikTok ou Instagram.' : '',
       (!gate.hasCampaignPlatform || !gate.hasDestination) ? 'Selecione pelo menos uma plataforma e um destino antes de ativar o briefing de capa.' : '',
     ].filter(Boolean);
@@ -11972,7 +12865,8 @@ function attachCampaignFlowMetadataStep() {
       if (
         input.id === 'campaign-flow-random-title' ||
         input.id === 'campaign-flow-thumbnail-assistant-enabled' ||
-        input.id === 'campaign-flow-thumbnail-asset-id' ||
+        input.id === 'campaign-flow-youtube-thumbnail-asset-id' ||
+        input.id === 'campaign-flow-vertical-thumbnail-asset-id' ||
         input.name === 'campaign-flow-cover-platform'
       ) void renderCampaignFlowPage(4);
       else syncThumbnailAssistantGate();
@@ -11999,14 +12893,26 @@ function attachCampaignFlowMetadataStep() {
       setTimeout(() => setButtonBusy(button, false), 900);
     }
   });
+  attachCampaignCoverStudio(context);
+  document.querySelector('[data-action="undo-campaign-preset"]')?.addEventListener('click', () => {
+    const current = readCampaignFlowState();
+    const previous = current.presetPreviousData ?? {};
+    patchCampaignFlowState({
+      videoTitle: previous.videoTitle ?? '',
+      videoDescription: previous.videoDescription ?? '',
+      tags: previous.tags ?? '',
+      privacy: previous.privacy ?? '',
+      presetAppliedData: null,
+      presetPreviousData: null,
+    });
+    setUiNotice('info', 'Preset desfeito', 'Os metadados anteriores foram restaurados.');
+    void renderCampaignFlowPage(4);
+  });
   attachCampaignFlowNextHandlers(() => {
     const next = readCampaignFlowState();
-    const randomTitleUsable = next.sourceType === 'playlist' && next.schedulePatternEnabled && next.randomTitleEnabled;
-    const hasCampaignTitle = (randomTitleUsable && next.titleSeed.trim()) || next.title.trim();
-    if (randomTitleUsable && countCampaignFlowWords(next.titleSeed) < 12) return { ok: false, title: 'Base para titulo aleatorio', message: 'Preencha a Base para título aleatório com no mínimo 12 palavras para gerar um briefing melhor.' };
-    if (!hasCampaignTitle) return { ok: false, title: 'Titulo da campanha', message: 'Informe um titulo fixo ou ative o titulo aleatorio com uma base.' };
-    if (!next.videoTitle.trim() || !next.videoDescription.trim()) return { ok: false, title: 'Metadados obrigatorios', message: 'Titulo e descricao do video sao obrigatorios.' };
-    return { ok: true };
+    const issue = getCampaignFlowValidationIssues(next, context)
+      .find((item) => item.editHref === '/workspace/campanhas/Etapa4');
+    return issue ? { ok: false, title: issue.title, message: issue.message } : { ok: true };
   });
 }
 
@@ -12025,35 +12931,73 @@ function campaignFlowBuildScheduledLaunches(flowState) {
   return launches;
 }
 
-function validateCampaignFlowReadyToSave(flowState, context) {
+function campaignFlowGetLaunchDates(flowState) {
+  if (flowState.completionMode !== 'schedule') return [null];
+  const generated = campaignFlowBuildScheduledLaunches(flowState);
+  if (generated.length > 0) return generated;
+  const scheduledAt = campaignFlowToIso(flowState.scheduledAt);
+  return scheduledAt ? [scheduledAt] : [];
+}
+
+function getCampaignFlowValidationIssues(flowState, context) {
+  const issues = [];
   if (!flowState.selectedPlatforms.length) {
-    return { ok: false, title: 'Escolha plataformas', message: 'Selecione pelo menos uma plataforma na Etapa 1.' };
+    issues.push({ id: 'platforms', title: 'Escolha as plataformas', message: 'Selecione pelo menos uma plataforma.', editHref: '/workspace/campanhas/Etapa1' });
+  }
+  const blockedPlatforms = flowState.selectedPlatforms.filter((platform) => !isCampaignFlowPlatformAllowedByPlan(platform, context?.account));
+  if (blockedPlatforms.length) {
+    issues.push({ id: 'plan', title: 'Plataformas fora do plano', message: `${blockedPlatforms.map(getCampaignFlowPlatformLabel).join(', ')} nao esta disponivel no seu plano.`, editHref: '/workspace/campanhas/Etapa1' });
   }
   if (flowState.sourceType === 'playlist') {
     if (!isPaidCampaignPlan(context?.account)) {
-      return { ok: false, title: 'Playlist bloqueada', message: 'A selecao por playlist fica disponivel apenas em plano pago.' };
+      issues.push({ id: 'queue-plan', title: 'Fila de conteudo bloqueada', message: 'A selecao automatica por fila exige um plano pago.', editHref: '/workspace/campanhas/Etapa2' });
     }
     if (!flowState.playlistId) {
-      return { ok: false, title: 'Escolha a playlist', message: 'Selecione uma playlist na Etapa 2.' };
+      issues.push({ id: 'queue', title: 'Escolha a fila de conteudo', message: 'Selecione a fila que fornecera os videos.', editHref: '/workspace/campanhas/Etapa2' });
     }
   } else if (!flowState.videoAssetId) {
-    return { ok: false, title: 'Escolha o video', message: 'Selecione uma midia na Etapa 2.' };
+    issues.push({ id: 'video', title: 'Escolha o video', message: 'Selecione uma midia compativel com o formato.', editHref: '/workspace/campanhas/Etapa2' });
   }
   if (!flowState.selectedDestinationRefs.length) {
-    return { ok: false, title: 'Selecione destinos', message: 'Escolha pelo menos um canal ou conta na Etapa 3.' };
+    issues.push({ id: 'destinations', title: 'Selecione os destinos', message: 'Escolha pelo menos um canal ou conta.', editHref: '/workspace/campanhas/Etapa3' });
   }
-  const randomTitleUsable = flowState.sourceType === 'playlist' && flowState.schedulePatternEnabled && flowState.randomTitleEnabled;
+  const randomTitleUsable = flowState.completionMode === 'schedule' && flowState.sourceType === 'playlist' && flowState.schedulePatternEnabled && flowState.randomTitleEnabled;
   const hasCampaignTitle = (randomTitleUsable && flowState.titleSeed.trim()) || flowState.title.trim();
   if (randomTitleUsable && countCampaignFlowWords(flowState.titleSeed) < 12) {
-    return { ok: false, title: 'Base para titulo aleatorio', message: 'Preencha a Base para título aleatório com no mínimo 12 palavras para gerar um briefing melhor.' };
+    issues.push({ id: 'random-title', title: 'Complete a base do titulo automatico', message: 'Use pelo menos 12 palavras para gerar variacoes com contexto.', editHref: '/workspace/campanhas/Etapa4' });
   }
   if (!hasCampaignTitle) {
-    return { ok: false, title: 'Titulo da campanha', message: 'Informe um titulo fixo ou uma base para titulo aleatorio na Etapa 4.' };
+    issues.push({ id: 'campaign-name', title: 'Informe o nome interno da campanha', message: 'Defina um nome fixo ou ative a geracao automatica.', editHref: '/workspace/campanhas/Etapa4' });
   }
-  if (!flowState.videoTitle.trim() || !flowState.videoDescription.trim()) {
-    return { ok: false, title: 'Metadados obrigatorios', message: 'Titulo e descricao do video sao obrigatorios na Etapa 4.' };
+  if (!flowState.videoTitle.trim()) {
+    issues.push({ id: 'published-title', title: 'Informe o titulo que sera publicado', message: 'O titulo publicado e obrigatorio para todos os destinos.', editHref: '/workspace/campanhas/Etapa4' });
   }
-  return { ok: true };
+  if (!flowState.videoDescription.trim()) {
+    issues.push({ id: 'published-description', title: 'Informe a descricao que sera publicada', message: 'A descricao publicada e obrigatoria para todos os destinos.', editHref: '/workspace/campanhas/Etapa4' });
+  }
+  if (flowState.completionMode === 'schedule' && campaignFlowGetLaunchDates(flowState).length === 0) {
+    issues.push({ id: 'schedule', title: 'Defina o agendamento', message: 'Escolha um horario geral ou configure dias e horarios automaticos.', editHref: '/workspace/campanhas/Etapa3' });
+  }
+  return issues;
+}
+
+function validateCampaignFlowReadyToSave(flowState, context) {
+  const issues = getCampaignFlowValidationIssues(flowState, context);
+  const first = issues[0];
+  return first
+    ? { ok: false, title: first.title, message: first.message, issues }
+    : { ok: true, issues: [] };
+}
+
+function campaignFlowSubmissionSignature(flowState) {
+  const comparable = { ...flowState, submissionProgress: null };
+  const source = JSON.stringify(comparable);
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `campaign-${(hash >>> 0).toString(16)}`;
 }
 
 function renderCampaignFlowReviewStep(context, flowState) {
@@ -12061,42 +13005,32 @@ function renderCampaignFlowReviewStep(context, flowState) {
     .map((ref) => ({ ref, destination: campaignFlowFindDestination(context.destinations, ref) }))
     .filter((entry) => entry.destination);
   const selectedVideo = context.videos.find((video) => video.id === flowState.videoAssetId);
-  const selectedPlaylist = context.playlists.find((playlist) => playlist.id === flowState.playlistId);
-  const scheduledLaunches = campaignFlowBuildScheduledLaunches(flowState);
+  const selectedQueue = context.playlists.find((playlist) => playlist.id === flowState.playlistId);
+  const launchDates = campaignFlowGetLaunchDates(flowState);
+  const previewDates = launchDates.length > 0 ? launchDates : [null];
+  const completionMode = getCampaignFlowCompletionMode(flowState.completionMode);
   const blockedPlatforms = flowState.selectedPlatforms.filter((platform) => !isCampaignFlowPlatformAllowedByPlan(platform, context.account));
+  const randomTitleUsable = flowState.completionMode === 'schedule' && flowState.sourceType === 'playlist' && flowState.schedulePatternEnabled && flowState.randomTitleEnabled;
   const thumbnailGate = getCampaignFlowThumbnailAssistantGate(flowState);
   const thumbnailAssistantEnabled = flowState.thumbnailAssistantEnabled && thumbnailGate.canEnable;
+  const validation = validateCampaignFlowReadyToSave(flowState, context);
+  const submissionSignature = campaignFlowSubmissionSignature(flowState);
+  const partialProgress = flowState.submissionProgress?.signature === submissionSignature
+    ? flowState.submissionProgress
+    : null;
+  const partialEntries = Array.isArray(partialProgress?.entries) ? partialProgress.entries : [];
+  const hasPartialFailure = Boolean(partialProgress?.lastError && partialEntries.some((entry) => entry.campaignId || entry.selection));
+  const sourceLabel = flowState.sourceType === 'playlist'
+    ? `Fila de conteudo: ${selectedQueue?.name ?? '-'}`
+    : `Midia: ${selectedVideo?.original_name ?? '-'}`;
   const reviewRows = [
-    {
-      label: 'Origem',
-      value: flowState.sourceType === 'playlist' ? `Playlist: ${selectedPlaylist?.name ?? '-'}` : `Midia: ${selectedVideo?.original_name ?? '-'}`,
-      editHref: '/workspace/campanhas/Etapa2',
-    },
-    {
-      label: 'Formato',
-      value: getVideoPublishFormatLabel(flowState.publishFormat),
-      editHref: '/workspace/campanhas/Etapa2',
-    },
-    {
-      label: 'Plataformas',
-      value: flowState.selectedPlatforms.map(getCampaignFlowPlatformLabel).join(', ') || '-',
-      editHref: '/workspace/campanhas/Etapa1',
-    },
-    {
-      label: 'Destinos',
-      value: `${selectedDestinations.length} selecionado${selectedDestinations.length === 1 ? '' : 's'}`,
-      editHref: '/workspace/campanhas/Etapa3',
-    },
-    {
-      label: 'Horario geral',
-      value: flowState.scheduledAt ? campaignFlowFormatLocalDate(flowState.scheduledAt) : 'Sem horario geral',
-      editHref: '/workspace/campanhas/Etapa3',
-    },
-    {
-      label: 'Disparos gerados',
-      value: scheduledLaunches.length > 0 ? `${scheduledLaunches.length} campanhas agendadas` : '1 campanha',
-      editHref: '/workspace/campanhas/Etapa3',
-    },
+    { label: 'Nome interno', value: randomTitleUsable ? 'Gerado automaticamente por disparo' : (flowState.title || '-'), editHref: '/workspace/campanhas/Etapa4' },
+    { label: 'Origem', value: sourceLabel, editHref: '/workspace/campanhas/Etapa2' },
+    { label: 'Formato', value: getVideoPublishFormatLabel(flowState.publishFormat), editHref: '/workspace/campanhas/Etapa2' },
+    { label: 'Plataformas', value: flowState.selectedPlatforms.map(getCampaignFlowPlatformLabel).join(', ') || '-', editHref: '/workspace/campanhas/Etapa1' },
+    { label: 'Destinos', value: `${selectedDestinations.length} selecionado${selectedDestinations.length === 1 ? '' : 's'}`, editHref: '/workspace/campanhas/Etapa3' },
+    { label: 'Conclusao', value: completionMode.label, editHref: '/workspace/campanhas/Etapa3' },
+    { label: 'Campanhas', value: `${previewDates.length} a criar`, editHref: '/workspace/campanhas/Etapa3' },
     ...(thumbnailGate.hasCoverPlatform ? [{
       label: 'Thumbnail assistida',
       value: thumbnailAssistantEnabled
@@ -12105,15 +13039,48 @@ function renderCampaignFlowReviewStep(context, flowState) {
       editHref: '/workspace/campanhas/Etapa4',
     }] : []),
   ];
+  const dispatches = previewDates.flatMap((scheduledAt, campaignIndex) => selectedDestinations.map(({ ref, destination }) => ({
+    campaignIndex,
+    ref,
+    destination,
+    scheduledAt: flowState.completionMode === 'schedule'
+      ? (campaignFlowToIso(flowState.perTargetPublishAt?.[ref]) ?? scheduledAt)
+      : null,
+  })));
+  const visibleDispatches = dispatches.slice(0, 30);
 
   return renderCampaignFlowLayout(context, flowState, 5, `
     <section class="campaign-flow-panel">
       <div class="campaign-flow-panel-head">
-        <span class="campaign-flow-eyebrow">Etapa 5</span>
-        <h2>Revisar campanha</h2>
-        <p>Confira o pacote antes de salvar. O rascunho sera criado no backend e podera ser marcado como pronto na tela de detalhes.</p>
+        <span class="campaign-flow-eyebrow">Etapa 5 de 5</span>
+        <h2>Confirmar e ${escapeHtml(completionMode.buttonLabel.toLowerCase())}</h2>
+        <p>Esta e a ultima etapa. Confira o resultado exato e confirme a acao escolhida.</p>
       </div>
-      ${blockedPlatforms.length > 0 ? `<div class="notice warning">Seu plano atual pode bloquear: ${escapeHtml(blockedPlatforms.map(getCampaignFlowPlatformLabel).join(', '))}. Se o backend negar, ajuste o plano ou remova estes destinos.</div>` : ''}
+      <section class="campaign-validation-checklist" data-state="${validation.ok ? 'ready' : 'attention'}" aria-live="polite">
+        <div class="campaign-review-section-head">
+          <div><span class="campaign-flow-eyebrow">Verificacao final</span><h3>${validation.ok ? 'Tudo pronto para confirmar' : `${validation.issues.length} problema${validation.issues.length === 1 ? '' : 's'} para corrigir`}</h3></div>
+        </div>
+        ${validation.ok
+          ? '<p>Plataformas, midia, destinos, agenda e metadados foram conferidos.</p>'
+          : `<ul>${validation.issues.map((issue) => `<li><span><strong>${escapeHtml(issue.title)}</strong><small>${escapeHtml(issue.message)}</small></span><a data-link href="${escapeHtml(issue.editHref)}">Corrigir</a></li>`).join('')}</ul>`}
+      </section>
+      ${hasPartialFailure ? `
+        <section class="campaign-partial-recovery" aria-live="polite">
+          <div class="campaign-review-section-head">
+            <div><span class="campaign-flow-eyebrow">Envio interrompido</span><h3>Continue sem recriar o que ja foi salvo</h3></div>
+          </div>
+          <p>${escapeHtml(partialProgress.lastError)}</p>
+          <div class="campaign-partial-list">
+            ${partialEntries.map((entry, index) => `
+              <div data-state="${entry.completed ? 'done' : entry.error ? 'error' : 'waiting'}">
+                <strong>Campanha ${index + 1}</strong>
+                <span>${entry.campaignId ? `Criada: ${escapeHtml(entry.campaignId)}` : 'Ainda nao criada'}</span>
+                <small>${escapeHtml(entry.error || (entry.completed ? 'Concluida' : 'A retomada continuara desta etapa.'))}</small>
+              </div>
+            `).join('')}
+          </div>
+        </section>
+      ` : ''}
       <div class="campaign-review-grid">
         ${reviewRows.map((row) => `
           <div class="campaign-review-item">
@@ -12125,20 +13092,40 @@ function renderCampaignFlowReviewStep(context, flowState) {
       </div>
       <section class="campaign-review-destinations">
         <div class="campaign-review-section-head">
-          <h3>Destinos</h3>
+          <div><h3>Tabela final por destino</h3><p class="muted">Resultado efetivo de cada publicacao antes do envio.</p></div>
           <a class="campaign-review-edit" data-link href="/workspace/campanhas/Etapa3">Editar</a>
         </div>
-        ${selectedDestinations.map(({ ref, destination }) => `
-          <div class="campaign-review-destination">
-            <span>${renderPlatformArtwork(destination.platform, 24)}</span>
-            <strong>${escapeHtml(destination.destinationLabel ?? destination.title ?? destination.destinationId)}</strong>
-            <small>${escapeHtml(flowState.perTargetPublishAt?.[ref] ? campaignFlowFormatLocalDate(flowState.perTargetPublishAt[ref]) : 'Usa horario geral ou imediato')}</small>
-          </div>
-        `).join('') || '<p class="muted">Nenhum destino selecionado.</p>'}
+        <div class="campaign-dispatch-table-wrap">
+          <table class="campaign-dispatch-table">
+            <thead><tr><th>Destino</th><th>Video</th><th>Horario</th><th>Privacidade</th><th>Playlist do YouTube</th><th>Situacao</th></tr></thead>
+            <tbody>
+              ${visibleDispatches.map((entry) => {
+                const youtubePlaylistId = flowState.youtubePlaylistByDestination?.[entry.ref] || '';
+                const youtubePlaylist = (context.youtubePlaylistsByDestination?.[entry.ref] ?? []).find((playlist) => playlist.id === youtubePlaylistId);
+                const scheduleLabel = flowState.completionMode === 'draft'
+                  ? 'Publicacao manual'
+                  : flowState.completionMode === 'publish_now'
+                    ? 'Assim que confirmar'
+                    : entry.scheduledAt ? campaignFlowFormatLocalDate(entry.scheduledAt) : 'Horario pendente';
+                const situation = flowState.completionMode === 'draft' ? 'Rascunho' : flowState.completionMode === 'publish_now' ? 'Pronta para enviar' : 'Pronta para agendar';
+                return `
+                <tr>
+                  <td><strong>${escapeHtml(entry.destination.destinationLabel ?? entry.destination.title ?? entry.destination.destinationId)}</strong><small>${escapeHtml(getProviderLabel(entry.destination.platform))}</small></td>
+                  <td>${escapeHtml(flowState.sourceType === 'playlist' ? `Proximo da fila ${selectedQueue?.name ?? ''}` : selectedVideo?.original_name ?? '-')}</td>
+                  <td>${escapeHtml(scheduleLabel)}</td>
+                  <td>${escapeHtml(campaignFlowEffectivePrivacy(flowState))}</td>
+                  <td>${entry.destination.platform === 'youtube' ? escapeHtml(youtubePlaylist?.title ?? 'Nao adicionar') : '<span class="muted">Nao se aplica</span>'}</td>
+                  <td><span class="campaign-dispatch-status">${escapeHtml(situation)}</span></td>
+                </tr>
+              `;}).join('') || '<tr><td colspan="6">Nenhum disparo configurado.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+        ${dispatches.length > visibleDispatches.length ? `<p class="muted">Mostrando 30 de ${formatNumber(dispatches.length)} disparos. Todos seguirao a mesma configuracao exibida acima.</p>` : ''}
       </section>
       <section class="campaign-review-metadata">
         <div class="campaign-review-section-head">
-          <h3>Metadados</h3>
+          <h3>Conteudo publicado</h3>
           <a class="campaign-review-edit" data-link href="/workspace/campanhas/Etapa4">Editar</a>
         </div>
         <p><strong>${escapeHtml(flowState.videoTitle || '-')}</strong></p>
@@ -12147,83 +13134,68 @@ function renderCampaignFlowReviewStep(context, flowState) {
         ${thumbnailAssistantEnabled ? `
           <div class="campaign-review-thumbnail">
             <strong>Capa assistida por plataforma</strong>
-            <span>Briefing e checklist preparados para ${escapeHtml(thumbnailGate.coverPlatforms.map(campaignFlowCoverPlatformLabel).join(', '))}. Depois de criar a imagem, envie em Midia e selecione no campo Thumbnail quando aplicavel.</span>
+            <span>Briefing preparado para ${escapeHtml(thumbnailGate.coverPlatforms.map(campaignFlowCoverPlatformLabel).join(', '))}.</span>
           </div>
         ` : ''}
       </section>
+      <section class="campaign-save-progress" aria-live="polite" ${hasPartialFailure ? '' : 'hidden'}>
+        <div class="campaign-save-progress-row" data-save-progress-step="create_campaign" data-state="waiting"><span>1</span><div><strong>Criar campanhas</strong><small>Aguardando confirmacao.</small></div></div>
+        <div class="campaign-save-progress-row" data-save-progress-step="add_targets" data-state="waiting"><span>2</span><div><strong>Adicionar destinos</strong><small>Aguardando criacao.</small></div></div>
+        <div class="campaign-save-progress-row" data-save-progress-step="activate" data-state="waiting"><span>3</span><div><strong>${escapeHtml(completionMode.label)}</strong><small>Aguardando destinos.</small></div></div>
+        <div class="campaign-save-progress-row" data-save-progress-step="finish" data-state="waiting"><span>4</span><div><strong>Finalizar</strong><small>Aguardando conclusao.</small></div></div>
+      </section>
       ${renderCampaignFlowFooter({
         backHref: '/workspace/campanhas/Etapa4',
-        nextHref: '/workspace/campanhas/Etapa6',
-        nextDisabled: selectedDestinations.length === 0,
-        nextLabel: 'Continuar para salvar',
+        nextHref: '#',
+        nextDisabled: !validation.ok || blockedPlatforms.length > 0,
+        nextLabel: hasPartialFailure ? 'Continuar de onde parou' : completionMode.buttonLabel,
+        submit: true,
       })}
     </section>
   `);
 }
 
-function renderCampaignFlowSaveStep(context, flowState) {
-  const selectedDestinations = flowState.selectedDestinationRefs
-    .map((ref) => campaignFlowFindDestination(context.destinations, ref))
-    .filter(Boolean);
-  const selectedVideo = context.videos.find((video) => video.id === flowState.videoAssetId);
-  const selectedPlaylist = context.playlists.find((playlist) => playlist.id === flowState.playlistId);
-  const scheduledLaunches = campaignFlowBuildScheduledLaunches(flowState);
-  const campaignCount = Math.max(1, scheduledLaunches.length);
-  const sourceLabel = flowState.sourceType === 'playlist'
-    ? `Playlist: ${selectedPlaylist?.name ?? 'playlist selecionada'}`
-    : `Midia: ${selectedVideo?.original_name ?? 'video selecionado'}`;
-  const targetCount = selectedDestinations.length * campaignCount;
-  const validation = validateCampaignFlowReadyToSave(flowState, context);
-
-  return renderCampaignFlowLayout(context, flowState, 6, `
-    <section class="campaign-flow-panel">
-      <div class="campaign-flow-panel-head">
-        <span class="campaign-flow-eyebrow">Etapa 6</span>
-        <h2>Salvar rascunho</h2>
-        <p>Esta etapa grava a campanha e seus destinos sem iniciar a publicacao. Depois disso, a preparacao, o lancamento e o acompanhamento ficam na tela da campanha.</p>
+function renderCampaignFlowSuccessPage(result) {
+  const campaignIds = Array.isArray(result?.campaignIds) ? result.campaignIds : [];
+  const pendingItems = Array.isArray(result?.pendingItems) ? result.pendingItems : [];
+  const destinationNames = Array.isArray(result?.destinationNames) ? result.destinationNames : [];
+  const firstCampaignId = campaignIds[0];
+  return `
+    <section class="campaign-flow-success">
+      <header class="campaign-success-hero">
+        <span class="campaign-flow-eyebrow">Processo concluido</span>
+        <h1>${escapeHtml(result?.title ?? 'Campanha criada')}</h1>
+        <p>${escapeHtml(result?.message ?? 'A configuracao foi salva com sucesso.')}</p>
+      </header>
+      <div class="campaign-success-summary">
+        <div><span>Campanhas</span><strong>${formatNumber(result?.campaignCount ?? campaignIds.length)}</strong></div>
+        <div><span>Publicacoes</span><strong>${formatNumber(result?.publicationCount ?? 0)}</strong></div>
+        <div><span>Primeiro disparo</span><strong>${escapeHtml(result?.firstDispatch ?? 'Nao agendado')}</strong></div>
+        <div><span>Destinos</span><strong>${formatNumber(result?.destinationCount ?? 0)}</strong></div>
       </div>
-      <div class="notice info">Salvar rascunho nao consome o lancamento agora. A campanha ainda precisa ser marcada como pronta antes de publicar.</div>
-      ${validation.ok ? '' : `<div class="notice warning">${escapeHtml(validation.message)}</div>`}
-      <div class="campaign-save-grid">
+      <section class="campaign-success-details">
         <div>
-          <span>Campanhas a criar</span>
-          <strong>${formatNumber(campaignCount)}</strong>
-          <small>${escapeHtml(scheduledLaunches.length > 0 ? 'Geradas pelo padrao aleatorio da playlist.' : 'Um rascunho unico sera criado.')}</small>
+          <h2>Campanha criada</h2>
+          <p>${campaignIds.length === 1 ? 'O identificador abaixo confirma a criacao.' : 'As campanhas abaixo foram criadas.'}</p>
         </div>
-        <div>
-          <span>Destinos vinculados</span>
-          <strong>${formatNumber(selectedDestinations.length)}</strong>
-          <small>${escapeHtml(`${formatNumber(targetCount)} destino${targetCount === 1 ? '' : 's'} no total considerando todos os disparos.`)}</small>
+        <div class="campaign-success-id-list">
+          ${campaignIds.map((id, index) => `<a data-link href="/workspace/campanhas/${encodeURIComponent(id)}"><span>${index + 1}</span><strong>${escapeHtml(id)}</strong></a>`).join('')}
         </div>
-        <div>
-          <span>Origem do video</span>
-          <strong>${escapeHtml(sourceLabel)}</strong>
-          <small>${escapeHtml(getVideoPublishFormatLabel(flowState.publishFormat))}</small>
-        </div>
-      </div>
-      <section class="campaign-save-progress" aria-live="polite">
-        <div class="campaign-save-progress-row" data-save-progress-step="create_campaign" data-state="waiting">
-          <span>1</span>
-          <div><strong>Criar campanha</strong><small>Preparando o rascunho principal.</small></div>
-        </div>
-        <div class="campaign-save-progress-row" data-save-progress-step="add_targets" data-state="waiting">
-          <span>2</span>
-          <div><strong>Adicionar destinos</strong><small>Vinculando canais e contas selecionadas.</small></div>
-        </div>
-        <div class="campaign-save-progress-row" data-save-progress-step="finish" data-state="waiting">
-          <span>3</span>
-          <div><strong>Finalizar</strong><small>Abrindo a campanha salva para revisao operacional.</small></div>
-        </div>
+        ${destinationNames.length ? `<p><strong>Destinos configurados:</strong> ${escapeHtml(destinationNames.join(', '))}</p>` : ''}
       </section>
-      ${renderCampaignFlowFooter({
-        backHref: '/workspace/campanhas/Etapa5',
-        nextHref: '#',
-        nextDisabled: !validation.ok,
-        nextLabel: 'Salvar rascunho',
-        submit: true,
-      })}
+      <section class="campaign-success-pending" data-state="${pendingItems.length ? 'attention' : 'clear'}">
+        <h2>Eventuais pendencias</h2>
+        ${pendingItems.length
+          ? `<ul>${pendingItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
+          : '<p>Nenhuma configuracao pendente. Acompanhe o processamento das publicacoes.</p>'}
+      </section>
+      <div class="campaign-success-actions">
+        ${firstCampaignId ? `<a class="button button-primary" data-link href="/workspace/campanhas/${encodeURIComponent(firstCampaignId)}">Abrir campanha</a>` : ''}
+        <a class="button button-secondary" data-link href="/workspace/videos?view=publications">Acompanhar publicacoes</a>
+        <button class="button button-secondary" type="button" data-action="campaign-flow-create-another">Criar outra campanha</button>
+      </div>
     </section>
-  `);
+  `;
 }
 
 function setCampaignFlowSaveProgress(stepKey, state, message) {
@@ -12242,95 +13214,251 @@ async function submitCampaignFlow(context) {
     setUiNotice('warning', validation.title, validation.message);
     return;
   }
-  setButtonBusy(submitButton, true, 'Salvando...');
-  setCampaignFlowSaveProgress('create_campaign', 'active', 'Criando rascunho 1.');
-  setCampaignFlowSaveProgress('add_targets', 'waiting', 'Aguardando criacao da campanha.');
-  setCampaignFlowSaveProgress('finish', 'waiting', 'Aguardando finalizacao.');
+  const progressPanel = document.querySelector('.campaign-save-progress');
+  if (progressPanel) progressPanel.hidden = false;
+  const completionMode = getCampaignFlowCompletionMode(flowState.completionMode);
+  setButtonBusy(submitButton, true, flowState.submissionProgress?.lastError ? 'Retomando...' : 'Processando...');
+  setCampaignFlowSaveProgress('create_campaign', 'active', 'Preparando campanhas e videos.');
+  setCampaignFlowSaveProgress('add_targets', 'waiting', 'Aguardando criacao das campanhas.');
+  setCampaignFlowSaveProgress('activate', 'waiting', 'Aguardando destinos.');
+  setCampaignFlowSaveProgress('finish', 'waiting', 'Aguardando conclusao.');
   const tags = String(flowState.tags ?? '').split(',').map((tag) => tag.trim()).filter(Boolean);
-  const scheduledLaunches = campaignFlowBuildScheduledLaunches(flowState);
-  const launchDates = scheduledLaunches.length > 0 ? scheduledLaunches : [campaignFlowToIso(flowState.scheduledAt)];
-  let firstCampaignId = null;
+  const launchDates = campaignFlowGetLaunchDates(flowState);
+  const signature = campaignFlowSubmissionSignature(flowState);
+  const previousProgress = flowState.submissionProgress?.signature === signature ? flowState.submissionProgress : null;
+  const progress = previousProgress ?? {
+    signature,
+    startedAt: new Date().toISOString(),
+    lastError: '',
+    entries: launchDates.map((scheduledAt, index) => ({ index, scheduledAt, completed: false, error: '' })),
+  };
+  progress.lastError = '';
+  progress.entries = launchDates.map((scheduledAt, index) => ({
+    index,
+    scheduledAt,
+    completed: false,
+    error: '',
+    ...(progress.entries?.[index] ?? {}),
+  }));
+  const persistProgress = () => {
+    progress.updatedAt = new Date().toISOString();
+    patchCampaignFlowState({ submissionProgress: progress });
+  };
+  persistProgress();
   let activeSaveStep = 'create_campaign';
+  let activeEntry = progress.entries[0] ?? null;
 
-  async function resolveVideoAssetId() {
-    if (flowState.sourceType === 'media') return flowState.videoAssetId;
-    const nextVideo = await api.nextPlaylistVideo(flowState.playlistId);
-    if (!nextVideo.ok || !nextVideo.body?.videoAssetId) {
-      throw new Error(nextVideo.error || 'Nao foi possivel selecionar um video da playlist.');
+  async function resolveVideoSelection(entry) {
+    if (entry.selection?.videoAssetId) return entry.selection;
+    if (flowState.sourceType === 'media') return { videoAssetId: flowState.videoAssetId };
+    const nextVideo = await api.reserveQueueVideo(flowState.playlistId, {
+      sequence: flowState.playlistSequenceMode,
+      repeat: flowState.playlistRepeatPolicy,
+    });
+    if (!nextVideo.ok || !nextVideo.body?.reservation?.videoAssetId) {
+      throw new Error(nextVideo.error || 'Nao foi possivel reservar um video da fila.');
     }
-    return nextVideo.body.videoAssetId;
+    return nextVideo.body.reservation;
   }
 
   try {
     for (let index = 0; index < launchDates.length; index += 1) {
+      activeEntry = progress.entries[index];
+      if (activeEntry.completed) continue;
       const scheduledAt = launchDates[index];
-      const videoAssetId = await resolveVideoAssetId();
+      const selection = await resolveVideoSelection(activeEntry);
+      activeEntry.selection = selection;
+      activeEntry.error = '';
+      persistProgress();
+      const videoAssetId = selection.videoAssetId;
+      const presetResponse = await api.getPreset(videoAssetId);
+      const preset = presetResponse.ok ? presetResponse.body?.preset : null;
       const assetForTitle = context.videos.find((video) => video.id === videoAssetId);
-      const shouldGenerateRandomTitle = flowState.sourceType === 'playlist' && flowState.schedulePatternEnabled && flowState.randomTitleEnabled && flowState.titleSeed;
+      const shouldGenerateRandomTitle = flowState.completionMode === 'schedule' && flowState.sourceType === 'playlist' && flowState.schedulePatternEnabled && flowState.randomTitleEnabled && flowState.titleSeed;
       const campaignTitle = shouldGenerateRandomTitle
         ? generateRandomTitle(flowState.titleSeed, assetForTitle)
         : (flowState.title || `Campanha ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`);
-      const created = await api.createCampaign({
-        title: `${campaignTitle}${launchDates.length > 1 ? ` #${index + 1}/${launchDates.length}` : ''}`,
-        videoAssetId,
-        scheduledAt,
-        playlistId: flowState.sourceType === 'playlist' ? flowState.playlistId : undefined,
-        autoMode: flowState.sourceType === 'playlist',
-        schedulePattern: flowState.schedulePatternEnabled ? `random:${JSON.stringify({
-          timesPerDay: flowState.scheduleTimesPerDay,
-          sequence: flowState.playlistSequenceMode,
-          repeat: flowState.playlistRepeatPolicy,
-          strictFormat: flowState.playlistStrictFormat,
-          days: flowState.scheduleDays,
-          hours: flowState.scheduleHourAuto ? 'auto' : flowState.scheduleHours,
-        })}` : undefined,
-      });
-      if (!created.ok) throw new Error(created.error);
-      const campaignId = created.body?.campaign?.id;
-      if (!campaignId) throw new Error('Campaign id ausente na resposta.');
-      if (!firstCampaignId) firstCampaignId = campaignId;
-      setCampaignFlowSaveProgress('create_campaign', 'done', `Rascunho ${index + 1}/${launchDates.length} criado.`);
+      activeEntry.title = activeEntry.title || `${campaignTitle}${launchDates.length > 1 ? ` #${index + 1}/${launchDates.length}` : ''}`;
+      if (!activeEntry.campaignId) {
+        const created = await api.createCampaign({
+          title: activeEntry.title,
+          videoAssetId,
+          scheduledAt: scheduledAt ?? undefined,
+          contentQueueId: flowState.sourceType === 'playlist' ? flowState.playlistId : undefined,
+          queueItemId: selection.itemId,
+          autoMode: flowState.sourceType === 'playlist',
+          schedulePattern: flowState.completionMode === 'schedule' && flowState.schedulePatternEnabled ? `random:${JSON.stringify({
+            timesPerDay: flowState.scheduleTimesPerDay,
+            sequence: flowState.playlistSequenceMode,
+            repeat: flowState.playlistRepeatPolicy,
+            strictFormat: flowState.playlistStrictFormat,
+            days: flowState.scheduleDays,
+            hours: flowState.scheduleHourAuto ? 'auto' : flowState.scheduleHours,
+          })}` : undefined,
+        });
+        if (!created.ok) throw new Error(created.error);
+        activeEntry.campaignId = created.body?.campaign?.id;
+        if (!activeEntry.campaignId) throw new Error('Campaign id ausente na resposta.');
+        persistProgress();
+      }
+      const campaignId = activeEntry.campaignId;
+      setCampaignFlowSaveProgress('create_campaign', 'done', `Campanha ${index + 1}/${launchDates.length} criada.`);
       activeSaveStep = 'add_targets';
-      setCampaignFlowSaveProgress('add_targets', 'active', `Adicionando destinos do rascunho ${index + 1}/${launchDates.length}.`);
+      setCampaignFlowSaveProgress('add_targets', 'active', `Conferindo destinos da campanha ${index + 1}/${launchDates.length}.`);
       const targets = flowState.selectedDestinationRefs.map((ref) => {
         const destination = campaignFlowFindDestination(context.destinations, ref) ?? campaignFlowParseDestinationRef(ref);
         return buildCampaignTargetPayloadForDestination(destination, {
-          videoTitle: flowState.videoTitle,
-          videoDescription: flowState.videoDescription,
-          tags: tags.length > 0 ? tags : undefined,
-          publishAt: campaignFlowToIso(flowState.perTargetPublishAt?.[ref]) ?? scheduledAt,
-          playlistId: flowState.youtubePlaylistId || undefined,
-          privacy: flowState.privacy || undefined,
-          thumbnailAssetId: flowState.thumbnailAssetId || undefined,
+          videoTitle: flowState.videoTitle || preset?.title || assetForTitle?.original_name || campaignTitle,
+          videoDescription: flowState.videoDescription || preset?.description || '',
+          tags: tags.length > 0 ? tags : (preset?.tags?.length ? preset.tags : undefined),
+          publishAt: flowState.completionMode === 'schedule'
+            ? (campaignFlowToIso(flowState.perTargetPublishAt?.[ref]) ?? scheduledAt)
+            : undefined,
+          youtubePlaylistId: flowState.youtubePlaylistByDestination?.[ref] || undefined,
+          privacy: flowState.privacy || 'private',
+          thumbnailAssetId: flowState.youtubeThumbnailAssetId || flowState.thumbnailAssetId || undefined,
+          verticalThumbnailAssetId: flowState.verticalThumbnailAssetId || undefined,
         }, {
           instagramCaption: flowState.instagramCaption,
           instagramShareToFeed: flowState.instagramShareToFeed,
+          frameCaptureSecond: flowState.frameCaptureSecond,
         });
       });
-      const added = await api.addTargetsBulk(campaignId, targets);
-      if (!added.ok) throw new Error(added.error || 'Falha ao salvar destinos.');
-      setCampaignFlowSaveProgress('add_targets', 'done', `Destinos adicionados ao rascunho ${index + 1}/${launchDates.length}.`);
-      if (index + 1 < launchDates.length) {
-        activeSaveStep = 'create_campaign';
-        setCampaignFlowSaveProgress('create_campaign', 'active', `Criando rascunho ${index + 2}/${launchDates.length}.`);
+      if (!activeEntry.targetsAdded) {
+        const campaignResponse = await api.campaignById(campaignId);
+        if (!campaignResponse.ok) throw new Error(campaignResponse.error || 'Nao foi possivel conferir a campanha criada.');
+        const existingTargets = campaignResponse.body?.campaign?.targets ?? [];
+        const existingRefs = new Set(existingTargets.map((target) => `${target.platform ?? 'youtube'}:${target.destinationId ?? target.channelId}`));
+        const missingTargets = targets.filter((target) => !existingRefs.has(`${target.platform ?? 'youtube'}:${target.destinationId ?? target.channelId}`));
+        if (missingTargets.length > 0) {
+          const added = await api.addTargetsBulk(campaignId, missingTargets);
+          if (!added.ok) throw new Error(added.error || 'Falha ao salvar destinos.');
+        }
+        activeEntry.targetsAdded = true;
+        persistProgress();
       }
+      setCampaignFlowSaveProgress('add_targets', 'done', `Destinos confirmados na campanha ${index + 1}/${launchDates.length}.`);
+
+      activeSaveStep = 'activate';
+      setCampaignFlowSaveProgress('activate', 'active', `${completionMode.label}: campanha ${index + 1}/${launchDates.length}.`);
+      if (flowState.completionMode !== 'draft') {
+        let campaignResponse = await api.campaignById(campaignId);
+        if (!campaignResponse.ok) throw new Error(campaignResponse.error || 'Nao foi possivel conferir o estado da campanha.');
+        let campaignStatus = campaignResponse.body?.campaign?.status;
+        if (campaignStatus === 'draft') {
+          const ready = await api.markReady(campaignId);
+          if (!ready.ok) throw new Error(ready.error || 'Nao foi possivel deixar a campanha pronta.');
+          campaignStatus = ready.body?.campaign?.status ?? 'ready';
+        }
+        activeEntry.ready = ['ready', 'launching', 'completed'].includes(campaignStatus);
+        persistProgress();
+        if (flowState.completionMode === 'publish_now' && campaignStatus === 'ready') {
+          const launched = await api.launch(campaignId);
+          if (!launched.ok) throw new Error(launched.error || 'Nao foi possivel iniciar a publicacao.');
+          campaignStatus = launched.body?.campaign?.status ?? 'launching';
+        }
+        activeEntry.launched = flowState.completionMode !== 'publish_now' || ['launching', 'completed'].includes(campaignStatus);
+      }
+      activeEntry.completed = true;
+      activeEntry.stage = flowState.completionMode === 'draft' ? 'draft' : flowState.completionMode === 'schedule' ? 'scheduled' : 'launched';
+      persistProgress();
+      setCampaignFlowSaveProgress('activate', 'done', `${completionMode.resultLabel}: ${index + 1}/${launchDates.length}.`);
+      if (index + 1 < launchDates.length) setCampaignFlowSaveProgress('create_campaign', 'active', `Preparando campanha ${index + 2}/${launchDates.length}.`);
     }
     activeSaveStep = 'finish';
-    setCampaignFlowSaveProgress('finish', 'done', 'Campanha salva. Abrindo revisao operacional.');
+    setCampaignFlowSaveProgress('finish', 'done', 'Tudo concluido. Preparando o resumo.');
     setButtonBusy(submitButton, false);
+    const campaignIds = progress.entries.map((entry) => entry.campaignId).filter(Boolean);
+    const firstDispatch = flowState.completionMode === 'publish_now'
+      ? 'Imediato'
+      : flowState.completionMode === 'schedule'
+        ? campaignFlowFormatLocalDate(launchDates[0])
+        : 'Nao agendado';
+    writeCampaignFlowResult({
+      title: completionMode.resultLabel,
+      message: flowState.completionMode === 'draft'
+        ? 'A campanha foi criada sem iniciar publicacoes.'
+        : flowState.completionMode === 'schedule'
+          ? 'As campanhas estao prontas e aguardam os horarios definidos.'
+          : 'As campanhas foram criadas e o envio para as plataformas foi iniciado.',
+      mode: flowState.completionMode,
+      campaignIds,
+      campaignCount: campaignIds.length,
+      publicationCount: campaignIds.length * flowState.selectedDestinationRefs.length,
+      destinationCount: flowState.selectedDestinationRefs.length,
+      destinationNames: flowState.selectedDestinationRefs.map((ref) => {
+        const destination = campaignFlowFindDestination(context.destinations, ref);
+        return destination?.destinationLabel ?? destination?.title ?? destination?.destinationId ?? ref;
+      }),
+      firstDispatch,
+      pendingItems: flowState.completionMode === 'draft'
+        ? ['Revise a campanha e marque-a como pronta antes de publicar.']
+        : [],
+      completedAt: new Date().toISOString(),
+    });
     resetCampaignFlowState();
-    setUiNotice('success', launchDates.length > 1 ? 'Campanhas criadas' : 'Campanha salva', launchDates.length > 1
-      ? `${launchDates.length} rascunhos foram criados com os disparos definidos.`
-      : 'O rascunho foi salvo e esta pronto para revisao.');
-    navigate(firstCampaignId ? `/workspace/campanhas/${encodeURIComponent(firstCampaignId)}` : '/workspace/campanhas');
+    await renderCampaignFlowPage(5);
+    setUiNotice('success', completionMode.resultLabel, 'O resumo da operacao esta disponivel nesta tela.');
   } catch (error) {
-    setCampaignFlowSaveProgress(activeSaveStep, 'error', error instanceof Error ? error.message : 'Erro inesperado.');
+    const message = error instanceof Error ? error.message : 'Erro inesperado.';
+    if (activeEntry) activeEntry.error = message;
+    progress.lastError = message;
+    progress.failedStep = activeSaveStep;
+    persistProgress();
+    setCampaignFlowSaveProgress(activeSaveStep, 'error', message);
     setButtonBusy(submitButton, false);
-    setUiNotice('error', 'Falha ao salvar campanha', error instanceof Error ? error.message : 'Erro inesperado.');
+    await renderCampaignFlowPage(5);
+    setUiNotice('error', 'Processo interrompido', `${message} Use "Continuar de onde parou" para tentar novamente.`);
   }
 }
 
+async function applyCampaignPreset(flowState, context) {
+  if (flowState.sourceType !== 'media' || !flowState.videoAssetId || flowState.presetAppliedVideoAssetId === flowState.videoAssetId) {
+    return flowState;
+  }
+  const response = await api.getPreset(flowState.videoAssetId);
+  const preset = response.ok ? response.body?.preset : null;
+  const patch = { presetAppliedVideoAssetId: flowState.videoAssetId };
+  if (preset) {
+    const asset = context?.videos?.find((item) => item.id === flowState.videoAssetId);
+    patch.presetPreviousData = {
+      videoTitle: flowState.videoTitle,
+      videoDescription: flowState.videoDescription,
+      tags: flowState.tags,
+      privacy: flowState.privacy,
+    };
+    patch.videoTitle = preset.title ?? '';
+    patch.videoDescription = preset.description ?? '';
+    patch.tags = Array.isArray(preset.tags) ? preset.tags.join(', ') : '';
+    patch.privacy = preset.privacy ?? '';
+    patch.presetAppliedData = {
+      assetName: asset?.original_name ?? flowState.videoAssetId,
+      videoTitle: patch.videoTitle,
+      videoDescription: patch.videoDescription,
+      tags: patch.tags,
+      privacy: patch.privacy,
+    };
+  }
+  return patchCampaignFlowState(patch);
+}
+
 async function renderCampaignFlowPage(step = 1) {
+  const currentStep = Math.min(Math.max(Number(step) || 1, 1), 5);
+  if (currentStep === 1) resetCampaignFlowResult();
+  const completedResult = currentStep === 5 ? readCampaignFlowResult() : null;
+  if (completedResult) {
+    renderWorkspaceShell({
+      title: 'Campanha concluida',
+      subtitle: 'Resumo da criacao e proximos passos.',
+      contentHtml: renderCampaignFlowSuccessPage(completedResult),
+    });
+    document.querySelector('[data-action="campaign-flow-create-another"]')?.addEventListener('click', () => {
+      resetCampaignFlowResult();
+      resetCampaignFlowState();
+      navigate('/workspace/campanhas/Etapa1');
+    });
+    return;
+  }
   const context = await loadCampaignFlowContext();
   if (!context.ok) {
     if (context.status === 401) {
@@ -12346,13 +13474,14 @@ async function renderCampaignFlowPage(step = 1) {
     return;
   }
 
-    const flowState = readCampaignFlowState();
-  flowState.selectedPlatforms = flowState.selectedPlatforms.filter((platform) => CAMPAIGN_FLOW_PLATFORMS.includes(platform));
+  let flowState = readCampaignFlowState();
+  flowState = await applyCampaignPreset(flowState, context);
+  flowState.selectedPlatforms = flowState.selectedPlatforms.filter((platform) =>
+    CAMPAIGN_FLOW_PLATFORMS.includes(platform) && isCampaignFlowPlatformAllowedByPlan(platform, context.account));
   flowState.selectedDestinationRefs = flowState.selectedDestinationRefs.filter((ref) =>
     flowState.selectedPlatforms.includes(campaignFlowParseDestinationRef(ref).platform));
   writeCampaignFlowState(flowState);
 
-  const currentStep = Math.min(Math.max(Number(step) || 1, 1), 6);
   const contentHtml = currentStep === 1
     ? renderCampaignFlowPlatformStep(context, flowState)
     : currentStep === 2
@@ -12361,9 +13490,7 @@ async function renderCampaignFlowPage(step = 1) {
         ? renderCampaignFlowDestinationStep(context, flowState)
         : currentStep === 4
           ? renderCampaignFlowMetadataStep(context, flowState)
-          : currentStep === 5
-            ? renderCampaignFlowReviewStep(context, flowState)
-            : renderCampaignFlowSaveStep(context, flowState);
+          : renderCampaignFlowReviewStep(context, flowState);
 
   renderWorkspaceShell({
     title: `Nova campanha - Etapa ${currentStep}`,
@@ -12371,17 +13498,11 @@ async function renderCampaignFlowPage(step = 1) {
     contentHtml,
   });
 
-  if (currentStep === 1) attachCampaignFlowPlatformStep(flowState);
+  if (currentStep === 1) attachCampaignFlowPlatformStep(context, flowState);
   else if (currentStep === 2) attachCampaignFlowMediaStep(context);
   else if (currentStep === 3) attachCampaignFlowDestinationStep(flowState);
-  else if (currentStep === 4) attachCampaignFlowMetadataStep();
+  else if (currentStep === 4) attachCampaignFlowMetadataStep(context);
   else if (currentStep === 5) {
-    attachCampaignFlowNextHandlers(() => {
-      return validateCampaignFlowReadyToSave(readCampaignFlowState(), context);
-    });
-  } else {
-    const validation = validateCampaignFlowReadyToSave(readCampaignFlowState(), context);
-    setCampaignFlowSaveProgress('create_campaign', validation.ok ? 'active' : 'waiting', validation.ok ? 'Pronto para criar o rascunho.' : 'Corrija as etapas anteriores antes de salvar.');
     document.querySelector('[data-action="campaign-flow-submit"]')?.addEventListener('click', () => { void submitCampaignFlow(context); });
   }
 }
@@ -12673,8 +13794,16 @@ function buildCampaignTargetPayloadForDestination(destination, targetTemplate, p
   };
 
   if (platform === 'youtube') {
-    payload.playlistId = targetTemplate.playlistId;
+    payload.youtubePlaylistId = targetTemplate.youtubePlaylistId ?? targetTemplate.playlistId;
     payload.thumbnailAssetId = targetTemplate.thumbnailAssetId;
+  }
+
+  if (platform === 'instagram' || platform === 'tiktok') {
+    payload.thumbnailAssetId = targetTemplate.verticalThumbnailAssetId;
+  }
+
+  if (platform === 'tiktok') {
+    payload.tiktokCoverTimestampMs = Math.max(0, Math.round(Number(platformOptions.frameCaptureSecond ?? 0) * 1000));
   }
 
   if (platform === 'instagram') {
@@ -13525,7 +14654,11 @@ async function renderRoute() {
         return;
       }
 
-      const campaignFlowMatch = path.match(/^\/workspace\/campanhas\/Etapa([1-6])$/);
+      if (path === '/workspace/campanhas/Etapa6') {
+        navigate('/workspace/campanhas/Etapa5');
+        return;
+      }
+      const campaignFlowMatch = path.match(/^\/workspace\/campanhas\/Etapa([1-5])$/);
       if (campaignFlowMatch) {
         await renderCampaignFlowPage(Number(campaignFlowMatch[1]));
         return;

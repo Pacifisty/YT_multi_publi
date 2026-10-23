@@ -3,6 +3,7 @@ import type { AdminSession } from './auth/session.guard';
 import type { AuthModuleInstance } from './auth/auth.module';
 import { createAuthModule } from './auth/auth.module';
 import type { AuthServiceOptions } from './auth/auth.service';
+import type { SessionStore } from './auth/session-store';
 import type { CampaignsModuleInstance, CampaignsModuleOptions } from './campaigns/campaigns.module';
 import { createCampaignsModule } from './campaigns/campaigns.module';
 import type { AccountsModuleInstance } from './accounts/accounts.module';
@@ -45,6 +46,7 @@ export interface BackgroundProcessor {
 export interface AppConfig {
   env?: Record<string, string | undefined>;
   authModuleOptions?: AuthServiceOptions;
+  sessionStore?: SessionStore;
   campaignsModuleOptions?: CampaignsModuleOptions;
   accountsModuleOptions?: AccountsServiceOptions;
   mediaModuleOptions?: MediaModuleOptions;
@@ -60,6 +62,8 @@ export interface HttpRequest {
   session: AdminSession | null;
   body?: unknown;
   query?: Record<string, string>;
+  headers?: Record<string, string | string[] | undefined>;
+  rawBody?: string;
 }
 
 export interface HttpResponse {
@@ -123,6 +127,7 @@ export function createApp(config: AppConfig = {}): AppInstance {
     env: config.env,
     emailService,
     ...config.authModuleOptions,
+    sessionStore: config.sessionStore,
   });
   const accountPlanService = new AccountPlanService({
     store: config.accountPlanStore,
@@ -164,12 +169,28 @@ export function createApp(config: AppConfig = {}): AppInstance {
     env,
   });
   const accountsModule = createAccountsModule(config.accountsModuleOptions);
+  const mediaModule = createMediaModule(config.mediaModuleOptions);
   const campaignsModule = createCampaignsModule({
     ...config.campaignsModuleOptions,
     accountPlanService,
     emailService,
     getAccessTokenForChannel: (channelId, options) =>
       accountsModule.accountsService.resolveAccessTokenForChannel(channelId, options),
+    validateMediaAsset: config.campaignsModuleOptions?.validateMediaAsset ?? (async (assetId, ownerEmail, expectedType) => {
+      const asset = await mediaModule.mediaService.getAsset(assetId, ownerEmail);
+      return asset?.asset_type === expectedType;
+    }),
+    validateContentQueueSelection: config.campaignsModuleOptions?.validateContentQueueSelection ?? (async (queueId, itemId, videoAssetId, ownerEmail) => {
+      const queue = await mediaModule.playlistService.getOwnedPlaylist(queueId, ownerEmail);
+      if (!queue) return false;
+      return itemId
+        ? queue.items.some((item) => item.id === itemId && item.videoAssetId === videoAssetId && item.status === 'reserved')
+        : queue.items.some((item) => item.videoAssetId === videoAssetId);
+    }),
+    queueLifecycle: config.campaignsModuleOptions?.queueLifecycle ?? {
+      markPublished: (itemId) => mediaModule.playlistService.markItemPublished(itemId),
+      release: (itemId) => mediaModule.playlistService.releaseReservation(itemId),
+    },
   });
   const growthScriptController = new GrowthScriptController(
     new GrowthScriptService({
@@ -179,7 +200,6 @@ export function createApp(config: AppConfig = {}): AppInstance {
     }),
     new SessionGuard(),
   );
-  const mediaModule = createMediaModule(config.mediaModuleOptions);
   let processingQueue = false;
 
   const integratedWorker = createIntegratedWorker({
@@ -193,30 +213,39 @@ export function createApp(config: AppConfig = {}): AppInstance {
     },
     videoFileResolver: {
       resolve: async (videoAssetId) => {
-        const asset = await mediaModule.mediaService.getAsset(videoAssetId);
-        if (!asset) {
+        const assetFile = await mediaModule.mediaService.getAssetFile(videoAssetId);
+        if (!assetFile) {
           throw new Error(`Media asset not found: ${videoAssetId}`);
         }
-        if (asset.asset_type !== 'video') {
+        if (assetFile.asset.asset_type !== 'video') {
           throw new Error(`Media asset ${videoAssetId} is not a video asset`);
         }
-        return asset.storage_path;
+        return assetFile.absolute_path;
       },
     },
     thumbnailFileResolver: {
       resolve: async (thumbnailAssetId) => {
-        const asset = await mediaModule.mediaService.getAsset(thumbnailAssetId);
-        if (!asset) {
+        const assetFile = await mediaModule.mediaService.getAssetFile(thumbnailAssetId);
+        if (!assetFile) {
           throw new Error(`Thumbnail asset not found: ${thumbnailAssetId}`);
         }
-        if (asset.asset_type !== 'thumbnail') {
+        if (assetFile.asset.asset_type !== 'thumbnail') {
           throw new Error(`Media asset ${thumbnailAssetId} is not a thumbnail asset`);
         }
-        return asset.storage_path;
+        return assetFile.absolute_path;
       },
     },
     getAccessTokenForConnectedAccount: (connectedAccountId) =>
       accountsModule.accountsService.resolveAccessTokenForConnectedAccount(connectedAccountId),
+    getInstagramBusinessAccountId: async (connectedAccountId) => {
+      const account = await accountsModule.accountsService.getAccount(connectedAccountId);
+      const providerSubject = account?.providerSubject ?? account?.googleSubject;
+      if (!account || account.provider !== 'instagram' || !providerSubject) {
+        throw new Error(`Instagram account identifier not found: ${connectedAccountId}`);
+      }
+      return providerSubject;
+    },
+    tiktokForcePrivatePublishing: env.TIKTOK_SANDBOX === 'true',
     getPublicVideoUrl: async (videoAssetId) => {
       if (!publicMediaUrlService) {
         throw new Error('PUBLIC_APP_URL is required for TikTok and Instagram publishing.');
@@ -250,9 +279,25 @@ export function createApp(config: AppConfig = {}): AppInstance {
 
       processingQueue = true;
       try {
-        await authModule.authService.processDueAccountDeletions();
-        await scheduledLaunchChecker.checkAndLaunch();
-        await resilientJobRunner.processAll();
+        try {
+          await authModule.authService.processDueAccountDeletions();
+        } catch (error) {
+          console.warn(`[auth] scheduled account deletion check failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        try {
+          const orphanCleanup = await mediaModule.mediaService.cleanupOrphanedFiles();
+          if (orphanCleanup.deleted > 0 || orphanCleanup.failed > 0) {
+            console.log(`[media] orphan cleanup: deleted=${orphanCleanup.deleted} failed=${orphanCleanup.failed}`);
+          }
+        } catch (error) {
+          console.warn(`[media] scheduled orphan cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        try {
+          await scheduledLaunchChecker.checkAndLaunch();
+          await resilientJobRunner.processAll();
+        } catch (error) {
+          console.warn(`[jobs] background processing failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
       } finally {
         processingQueue = false;
       }
@@ -280,6 +325,8 @@ export function createApp(config: AppConfig = {}): AppInstance {
         session: request.session,
         body: request.body,
         query: request.query,
+        headers: request.headers,
+        rawBody: request.rawBody,
       });
 
       return { status: apiResult.status, body: apiResult.body, cookies: apiResult.cookies, redirect: (apiResult as any).redirect };

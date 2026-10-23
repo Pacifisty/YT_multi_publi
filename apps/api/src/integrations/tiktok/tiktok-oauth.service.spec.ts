@@ -53,16 +53,17 @@ describe('TikTokOauthService', () => {
 
       const url = await sandboxService.createAuthorizationRedirect({});
 
-      expect(url).toContain('scope=user.info.basic');
-      expect(url).not.toContain('video.publish');
+      expect(url).toContain('user.info.basic');
+      expect(url).toContain('video.publish');
+      expect(url).not.toContain('video.upload');
     });
 
     it('should use full scopes when TIKTOK_SANDBOX is not set', async () => {
       const url = await service.createAuthorizationRedirect({});
 
-      expect(url).toContain('video.upload');
       expect(url).toContain('video.publish');
       expect(url).toContain('user.info.basic');
+      expect(url).not.toContain('video.upload');
     });
 
     it('should throw error when CLIENT_KEY is missing', async () => {

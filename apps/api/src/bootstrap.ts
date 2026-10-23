@@ -10,6 +10,7 @@ import type { AuthServiceOptions } from './auth/auth.service';
 import { createAccountRepoAdapter } from './config/account-repo-adapter';
 import { createChannelRepoAdapter } from './config/channel-repo-adapter';
 import { createMediaRepoAdapter } from './config/media-repo-adapter';
+import { createR2StorageFromEnv } from './media/storage/r2-storage.service';
 
 export interface BootstrapOptions {
   env: Record<string, string | undefined>;
@@ -74,9 +75,18 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
     ? { ...accountRepoOverrides, ...channelStoreOverride }
     : undefined;
 
+  const mediaStorageRoot = env.MEDIA_STORAGE_ROOT || undefined;
+  const mediaStorage = createR2StorageFromEnv(env, mediaStorageRoot);
   const mediaModuleOptions = {
-        ...(env.MEDIA_STORAGE_ROOT ? { storageRoot: env.MEDIA_STORAGE_ROOT } : {}),
-        ...(databaseProvider.mediaAssetRepository ? { repository: createMediaRepoAdapter(databaseProvider.mediaAssetRepository) } : {}),
+        ...(env.MEDIA_IMPORT_ROOT ? { importRoot: env.MEDIA_IMPORT_ROOT } : {}),
+        ...(mediaStorageRoot ? { storageRoot: mediaStorageRoot } : {}),
+        ...(mediaStorage ? { storage: mediaStorage } : {}),
+        ...(databaseProvider.mediaAssetRepository
+          ? {
+              repository: createMediaRepoAdapter(databaseProvider.mediaAssetRepository),
+              orphanCleanupEnabled: true,
+            }
+          : {}),
         ...(databaseProvider.playlistRepository ? { playlistRepository: databaseProvider.playlistRepository } : {}),
         ...(databaseProvider.presetRepository ? { presetRepository: databaseProvider.presetRepository } : {}),
       };
@@ -84,6 +94,7 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
   const server = createServer({
     env,
     sessionResolver,
+    sessionStore,
     authModuleOptions,
     campaignsModuleOptions,
     accountsModuleOptions,
@@ -95,13 +106,14 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
   });
 
   // Determine allowed origins
-  const allowedOrigins = options.allowedOrigins ??
-    (server.config.nodeEnv === 'production' ? [] : ['*']);
+  const allowedOrigins = options.allowedOrigins ?? deriveAllowedOrigins(env, server.config.nodeEnv);
 
   const securityMiddleware = createSecurityMiddleware({ allowedOrigins });
   const errorHandler = createErrorHandler({ nodeEnv: server.config.nodeEnv });
   const authRateLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 10 });
   const supportRateLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 5 });
+  const oauthRateLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 30 });
+  const mediaMutationRateLimiter = createRateLimiter({ windowMs: 60_000, maxRequests: 240 });
   const healthCheck = createHealthCheck({
     nodeEnv: server.config.nodeEnv,
     getDatabaseStatus: () => ({
@@ -151,10 +163,43 @@ export function bootstrap(options: BootstrapOptions): BootstrapResult {
           return;
         }
 
+        if (path.startsWith('/api/accounts/oauth/')) {
+          await oauthRateLimiter(req, res, async () => {
+            await server.requestHandler(req, res);
+          });
+          return;
+        }
+
+        if (path.startsWith('/api/media') && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method ?? 'GET')) {
+          await mediaMutationRateLimiter(req, res, async () => {
+            await server.requestHandler(req, res);
+          });
+          return;
+        }
+
         await server.requestHandler(req, res);
       });
     });
   };
 
   return { server, sessionStore, healthCheck, databaseProvider, handler };
+}
+
+function deriveAllowedOrigins(env: Record<string, string | undefined>, nodeEnv: string): string[] {
+  if (nodeEnv !== 'production') return ['*'];
+
+  const configured = [env.PUBLIC_APP_URL, env.ALLOWED_ORIGINS]
+    .flatMap((value) => value?.split(',') ?? [])
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .flatMap((value) => {
+      try {
+        const url = new URL(value);
+        return [url.origin];
+      } catch {
+        return [];
+      }
+    });
+
+  return [...new Set(configured)];
 }

@@ -1,3 +1,5 @@
+import { createHmac } from 'node:crypto';
+
 export interface PaymentLogEntry {
   timestamp: string;
   intentId?: string;
@@ -13,6 +15,11 @@ export interface PaymentLogEntry {
 }
 
 class PaymentLogger {
+  private pseudonymizeEmail(email: string): string {
+    const key = process.env.LOG_PSEUDONYM_KEY || process.env.OAUTH_TOKEN_KEY || 'development-log-key';
+    return `email_${createHmac('sha256', key).update(email.trim().toLowerCase()).digest('hex').slice(0, 16)}`;
+  }
+
   private redactSecrets(obj: any): any {
     if (!obj) return obj;
     const redacted = JSON.parse(JSON.stringify(obj));
@@ -23,6 +30,11 @@ class PaymentLogger {
         for (const key of secretKeys) {
           if (key in val) {
             val[key] = '[REDACTED]';
+          }
+        }
+        for (const [key, nested] of Object.entries(val)) {
+          if (key.toLowerCase().includes('email') && typeof nested === 'string') {
+            val[key] = this.pseudonymizeEmail(nested);
           }
         }
         Object.values(val).forEach(redactValue);
@@ -39,7 +51,7 @@ class PaymentLogger {
       scope: entry.scope,
       message: entry.message,
       ...(entry.intentId && { intentId: entry.intentId }),
-      ...(entry.email && { email: entry.email }),
+      ...(entry.email && { emailRef: this.pseudonymizeEmail(entry.email) }),
       ...(entry.status && { status: entry.status }),
       ...(entry.provider && { provider: entry.provider }),
       ...(entry.oldStatus && { oldStatus: entry.oldStatus }),

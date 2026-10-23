@@ -16,6 +16,8 @@ export interface CampaignTargetRecord {
   tags: string[];
   publishAt: string | null;
   playlistId: string | null;
+  /** YouTube destination playlist. `playlistId` remains as a compatibility alias. */
+  youtubePlaylistId?: string | null;
   privacy: string;
   thumbnailAssetId: string | null;
   status: 'aguardando' | 'enviando' | 'publicado' | 'erro';
@@ -28,6 +30,7 @@ export interface CampaignTargetRecord {
   tiktokDisableComment?: boolean | null;
   tiktokDisableDuet?: boolean | null;
   tiktokDisableStitch?: boolean | null;
+  tiktokCoverTimestampMs?: number | null;
   // Instagram-specific fields
   instagramCaption?: string | null;
   instagramShareToFeed?: boolean | null;
@@ -43,6 +46,9 @@ export interface CampaignRecord {
   status: 'draft' | 'ready' | 'launching' | 'completed' | 'failed';
   scheduledAt: string | null;
   playlistId: string | null;
+  /** Internal content queue. `playlistId` remains as a compatibility alias. */
+  contentQueueId?: string | null;
+  queueItemId?: string | null;
   autoMode: boolean;
   schedulePattern: string | null;
   targets: CampaignTargetRecord[];
@@ -56,6 +62,8 @@ export interface CreateCampaignInput {
   videoAssetId: string;
   scheduledAt?: string;
   playlistId?: string;
+  contentQueueId?: string;
+  queueItemId?: string;
   autoMode?: boolean;
   schedulePattern?: string;
 }
@@ -71,8 +79,10 @@ export interface AddTargetInput {
   tags?: string[];
   publishAt?: string;
   playlistId?: string;
+  youtubePlaylistId?: string;
   privacy?: string;
   thumbnailAssetId?: string;
+  tiktokCoverTimestampMs?: number;
   instagramCaption?: string;
   instagramShareToFeed?: boolean;
 }
@@ -179,6 +189,12 @@ export interface CampaignServiceOptions {
   emailService?: EmailService;
   logger?: any;
   now?: () => Date;
+  validateMediaAsset?: (assetId: string, ownerEmail: string | undefined, expectedType: 'video' | 'thumbnail') => Promise<boolean>;
+  validateContentQueueSelection?: (contentQueueId: string, queueItemId: string | undefined, videoAssetId: string, ownerEmail?: string) => Promise<boolean>;
+  queueLifecycle?: {
+    markPublished(itemId: string): Promise<boolean>;
+    release(itemId: string): Promise<boolean>;
+  };
 }
 
 export const DUPLICATE_CAMPAIGN_TARGET_CHANNEL_ERROR = 'Target for this channel already exists in the campaign';
@@ -190,6 +206,9 @@ export class CampaignService {
   private readonly emailService?: EmailService;
   private readonly logger?: any;
   private readonly now: () => Date;
+  private readonly validateMediaAsset?: CampaignServiceOptions['validateMediaAsset'];
+  private readonly validateContentQueueSelection?: CampaignServiceOptions['validateContentQueueSelection'];
+  private readonly queueLifecycle?: CampaignServiceOptions['queueLifecycle'];
 
   constructor(options: CampaignServiceOptions = {}) {
     this.repository = options.repository ?? new InMemoryCampaignRepository();
@@ -197,6 +216,9 @@ export class CampaignService {
     this.emailService = options.emailService;
     this.logger = options.logger;
     this.now = options.now ?? (() => new Date());
+    this.validateMediaAsset = options.validateMediaAsset;
+    this.validateContentQueueSelection = options.validateContentQueueSelection;
+    this.queueLifecycle = options.queueLifecycle;
   }
 
   private canMutateTargets(status: CampaignRecord['status']): boolean {
@@ -223,11 +245,6 @@ export class CampaignService {
       return campaigns;
     }
 
-    const hasOwnedCampaigns = campaigns.some((campaign) => this.normalizeOwnerEmail(campaign.ownerEmail) !== null);
-    if (!hasOwnedCampaigns) {
-      return campaigns;
-    }
-
     return campaigns.filter((campaign) => this.matchesOwner(campaign, ownerEmail));
   }
 
@@ -241,16 +258,22 @@ export class CampaignService {
       return campaign;
     }
 
-    const hasOwnedCampaigns = (await this.repository.findAllNewestFirst())
-      .some((record) => this.normalizeOwnerEmail(record.ownerEmail) !== null);
-    if (!hasOwnedCampaigns && this.normalizeOwnerEmail(campaign.ownerEmail) === null) {
-      return campaign;
-    }
-
     return null;
   }
 
   async createCampaign(input: CreateCampaignInput): Promise<{ campaign: CampaignRecord }> {
+    if (this.validateMediaAsset && !await this.validateMediaAsset(input.videoAssetId, input.ownerEmail, 'video')) {
+      throw new Error('INVALID_VIDEO_ASSET');
+    }
+    const contentQueueId = input.contentQueueId ?? input.playlistId;
+    if (contentQueueId && this.validateContentQueueSelection && !await this.validateContentQueueSelection(
+      contentQueueId,
+      input.queueItemId,
+      input.videoAssetId,
+      input.ownerEmail,
+    )) {
+      throw new Error('INVALID_CONTENT_QUEUE_SELECTION');
+    }
     const nowIso = this.now().toISOString();
     const record: CampaignRecord = {
       id: randomUUID(),
@@ -259,7 +282,9 @@ export class CampaignService {
       videoAssetId: input.videoAssetId,
       status: 'draft',
       scheduledAt: input.scheduledAt ?? null,
-      playlistId: input.playlistId ?? null,
+      playlistId: contentQueueId ?? null,
+      contentQueueId: contentQueueId ?? null,
+      queueItemId: input.queueItemId ?? null,
       autoMode: input.autoMode ?? false,
       schedulePattern: input.schedulePattern ?? null,
       targets: [],
@@ -305,7 +330,8 @@ export class CampaignService {
       videoDescription: input.videoDescription,
       tags: input.tags ?? [],
       publishAt: input.publishAt ?? null,
-      playlistId: input.playlistId ?? null,
+      playlistId: input.youtubePlaylistId ?? input.playlistId ?? null,
+      youtubePlaylistId: input.youtubePlaylistId ?? input.playlistId ?? null,
       privacy: input.privacy ?? (platform === 'instagram' ? 'public' : 'private'),
       thumbnailAssetId: input.thumbnailAssetId ?? null,
       status: 'aguardando',
@@ -318,6 +344,7 @@ export class CampaignService {
       tiktokDisableComment: null,
       tiktokDisableDuet: null,
       tiktokDisableStitch: null,
+      tiktokCoverTimestampMs: platform === 'tiktok' ? input.tiktokCoverTimestampMs ?? 0 : null,
       instagramCaption,
       instagramShareToFeed: platform === 'instagram' ? input.instagramShareToFeed ?? true : null,
       createdAt: nowIso,
@@ -458,6 +485,7 @@ export class CampaignService {
       tiktokDisableComment: t.tiktokDisableComment ?? null,
       tiktokDisableDuet: t.tiktokDisableDuet ?? null,
       tiktokDisableStitch: t.tiktokDisableStitch ?? null,
+      tiktokCoverTimestampMs: t.tiktokCoverTimestampMs ?? null,
       instagramCaption: t.instagramCaption ?? null,
       instagramShareToFeed: t.instagramShareToFeed ?? null,
       createdAt: nowIso,
@@ -660,6 +688,10 @@ export class CampaignService {
           status: newStatus,
           updatedAt: this.now().toISOString(),
         });
+        if (refreshedCampaign.queueItemId) {
+          if (anySuccess) await this.queueLifecycle?.markPublished(refreshedCampaign.queueItemId);
+          else await this.queueLifecycle?.release(refreshedCampaign.queueItemId);
+        }
         // Send email notification for campaign completion/failure
         await this.notifyCampaignCompletion(refreshedCampaign, newStatus);
       } else {
@@ -682,8 +714,9 @@ export class CampaignService {
     const campaign = await this.resolveCampaign(campaignId, ownerEmail);
     if (!campaign) return { error: 'NOT_FOUND' };
     if (campaign.status !== 'draft' && campaign.status !== 'ready') return { error: 'CAMPAIGN_ACTIVE' };
-
-    return { deleted: await this.repository.delete(campaignId) };
+    const deleted = await this.repository.delete(campaignId);
+    if (deleted && campaign.queueItemId) await this.queueLifecycle?.release(campaign.queueItemId);
+    return { deleted };
   }
 
   async updateCampaign(

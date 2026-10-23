@@ -5,12 +5,15 @@ import type { RegisterDto } from './dto/register.dto';
 import { validateRegisterDto } from './dto/register.dto';
 import { AuthService, type AccountDeletionSchedule } from './auth.service';
 import { SessionGuard, type SessionRequestLike } from './session.guard';
-import { SessionStore } from './session-store';
+import { parseCookieHeader, SessionStore } from './session-store';
+
+const LOGIN_OAUTH_STATE_COOKIE = 'pmp_login_oauth_state';
 
 export interface AuthRequest extends SessionRequestLike {
   body?: Partial<LoginDto & RegisterDto> & {
     currentPassword?: string;
     confirmationCode?: string;
+    confirmationText?: string;
     token?: string;
     newPassword?: string;
   };
@@ -18,6 +21,7 @@ export interface AuthRequest extends SessionRequestLike {
     code?: string;
     state?: string;
   };
+  headers?: Record<string, string | string[] | undefined>;
 }
 
 export interface CookieDescriptor extends SessionCookieOptions {
@@ -32,9 +36,10 @@ export interface ControllerResponse<TBody> {
 
 type AuthenticatedUserResponse = {
   email: string;
+  storageScope: string;
   fullName?: string;
   needsPlanSelection: boolean;
-  accountDeletionConfirmationMethod?: 'password' | 'email_code';
+  accountDeletionConfirmationMethod?: 'password' | 'email_code' | 'google_reauth';
   accountDeletion?: AccountDeletionSchedule | null;
 };
 
@@ -53,6 +58,10 @@ export class AuthController {
   }
 
   async login(request: AuthRequest): Promise<ControllerResponse<{ error?: string; user?: AuthenticatedUserResponse }>> {
+    if (this.authService.isGoogleOnlyMode()) {
+      return { status: 403, body: { error: 'Use Continuar com Google para acessar a plataforma.' }, cookies: [] };
+    }
+
     const validation = validateLoginDto(request.body);
 
     if (!validation.ok) {
@@ -70,6 +79,10 @@ export class AuthController {
   }
 
   async register(request: AuthRequest): Promise<ControllerResponse<{ error?: string; user?: AuthenticatedUserResponse }>> {
+    if (this.authService.isGoogleOnlyMode()) {
+      return { status: 403, body: { error: 'Novas contas sao criadas exclusivamente pelo Google.' }, cookies: [] };
+    }
+
     const validation = validateRegisterDto(request.body);
 
     if (!validation.ok) {
@@ -89,6 +102,10 @@ export class AuthController {
   async requestPasswordReset(
     request: AuthRequest,
   ): Promise<ControllerResponse<{ message: string } | { error: string }>> {
+    if (this.authService.isGoogleOnlyMode()) {
+      return { status: 403, body: { error: 'Recuperacao por senha desativada. Entre com o Google.' }, cookies: [] };
+    }
+
     const email = typeof request.body?.email === 'string' ? request.body.email.trim() : '';
     if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return {
@@ -109,6 +126,10 @@ export class AuthController {
   async resetPassword(
     request: AuthRequest,
   ): Promise<ControllerResponse<{ message?: string; error?: string }>> {
+    if (this.authService.isGoogleOnlyMode()) {
+      return { status: 403, body: { error: 'Recuperacao por senha desativada. Entre com o Google.' }, cookies: [] };
+    }
+
     const token = typeof request.body?.token === 'string' ? request.body.token : '';
     const newPassword = typeof request.body?.newPassword === 'string' ? request.body.newPassword : '';
     const result = await this.authService.resetPassword(token, newPassword);
@@ -119,16 +140,22 @@ export class AuthController {
   }
 
   async startGoogleOauth(
-    request: SessionRequestLike,
+    request: AuthRequest,
   ): Promise<ControllerResponse<{ error?: string; redirectUrl?: string }>> {
     try {
       const redirectUrl = await this.authService.createGoogleAuthorizationRedirect(
         request.session as unknown as { oauthStateNonce?: string } | null | undefined,
       );
+      const state = new URL(redirectUrl).searchParams.get('state');
       return {
         status: 200,
         body: { redirectUrl },
-        cookies: [],
+        cookies: state ? [{
+          ...this.cookieOptions,
+          maxAge: 10 * 60 * 1000,
+          name: LOGIN_OAUTH_STATE_COOKIE,
+          value: state,
+        }] : [],
       };
     } catch (error) {
       return {
@@ -159,11 +186,15 @@ export class AuthController {
 
     let result;
     try {
+      const cookieHeader = request.headers?.cookie;
+      const serializedCookie = Array.isArray(cookieHeader) ? cookieHeader[0] : cookieHeader;
+      const expectedState = parseCookieHeader(serializedCookie)[LOGIN_OAUTH_STATE_COOKIE]
+        ?? (request.session as unknown as { oauthStateNonce?: string } | null | undefined)?.oauthStateNonce;
       result = await this.authService.authenticateWithGoogleCallback(
         {
           code,
           state,
-          session: request.session as unknown as { oauthStateNonce?: string } | null | undefined,
+          session: expectedState ? { oauthStateNonce: expectedState } : undefined,
         },
         request.session,
       );
@@ -177,10 +208,18 @@ export class AuthController {
       };
     }
 
-    return this.toAuthResponse(result);
+    const response = this.toAuthResponse(result);
+    response.cookies.push({
+      ...this.cookieOptions,
+      maxAge: 0,
+      name: LOGIN_OAUTH_STATE_COOKIE,
+      value: '',
+    });
+    return response;
   }
 
   async logout(request: SessionRequestLike): Promise<ControllerResponse<{ success: true }>> {
+    this.sessionStore?.revokeSession(request.session?.id);
     await this.authService.logout(request.session);
 
     return {
@@ -290,6 +329,7 @@ export class AuthController {
     const result = await this.authService.requestAccountDeletion(user.email, request.session, {
       currentPassword: typeof request.body?.currentPassword === 'string' ? request.body.currentPassword : undefined,
       confirmationCode: typeof request.body?.confirmationCode === 'string' ? request.body.confirmationCode : undefined,
+      confirmationText: typeof request.body?.confirmationText === 'string' ? request.body.confirmationText : undefined,
     });
     if (!result.ok) {
       return {
@@ -458,7 +498,7 @@ export class AuthController {
       email: string;
       fullName?: string;
       needsPlanSelection?: boolean;
-      accountDeletionConfirmationMethod?: 'password' | 'email_code';
+      accountDeletionConfirmationMethod?: 'password' | 'email_code' | 'google_reauth';
       accountDeletionRequestedAt?: string;
       accountDeactivationAt?: string;
       accountDeletionAt?: string;
@@ -468,6 +508,7 @@ export class AuthController {
   ): AuthenticatedUserResponse {
     const response: AuthenticatedUserResponse = {
       email: user.email,
+      storageScope: this.authService.createBrowserStorageScope(user.email),
       fullName: user.fullName,
       needsPlanSelection: Boolean(user.needsPlanSelection),
       accountDeletionConfirmationMethod,

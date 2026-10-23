@@ -12,6 +12,8 @@ const AUTHENTICATED_SESSION = {
   },
 };
 
+const VALID_MP4 = Buffer.from([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]);
+
 const tempRoots: string[] = [];
 
 afterEach(async () => {
@@ -39,7 +41,7 @@ describe('media metadata retrieval', () => {
           {
             originalname: 'older.mp4',
             mimetype: 'video/mp4',
-            buffer: Buffer.from('old-video'),
+            buffer: VALID_MP4,
             durationSeconds: 30,
           },
         ],
@@ -53,7 +55,7 @@ describe('media metadata retrieval', () => {
           {
             originalname: 'newer.mp4',
             mimetype: 'video/mp4',
-            buffer: Buffer.from('new-video'),
+            buffer: VALID_MP4,
             durationSeconds: 45,
           },
         ],

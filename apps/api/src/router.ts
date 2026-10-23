@@ -17,6 +17,8 @@ export interface ApiRequest {
   session: AdminSession | null;
   body?: unknown;
   query?: Record<string, string>;
+  headers?: Record<string, string | string[] | undefined>;
+  rawBody?: string;
 }
 
 export interface ApiResponse {
@@ -479,6 +481,12 @@ export function createApiRouter(options: {
       },
       {
         method: 'GET',
+        pattern: /^\/api\/channels\/([^/]+)\/youtube-playlists$/,
+        paramNames: ['channelId'],
+        handler: (req: AccountsRequest) => accountsController.getYouTubePlaylists(req),
+      },
+      {
+        method: 'GET',
         pattern: /^\/api\/accounts\/([^/]+)$/,
         paramNames: ['accountId'],
         handler: (req: AccountsRequest) => accountsController.getAccount(req),
@@ -520,6 +528,12 @@ export function createApiRouter(options: {
         handler: (req: MediaRequest) => mediaController.linkThumbnail(req),
       },
       {
+        method: 'POST',
+        pattern: /^\/api\/media\/([^/]+)\/thumbnails$/,
+        paramNames: ['id'],
+        handler: (req: MediaRequest) => mediaController.createThumbnailForVideo(req),
+      },
+      {
         method: 'GET',
         pattern: /^\/api\/media\/([^/]+)$/,
         paramNames: ['id'],
@@ -557,6 +571,15 @@ export function createApiRouter(options: {
       { method: 'POST', pattern: /^\/api\/playlists\/([^/]+)\/items$/, paramNames: ['id'], handler: (req: any) => playlistController.addItem(req) },
       { method: 'DELETE', pattern: /^\/api\/playlists\/([^/]+)\/items\/([^/]+)$/, paramNames: ['id', 'videoAssetId'], handler: (req: any) => playlistController.removeItem(req) },
       { method: 'GET', pattern: /^\/api\/playlists\/([^/]+)\/next$/, paramNames: ['id'], handler: (req: any) => playlistController.pickNextAutoVideo(req) },
+      { method: 'GET', pattern: /^\/api\/content-queues$/, paramNames: [], handler: (req: any) => playlistController.listPlaylists(req) },
+      { method: 'POST', pattern: /^\/api\/content-queues$/, paramNames: [], handler: (req: any) => playlistController.createPlaylist(req) },
+      { method: 'POST', pattern: /^\/api\/content-queues\/scan$/, paramNames: [], handler: (req: any) => playlistController.scanFolder(req) },
+      { method: 'GET', pattern: /^\/api\/content-queues\/([^/]+)$/, paramNames: ['id'], handler: (req: any) => playlistController.getPlaylist(req) },
+      { method: 'DELETE', pattern: /^\/api\/content-queues\/([^/]+)$/, paramNames: ['id'], handler: (req: any) => playlistController.deletePlaylist(req) },
+      { method: 'POST', pattern: /^\/api\/content-queues\/([^/]+)\/items$/, paramNames: ['id'], handler: (req: any) => playlistController.addItem(req) },
+      { method: 'DELETE', pattern: /^\/api\/content-queues\/([^/]+)\/items\/([^/]+)$/, paramNames: ['id', 'videoAssetId'], handler: (req: any) => playlistController.removeItem(req) },
+      { method: 'POST', pattern: /^\/api\/content-queues\/([^/]+)\/reservations$/, paramNames: ['id'], handler: (req: any) => playlistController.reserveNextVideo(req) },
+      { method: 'DELETE', pattern: /^\/api\/content-queues\/([^/]+)\/reservations\/([^/]+)$/, paramNames: ['id', 'itemId'], handler: (req: any) => playlistController.releaseReservation(req) },
       { method: 'GET', pattern: /^\/api\/media\/([^/]+)\/preset$/, paramNames: ['videoAssetId'], handler: (req: any) => playlistController.getPreset(req) },
       { method: 'PUT', pattern: /^\/api\/media\/([^/]+)\/preset$/, paramNames: ['videoAssetId'], handler: (req: any) => playlistController.upsertPreset(req) },
       { method: 'DELETE', pattern: /^\/api\/media\/([^/]+)\/preset$/, paramNames: ['videoAssetId'], handler: (req: any) => playlistController.deletePreset(req) },
@@ -618,6 +641,8 @@ export function createApiRouter(options: {
           body: request.body,
           params,
           query: request.query,
+          headers: request.headers,
+          rawBody: request.rawBody,
         };
 
         const result = await route.handler(controllerRequest);

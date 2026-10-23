@@ -21,6 +21,7 @@ cp .env.example .env
 Fill any real credentials you need.  
 `DATABASE_URL` can stay empty for in-memory mode.
 `PUBLIC_APP_URL` should point to the externally reachable base URL when platforms like TikTok need to fetch uploaded media back from your server.
+`ALLOWED_ORIGINS` can contain a comma-separated allowlist of additional browser origins. Never use `*` in production.
 
 For persistent local development with PostgreSQL:
 
@@ -67,7 +68,7 @@ For TikTok account connection, set:
 
 - `TIKTOK_CLIENT_KEY`
 - `TIKTOK_CLIENT_SECRET`
-- `TIKTOK_REDIRECT_URI=http://127.0.0.1:3000/workspace/accounts/callback?provider=tiktok`
+- `TIKTOK_REDIRECT_URI=http://127.0.0.1:3000/api/accounts/oauth/tiktok/callback`
 
 Register the same callback in the TikTok developer console.
 For direct video publishing to TikTok, your TikTok app must also have the Content Posting API enabled for Direct Post, the `video.publish` scope approved, and the domain used by `PUBLIC_APP_URL` verified in TikTok URL properties because the app uses TikTok's `PULL_FROM_URL` flow.

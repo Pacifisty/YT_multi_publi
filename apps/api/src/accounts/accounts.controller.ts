@@ -25,6 +25,37 @@ interface ChannelSyncSummary {
   message: string;
 }
 
+/**
+ * Browser-safe representation of a connected account.
+ *
+ * Keep this as an explicit allowlist. Persistence-only fields such as ownerEmail,
+ * provider subjects, scopes and encrypted OAuth tokens must never cross the API
+ * boundary into the browser.
+ */
+export interface PublicConnectedAccount {
+  id: string;
+  provider: string;
+  email?: string;
+  displayName?: string;
+  tokenExpiresAt: string | null;
+  status: ConnectedAccountRecord['status'];
+  connectedAt: string;
+  updatedAt: string;
+}
+
+export function toPublicConnectedAccount(account: ConnectedAccountRecord): PublicConnectedAccount {
+  return {
+    id: account.id,
+    provider: account.provider,
+    ...(account.email ? { email: maskEmailAddress(account.email) } : {}),
+    ...(account.displayName ? { displayName: account.displayName } : {}),
+    tokenExpiresAt: account.tokenExpiresAt,
+    status: account.status,
+    connectedAt: account.connectedAt,
+    updatedAt: account.updatedAt,
+  };
+}
+
 export class AccountsController {
   constructor(
     private readonly accountsService: AccountsService,
@@ -33,7 +64,7 @@ export class AccountsController {
 
   async listAccounts(
     request: SessionRequestLike,
-  ): Promise<AccountsControllerResponse<{ accounts?: ConnectedAccountRecord[]; error?: string }>> {
+  ): Promise<AccountsControllerResponse<{ accounts?: PublicConnectedAccount[]; error?: string }>> {
     const guardResult = this.sessionGuard.check(request);
     if (!guardResult.allowed) {
       return { status: guardResult.status, body: { error: guardResult.reason } };
@@ -41,12 +72,12 @@ export class AccountsController {
 
     const ownerEmail = request.session?.adminUser?.email;
     const accounts = await this.accountsService.listAccounts(ownerEmail);
-    return { status: 200, body: { accounts } };
+    return { status: 200, body: { accounts: accounts.map(toPublicConnectedAccount) } };
   }
 
   async getAccount(
     request: AccountsRequest,
-  ): Promise<AccountsControllerResponse<{ account?: ConnectedAccountRecord; error?: string }>> {
+  ): Promise<AccountsControllerResponse<{ account?: PublicConnectedAccount; error?: string }>> {
     const guardResult = this.sessionGuard.check(request);
     if (!guardResult.allowed) {
       return { status: guardResult.status, body: { error: guardResult.reason } };
@@ -57,12 +88,13 @@ export class AccountsController {
       return { status: 400, body: { error: 'Missing accountId parameter.' } };
     }
 
-    const account = await this.accountsService.getAccount(accountId);
+    const ownerEmail = request.session?.adminUser?.email;
+    const account = await this.accountsService.getAccount(accountId, ownerEmail);
     if (!account) {
       return { status: 404, body: { error: 'Account not found.' } };
     }
 
-    return { status: 200, body: { account } };
+    return { status: 200, body: { account: toPublicConnectedAccount(account) } };
   }
 
   async startGoogleOauth(request: SessionRequestLike): Promise<AccountsControllerResponse<{ error?: string; redirectUrl?: string }>> {
@@ -122,26 +154,26 @@ export class AccountsController {
 
   async handleGoogleOauthCallback(
     request: AccountsRequest,
-  ): Promise<AccountsControllerResponse<{ error?: string; account?: ConnectedAccountRecord; sync?: ChannelSyncSummary }>> {
+  ): Promise<AccountsControllerResponse<{ error?: string; account?: PublicConnectedAccount; sync?: ChannelSyncSummary }>> {
     return this.handleOauthCallbackForProvider('google', request);
   }
 
   async handleTikTokOauthCallback(
     request: AccountsRequest,
-  ): Promise<AccountsControllerResponse<{ error?: string; account?: ConnectedAccountRecord; sync?: ChannelSyncSummary }>> {
+  ): Promise<AccountsControllerResponse<{ error?: string; account?: PublicConnectedAccount; sync?: ChannelSyncSummary }>> {
     return this.handleOauthCallbackForProvider('tiktok', request);
   }
 
   async handleInstagramOauthCallback(
     request: AccountsRequest,
-  ): Promise<AccountsControllerResponse<{ error?: string; account?: ConnectedAccountRecord; sync?: ChannelSyncSummary }>> {
+  ): Promise<AccountsControllerResponse<{ error?: string; account?: PublicConnectedAccount; sync?: ChannelSyncSummary }>> {
     return this.handleOauthCallbackForProvider('instagram', request);
   }
 
   private async handleOauthCallbackForProvider(
     provider: SupportedOauthProvider,
     request: AccountsRequest,
-  ): Promise<AccountsControllerResponse<{ error?: string; account?: ConnectedAccountRecord; sync?: ChannelSyncSummary }>> {
+  ): Promise<AccountsControllerResponse<{ error?: string; account?: PublicConnectedAccount; sync?: ChannelSyncSummary }>> {
     const guardResult = this.sessionGuard.check(request);
 
     if (!guardResult.allowed) {
@@ -205,7 +237,7 @@ export class AccountsController {
     return {
       status: 200,
       body: {
-        account: result.account,
+        account: toPublicConnectedAccount(result.account),
         sync: syncSummary,
       },
     };
@@ -235,9 +267,25 @@ export class AccountsController {
     return { status: 200, body: { channels } };
   }
 
+  async getYouTubePlaylists(
+    request: AccountsRequest,
+  ): Promise<AccountsControllerResponse<{ error?: string; playlists?: Array<{ id: string; title: string; itemCount: number; privacyStatus: string | null }> }>> {
+    const guardResult = this.sessionGuard.check(request);
+    if (!guardResult.allowed) return { status: 401, body: { error: guardResult.reason } };
+    const channelId = request.params?.channelId;
+    if (!channelId) return { status: 400, body: { error: 'Missing channelId parameter.' } };
+    try {
+      const playlists = await this.accountsService.listYouTubePlaylists(channelId, request.session?.adminUser?.email);
+      if (!playlists) return { status: 404, body: { error: 'Channel not found.' } };
+      return { status: 200, body: { playlists } };
+    } catch (error) {
+      return { status: 502, body: { error: error instanceof Error ? error.message : 'Could not list YouTube playlists.' } };
+    }
+  }
+
   async handleYouTubeOauthCallback(
     request: AccountsRequest,
-  ): Promise<AccountsControllerResponse<{ error?: string; account?: ConnectedAccountRecord; sync?: ChannelSyncSummary }>> {
+  ): Promise<AccountsControllerResponse<{ error?: string; account?: PublicConnectedAccount; sync?: ChannelSyncSummary }>> {
     return this.handleOauthCallbackForProvider('youtube', request);
   }
 
@@ -390,4 +438,17 @@ function getProviderLabel(provider: SupportedOauthProvider): string {
     default:
       return 'Google';
   }
+}
+
+function maskEmailAddress(email: string): string {
+  const normalized = email.trim();
+  const atIndex = normalized.lastIndexOf('@');
+  if (atIndex <= 0 || atIndex === normalized.length - 1) {
+    return '***';
+  }
+
+  const local = normalized.slice(0, atIndex);
+  const domain = normalized.slice(atIndex + 1);
+  const visibleLength = local.length <= 2 ? 1 : 2;
+  return `${local.slice(0, visibleLength)}***@${domain}`;
 }

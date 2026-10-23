@@ -1,4 +1,5 @@
 import type { AccountPlanType, AccountPlanDefinition, TokenPackDefinition } from './account-plan.service';
+import { randomUUID } from 'node:crypto';
 import { paymentLogger } from '../common/payment-logger';
 import type { EmailService } from '../integrations/email/email-service';
 import type { WebhookDeduplicator } from './webhook-deduplication';
@@ -142,7 +143,7 @@ export class PaymentService {
     }
 
     const nowIso = this.now().toISOString();
-    const id = `pay_${Math.random().toString(36).slice(2, 12)}_${Date.now()}`;
+    const id = `pay_${randomUUID()}`;
     const successUrl = input.successUrl ?? this.defaultSuccessUrl;
     const cancelUrl = input.cancelUrl ?? this.defaultCancelUrl;
 
@@ -262,6 +263,12 @@ export class PaymentService {
 
   async getIntent(id: string): Promise<PaymentIntent | null> {
     return this.repository.findById(id);
+  }
+
+  async getIntentForEmail(id: string, email: string): Promise<PaymentIntent | null> {
+    const intent = await this.repository.findById(id);
+    if (!intent || intent.email !== email.trim().toLowerCase()) return null;
+    return intent;
   }
 
   async listIntentsForEmail(email: string): Promise<PaymentIntent[]> {

@@ -11,12 +11,14 @@ import type { AccountPlanStore } from './account-plan/account-plan.service';
 import type { WebhookDeduplicator } from './account-plan/webhook-deduplication';
 import type { PaymentRepository } from './account-plan/payment.service';
 import type { ServiceRequestRepository } from './service-requests/service-request.repository';
+import type { SessionStore } from './auth/session-store';
 
 export interface ServerConfig extends EnvConfig {}
 
 export interface ServerOptions {
   env: Record<string, string | undefined>;
   sessionResolver?: (cookieHeader: string | undefined) => AdminSession | null;
+  sessionStore?: SessionStore;
   authModuleOptions?: AuthServiceOptions;
   campaignsModuleOptions?: CampaignsModuleOptions;
   accountsModuleOptions?: AccountsServiceOptions;
@@ -48,6 +50,7 @@ export function createServer(options: ServerOptions): ServerInstance {
     app = createApp({
       env: options.env,
       authModuleOptions: options.authModuleOptions,
+      sessionStore: options.sessionStore,
       campaignsModuleOptions: options.campaignsModuleOptions,
       accountsModuleOptions: options.accountsModuleOptions,
       mediaModuleOptions: options.mediaModuleOptions,

@@ -35,6 +35,8 @@ describe('google oauth callback endpoint', () => {
       handleOauthCallback: async () => ({
         ok: true,
         account: {
+          id: 'account-1',
+          ownerEmail: 'admin@example.com',
           provider: 'google',
           email: 'ops@example.com',
           displayName: 'Ops User',
@@ -47,6 +49,8 @@ describe('google oauth callback endpoint', () => {
           ],
           tokenExpiresAt: '2026-04-04T04:30:00.000Z',
           status: 'connected',
+          connectedAt: '2026-04-04T04:00:00.000Z',
+          updatedAt: '2026-04-04T04:30:00.000Z',
         },
       }),
     });
@@ -67,13 +71,14 @@ describe('google oauth callback endpoint', () => {
     expect(response.status).toBe(200);
     expect(response.body.account).toMatchObject({
       provider: 'google',
-      email: 'ops@example.com',
+      email: 'op***@example.com',
       displayName: 'Ops User',
       status: 'connected',
       tokenExpiresAt: '2026-04-04T04:30:00.000Z',
     });
-    expect(response.body.account?.accessTokenEnc).toBeDefined();
-    expect(response.body.account?.accessTokenEnc).not.toContain('oauth-code');
-    expect(response.body.account?.refreshTokenEnc).toBeDefined();
+    expect(response.body.account).not.toHaveProperty('accessTokenEnc');
+    expect(response.body.account).not.toHaveProperty('refreshTokenEnc');
+    expect(response.body.account).not.toHaveProperty('scopes');
+    expect(response.body.account).not.toHaveProperty('ownerEmail');
   });
 });

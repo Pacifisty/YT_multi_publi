@@ -30,6 +30,18 @@ export async function startServer(options: StartServerOptions): Promise<StartSer
 
   // Connect database if configured
   await bootstrapResult.databaseProvider.connect();
+  console.log(`[media] storage provider: ${bootstrapResult.server.app.mediaModule.mediaService.getStorageProviderName()}`);
+
+  try {
+    const orphanCleanup = await bootstrapResult.server.app.mediaModule.mediaService.cleanupOrphanedFiles({ force: true });
+    if (!orphanCleanup.skipped) {
+      console.log(
+        `[media] startup orphan cleanup: scanned=${orphanCleanup.scanned} deleted=${orphanCleanup.deleted} retained=${orphanCleanup.retained} failed=${orphanCleanup.failed}`,
+      );
+    }
+  } catch (error) {
+    console.warn(`[media] startup orphan cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
   const backgroundProcessorInterval = bootstrapResult.server.app.backgroundProcessor
     ? setInterval(() => {

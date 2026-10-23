@@ -200,15 +200,41 @@ export class YouTubeUploadWorker {
  * Performs a resumable upload streaming from disk.
  */
 export async function youtubeResumableUpload(context: UploadContext): Promise<UploadResult> {
-  const { createReadStream } = await import('node:fs');
+  const [{ constants, createReadStream }, { access }] = await Promise.all([
+    import('node:fs'),
+    import('node:fs/promises'),
+  ]);
+
+  try {
+    await access(context.filePath, constants.R_OK);
+  } catch {
+    throw new Error(`Video asset file is missing or unreadable: ${context.filePath}`);
+  }
+
+  if (context.thumbnailFilePath) {
+    try {
+      await access(context.thumbnailFilePath, constants.R_OK);
+    } catch {
+      throw new Error(`Thumbnail asset file is missing or unreadable: ${context.thumbnailFilePath}`);
+    }
+  }
+
   const { google } = await import('googleapis');
+  const awaitStreamRequest = <T>(
+    stream: ReturnType<typeof createReadStream>,
+    request: PromiseLike<T>,
+  ): Promise<T> => new Promise((resolve, reject) => {
+    stream.once('error', reject);
+    Promise.resolve(request).then(resolve, reject);
+  });
 
   const oauth2Client = new google.auth.OAuth2();
   oauth2Client.setCredentials({ access_token: context.accessToken });
 
   const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
 
-  const response = await youtube.videos.insert({
+  const videoStream = createReadStream(context.filePath);
+  const response = await awaitStreamRequest(videoStream, youtube.videos.insert({
     part: ['snippet', 'status'],
     requestBody: {
       snippet: {
@@ -221,9 +247,9 @@ export async function youtubeResumableUpload(context: UploadContext): Promise<Up
       },
     },
     media: {
-      body: createReadStream(context.filePath),
+      body: videoStream,
     },
-  });
+  }));
 
   if (!response.data.id) {
     throw new Error('YouTube API did not return a video ID');
@@ -254,12 +280,13 @@ export async function youtubeResumableUpload(context: UploadContext): Promise<Up
 
   if (context.thumbnailFilePath) {
     try {
-      await youtube.thumbnails.set({
+      const thumbnailStream = createReadStream(context.thumbnailFilePath);
+      await awaitStreamRequest(thumbnailStream, youtube.thumbnails.set({
         videoId: response.data.id,
         media: {
-          body: createReadStream(context.thumbnailFilePath),
+          body: thumbnailStream,
         },
-      });
+      }));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       throw new YouTubeUploadPartialFailureError(

@@ -13,6 +13,8 @@ import { paymentLogger } from '../common/payment-logger';
 export interface AccountPlanRequest extends SessionRequestLike {
   body?: unknown;
   params?: Record<string, string>;
+  headers?: Record<string, string | string[] | undefined>;
+  rawBody?: string;
 }
 
 export interface AccountPlanControllerOptions {
@@ -176,7 +178,12 @@ export class AccountPlanController {
       return { status: 400, body: { error: 'Missing intent id.' } };
     }
 
-    const intent = await this.paymentService.getIntent(intentId);
+    const email = request.session?.adminUser?.email;
+    if (!email) {
+      return { status: 401, body: { error: 'Authentication required.' } };
+    }
+
+    const intent = await this.paymentService.getIntentForEmail(intentId, email);
     if (!intent) {
       return { status: 404, body: { error: 'Payment intent not found.' } };
     }
@@ -205,8 +212,8 @@ export class AccountPlanController {
     if (!this.paymentService) {
       return { status: 503, body: { error: 'Payment service not configured.' } };
     }
-    const headers = (request as any).headers ?? {};
-    const rawBody = typeof request.body === 'string' ? request.body : JSON.stringify(request.body ?? {});
+    const headers = normalizeRequestHeaders(request.headers ?? {});
+    const rawBody = request.rawBody ?? (typeof request.body === 'string' ? request.body : JSON.stringify(request.body ?? {}));
     try {
       paymentLogger.logWebhookReceived('webhook-in-progress', 'unknown', rawBody.length);
       const updated = await this.paymentService.handleWebhook(headers, rawBody);
@@ -241,6 +248,15 @@ export class AccountPlanController {
     const intentId = request.params?.intentId;
     if (!intentId) {
       return { status: 400, body: { error: 'Missing intent id.' } };
+    }
+
+    const email = request.session?.adminUser?.email;
+    if (!email) {
+      return { status: 401, body: { error: 'Authentication required.' } };
+    }
+    const ownedIntent = await this.paymentService.getIntentForEmail(intentId, email);
+    if (!ownedIntent) {
+      return { status: 404, body: { error: 'Payment intent not found.' } };
     }
 
     const updated = await this.paymentService.markStatus(intentId, 'paid');
@@ -324,6 +340,13 @@ export class AccountPlanController {
       };
     }
 
+    if (normalizedPlan !== 'FREE') {
+      return {
+        status: 402,
+        body: { error: 'Planos pagos somente podem ser ativados depois da confirmacao do pagamento.' },
+      };
+    }
+
     try {
       const result = await this.accountPlanService.selectPlan(email, normalizedPlan as AccountPlanType);
       if (this.authController) {
@@ -385,4 +408,15 @@ export class AccountPlanController {
       throw error;
     }
   }
+}
+
+function normalizeRequestHeaders(
+  headers: Record<string, string | string[] | undefined>,
+): Record<string, string> {
+  const normalized: Record<string, string> = {};
+  for (const [name, value] of Object.entries(headers)) {
+    if (value === undefined) continue;
+    normalized[name.toLowerCase()] = Array.isArray(value) ? value.join(',') : value;
+  }
+  return normalized;
 }

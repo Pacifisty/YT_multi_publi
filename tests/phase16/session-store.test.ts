@@ -106,6 +106,28 @@ describe('SessionStore — token creation and verification', () => {
     expect(session!.adminUser!.accountDeactivationAt).toBe('2026-05-05T12:00:00.000Z');
     expect(session!.adminUser!.accountDeletionAt).toBe('2026-06-03T12:00:00.000Z');
   });
+
+  test('does not expose personal data as decodable token text', () => {
+    const store = new SessionStore({ secret: SECRET });
+    const token = store.createToken({ email: 'private@example.com', fullName: 'Private User' });
+
+    expect(token).not.toContain(Buffer.from('private@example.com').toString('base64url'));
+    expect(token).not.toContain('private@example.com');
+    expect(token).not.toContain('Private User');
+  });
+
+  test('rejects expired and revoked sessions', async () => {
+    const expiring = new SessionStore({ secret: SECRET, maxAgeMs: 1 });
+    const expiredToken = expiring.createToken({ email: 'admin@test.com' });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(expiring.verifyToken(expiredToken)).toBeNull();
+
+    const store = new SessionStore({ secret: SECRET });
+    const token = store.createToken({ email: 'admin@test.com' });
+    const session = store.verifyToken(token);
+    store.revokeSession(session?.id);
+    expect(store.verifyToken(token)).toBeNull();
+  });
 });
 
 describe('SessionStore — createSessionResolver', () => {

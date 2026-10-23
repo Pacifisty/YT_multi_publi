@@ -56,7 +56,7 @@ describe('Error Handling Middleware', () => {
     expect(res._status).toBe(500);
     const body = JSON.parse(res._body);
     expect(body.error).toBe('Internal Server Error');
-    expect(body.message).toBe('Something went wrong');
+    expect(body.message).toBe('An unexpected server error occurred.');
   });
 
   it('hides stack trace in production', async () => {
@@ -116,7 +116,7 @@ describe('Error Handling Middleware', () => {
     expect(res._status).toBe(500);
     const body = JSON.parse(res._body);
     expect(body.error).toBe('Internal Server Error');
-    expect(body.message).toBe('An unexpected error occurred');
+    expect(body.message).toBe('An unexpected server error occurred.');
   });
 
   it('handles errors with status property (alternative to statusCode)', async () => {
@@ -164,6 +164,24 @@ describe('Error Handling Middleware', () => {
     const body = JSON.parse(res._body);
     expect(body.error).toBe('Bad Request');
     expect(body.message).toBe('Bad request data');
+  });
+
+  it('returns the standard label for oversized payloads', async () => {
+    const handler = createErrorHandler({ nodeEnv: 'production' });
+    const req = createMockReq();
+    const res = createMockRes();
+    const err = new Error('Request body exceeds the maximum allowed size.') as Error & { statusCode: number };
+    err.statusCode = 413;
+
+    await handler(req, res, async () => {
+      throw err;
+    });
+
+    expect(res._status).toBe(413);
+    expect(JSON.parse(res._body)).toEqual({
+      error: 'Payload Too Large',
+      message: 'Request body exceeds the maximum allowed size.',
+    });
   });
 
   it('clamps status codes to valid HTTP range', async () => {

@@ -95,6 +95,11 @@ export class ServiceRequestService {
       throw new ServiceRequestError(400, 'Informe o protocolo e a chave de acompanhamento.');
     }
     const record = await this.repository.findByProtocol(normalizedProtocol);
+    const trackingTtlDays = parsePositiveInteger(this.env.SUPPORT_TRACKING_TTL_DAYS, 30);
+    const expiresAt = record ? record.createdAt.getTime() + trackingTtlDays * 24 * 60 * 60 * 1000 : 0;
+    if (record && expiresAt <= this.now().getTime()) {
+      throw new ServiceRequestError(404, 'Solicitacao nao encontrada para os dados informados.');
+    }
     if (!record || !safeHashEquals(record.trackingTokenHash, hashSecret(trackingKey.trim()))) {
       throw new ServiceRequestError(404, 'Solicitacao nao encontrada para os dados informados.');
     }
@@ -115,6 +120,11 @@ export class ServiceRequestService {
     }
     return toPublicRequest(record);
   }
+}
+
+function parsePositiveInteger(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function validateCreateInput(input: Partial<CreateServiceRequestDto>): {

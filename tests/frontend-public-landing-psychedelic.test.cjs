@@ -17,7 +17,7 @@ test('public root uses the complete login experience without retired landing ren
   assert.match(APP_JS, /navigate\(me\.needsPlanSelection \? '\/onboarding\/plan' : '\/workspace\/dashboard', true\)/);
 });
 
-test('legacy neon and psychedelic systems are absent from the production bundle', () => {
+test('legacy neon, animated logo, and psychedelic systems are absent from the production bundle', () => {
   assert.doesNotMatch(APP_JS, /renderPlatformLogo3d|renderAnimatedLogoByPlatform|injectLogoStyles|LOGO_STYLES/);
   assert.doesNotMatch(APP_CSS, /\.neon-media-|\.platform-logo-3d|\.public-psychedelic-page|\.psy-/);
   assert.doesNotMatch(APP_CSS, /@keyframes (?:neon-media|psy|login)-/);
@@ -27,6 +27,12 @@ test('legacy neon and psychedelic systems are absent from the production bundle'
   assert.match(APP_JS, /\/assets\/icons\/IG_instagram\.svg/);
   assert.equal(fs.existsSync(path.join(ROOT, 'apps', 'api', 'src', 'frontend', 'logo-renderers.js')), false);
   assert.equal(fs.existsSync(path.join(ROOT, 'apps', 'api', 'src', 'frontend', 'public', 'assets', 'neon-icons')), false);
+  for (const renderer of ['index.js', 'instagram-logo.jsx', 'tiktok-logo.jsx', 'youtube-logo.jsx']) {
+    assert.equal(
+      fs.existsSync(path.join(ROOT, 'apps', 'web', 'components', 'logos', 'animated', renderer)),
+      false,
+    );
+  }
 });
 
 test('server-rendered SEO metadata describes the landing conversion goal', () => {

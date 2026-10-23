@@ -149,6 +149,20 @@ describe('HTTP adapter — createRequestHandler', () => {
     );
   });
 
+  test('scopes authenticated media file access to the signed-in owner', async () => {
+    const app = mockApp();
+    const getAssetFile = app.mediaModule.mediaService.getAssetFile as ReturnType<typeof vi.fn>;
+    const session = { adminUser: { email: 'owner@example.com' } };
+    const handler = createRequestHandler({ app, sessionResolver: () => session });
+    const req = mockReq({ method: 'GET', url: '/media-files/asset-1' });
+    const res = mockRes();
+
+    await handler(req, res as any);
+
+    expect(getAssetFile).toHaveBeenCalledWith('asset-1', 'owner@example.com');
+    expect(res._status).toBe(404);
+  });
+
   test('sets Set-Cookie headers from response cookies', async () => {
     const app = mockApp({
       status: 200,
@@ -192,6 +206,26 @@ describe('HTTP adapter — createRequestHandler', () => {
 
     expect(res._status).toBe(400);
     expect(JSON.parse(res._body)).toEqual({ error: 'Invalid JSON body' });
+  });
+
+  test('rejects JSON request bodies larger than 1 MB with a 413 error', async () => {
+    const app = mockApp();
+    const handler = createRequestHandler({ app });
+    const oversized = Buffer.alloc((1024 * 1024) + 1, 0x61);
+    const req: any = {
+      method: 'POST',
+      url: '/api/campaigns',
+      headers: { 'content-type': 'application/json' },
+      on(event: string, cb: Function) {
+        if (event === 'data') cb(oversized);
+        if (event === 'end') cb();
+        return req;
+      },
+    };
+
+    await expect(handler(req as IncomingMessage, mockRes() as any)).rejects.toMatchObject({
+      statusCode: 413,
+    });
   });
 
   test('handles request with no body for GET', async () => {
@@ -291,7 +325,7 @@ describe('HTTP adapter — createRequestHandler', () => {
     expect(res._body).toContain('<a href="/privacy">Política de Privacidade</a>');
     expect(res._body).toContain('<a href="/terms">Termos de Uso</a>');
     expect(res._body).toContain('<a href="/data-deletion">Exclusão de Dados</a>');
-    expect(res._body).toContain('window.__PMP_LEGAL_DOCUMENTS__');
+    expect(res._body).toContain('id="pmp-legal-documents"');
     expect(res._body).toMatch(/<script src="\/i18n\.js\?v=[^"]+"><\/script>/);
   });
 
@@ -323,7 +357,7 @@ describe('HTTP adapter — createRequestHandler', () => {
     expect(privacyRes._body).toContain('<title>Política de Privacidade | Platform Multi Publisher</title>');
     expect(privacyRes._body).toContain('<meta name="robots" content="index,follow" />');
     expect(privacyRes._body).toContain('<link rel="canonical" href="https://platform.example/privacy" />');
-    expect(privacyRes._body).toContain('window.__PMP_LEGAL_DOCUMENTS__');
+    expect(privacyRes._body).toContain('id="pmp-legal-documents"');
 
     expect(termsRes._status).toBe(200);
     expect(termsRes._body).toContain('<title>Termos de Uso | Platform Multi Publisher</title>');
@@ -545,7 +579,7 @@ describe('HTTP adapter — createRequestHandler', () => {
 
     await handler(req, res as any);
 
-    expect(app.mediaModule.mediaService.getAssetFile).toHaveBeenCalledWith('media-1');
+    expect(app.mediaModule.mediaService.getAssetFile).toHaveBeenCalledWith('media-1', 'admin@test.com');
     expect(res._status).toBe(200);
     expect(res._headers['content-type']).toBe('video/mp4');
     expect(res._headers['accept-ranges']).toBe('bytes');
@@ -626,7 +660,7 @@ describe('HTTP adapter — cookie serialization', () => {
       status: 200,
       body: {},
       cookies: [
-        { name: 'session', value: 'tok', options: { maxAge: 3600 } },
+        { name: 'session', value: 'tok', options: { maxAge: 3_600_000 } },
       ],
     });
     const handler = createRequestHandler({ app });

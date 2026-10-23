@@ -7,6 +7,7 @@ import { PlaylistController } from './playlist.controller';
 export interface MediaModuleOptions extends MediaServiceOptions {
   playlistRepository?: PlaylistRepository;
   presetRepository?: PresetRepository;
+  importRoot?: string;
 }
 
 export interface MediaModuleInstance {
@@ -18,7 +19,7 @@ export interface MediaModuleInstance {
 }
 
 export function createMediaModule(options: MediaModuleOptions = {}): MediaModuleInstance {
-  const { playlistRepository, presetRepository, ...mediaOptions } = options;
+  const { playlistRepository, presetRepository, importRoot, ...mediaOptions } = options;
   const mediaService = new MediaService(mediaOptions);
   const sessionGuard = new SessionGuard();
   const mediaController = new MediaController(mediaService, sessionGuard);
@@ -26,7 +27,7 @@ export function createMediaModule(options: MediaModuleOptions = {}): MediaModule
     playlistRepo: playlistRepository,
     presetRepo: presetRepository,
   });
-  const playlistController = new PlaylistController(playlistService, mediaService, sessionGuard);
+  const playlistController = new PlaylistController(playlistService, mediaService, sessionGuard, importRoot);
 
   return {
     mediaController,

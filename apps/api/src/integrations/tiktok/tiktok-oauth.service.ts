@@ -1,7 +1,10 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 
-export const TIKTOK_BASIC_SCOPES = ['user.info.basic', 'video.publish', 'video.upload'] as const;
-export const TIKTOK_SANDBOX_SCOPES = ['user.info.basic'] as const;
+// This integration uses Direct Post with PULL_FROM_URL. TikTok documents that
+// flow under video.publish; video.upload is for the separate "Upload to TikTok"
+// flow and should not be requested when the app does not expose that product.
+export const TIKTOK_BASIC_SCOPES = ['user.info.basic', 'video.publish'] as const;
+export const TIKTOK_SANDBOX_SCOPES = TIKTOK_BASIC_SCOPES;
 
 export interface TikTokOauthSession {
   oauthStateNonce?: string;

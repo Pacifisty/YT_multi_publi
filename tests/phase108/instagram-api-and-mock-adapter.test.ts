@@ -20,6 +20,7 @@ describe('Phase 108 - Instagram API client and mock adapter', () => {
         expect(body.get('video_url')).toBe('https://cdn.example.com/reel.mp4');
         expect(body.get('caption')).toBe('Launch caption');
         expect(body.get('share_to_feed')).toBe('false');
+        expect(body.get('cover_url')).toBe('https://cdn.example.com/reel-cover.jpg');
         expect(body.get('access_token')).toBe('ig-access-token');
         return jsonResponse({ id: 'container-123' });
       }
@@ -50,6 +51,7 @@ describe('Phase 108 - Instagram API client and mock adapter', () => {
       videoUrl: 'https://cdn.example.com/reel.mp4',
       caption: 'Launch caption',
       shareToFeed: false,
+      coverUrl: 'https://cdn.example.com/reel-cover.jpg',
     })).resolves.toEqual({ creation_id: 'container-123' });
     await expect(client.publishReelsContainer('container-123')).resolves.toEqual({ id: 'post-123' });
     await expect(client.fetchContainerStatus('container-123')).resolves.toEqual({ status_code: 'FINISHED' });

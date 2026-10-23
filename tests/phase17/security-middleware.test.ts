@@ -73,7 +73,8 @@ describe('Security middleware — CORS', () => {
     await middleware(req, res as any, next);
 
     expect(res._headers['access-control-allow-origin']).toBeUndefined();
-    expect(next).toHaveBeenCalled();
+    expect(res._status).toBe(403);
+    expect(next).not.toHaveBeenCalled();
   });
 
   test('handles preflight OPTIONS request', async () => {
@@ -158,7 +159,7 @@ describe('Security middleware — security headers', () => {
 
     await middleware(req, res as any, next);
 
-    expect(res._headers['x-xss-protection']).toBe('1; mode=block');
+    expect(res._headers['x-xss-protection']).toBe('0');
   });
 
   test('sets Strict-Transport-Security header', async () => {
@@ -170,6 +171,20 @@ describe('Security middleware — security headers', () => {
     await middleware(req, res as any, next);
 
     expect(res._headers['strict-transport-security']).toContain('max-age=');
+  });
+
+  test('sets browser isolation and privacy headers', async () => {
+    const middleware = createSecurityMiddleware({ allowedOrigins: [] });
+    const next = vi.fn().mockResolvedValue(undefined);
+    const req = mockReq();
+    const res = mockRes();
+
+    await middleware(req, res as any, next);
+
+    expect(res._headers['content-security-policy']).toContain("frame-ancestors 'none'");
+    expect(res._headers['referrer-policy']).toBe('no-referrer');
+    expect(res._headers['permissions-policy']).toContain('camera=()');
+    expect(res._headers['cross-origin-opener-policy']).toBe('same-origin-allow-popups');
   });
 
   test('removes X-Powered-By by not setting it', async () => {

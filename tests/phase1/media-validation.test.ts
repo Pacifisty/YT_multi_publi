@@ -182,7 +182,7 @@ describe('media controller validation gate', () => {
         video: [{
           originalname: 'file.avi',
           mimetype: 'video/x-msvideo',
-          buffer: Buffer.from('video-content'),
+          buffer: Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypisom'), Buffer.alloc(24)]),
           durationSeconds: 60,
         }],
       },
@@ -214,6 +214,27 @@ describe('media controller validation gate', () => {
     expect(response.body).toHaveProperty('code', 'VIDEO_TOO_LARGE');
   });
 
+  test('rejects executable or spoofed content declared as MP4', async () => {
+    const storageRoot = await mkdtemp(join(tmpdir(), 'gsd-media-'));
+    tempRoots.push(storageRoot);
+
+    const mediaModule = createMediaModule({ storageRoot });
+    const response = await mediaModule.mediaController.createAsset({
+      session: AUTHENTICATED_SESSION,
+      files: {
+        video: [{
+          originalname: 'malware.mp4',
+          mimetype: 'video/mp4',
+          buffer: Buffer.from('MZ-not-a-real-video'),
+          durationSeconds: 1,
+        }],
+      },
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toHaveProperty('code', 'INVALID_VIDEO_CONTENT');
+  });
+
   test('rejects video over duration limit before persistence', async () => {
     const storageRoot = await mkdtemp(join(tmpdir(), 'gsd-media-'));
     tempRoots.push(storageRoot);
@@ -225,7 +246,7 @@ describe('media controller validation gate', () => {
         video: [{
           originalname: 'long.mp4',
           mimetype: 'video/mp4',
-          buffer: Buffer.from('video-content'),
+          buffer: Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypisom'), Buffer.alloc(24)]),
           durationSeconds: VALIDATION_RULES.VIDEO_MAX_DURATION_SECONDS + 1,
         }],
       },
@@ -246,7 +267,7 @@ describe('media controller validation gate', () => {
         video: [{
           originalname: 'feature-length.mp4',
           mimetype: 'video/mp4',
-          buffer: Buffer.from('video-content'),
+          buffer: Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypisom'), Buffer.alloc(24)]),
           durationSeconds: 21601,
         }],
       },
@@ -273,7 +294,7 @@ describe('media controller validation gate', () => {
         thumbnail: [{
           originalname: 'thumb.gif',
           mimetype: 'image/gif',
-          buffer: Buffer.from('thumbnail-content'),
+          buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0]),
         }],
       },
     });
@@ -293,7 +314,7 @@ describe('media controller validation gate', () => {
         video: [{
           originalname: 'ok.mp4',
           mimetype: 'video/mp4',
-          buffer: Buffer.from('video-content'),
+          buffer: Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypisom'), Buffer.alloc(24)]),
           durationSeconds: 60,
         }],
         thumbnail: [{
@@ -320,13 +341,13 @@ describe('media controller validation gate', () => {
         video: [{
           originalname: 'ok.mp4',
           mimetype: 'video/mp4',
-          buffer: Buffer.from('video-content'),
+          buffer: Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypisom'), Buffer.alloc(24)]),
           durationSeconds: 120,
         }],
         thumbnail: [{
           originalname: 'thumb.png',
           mimetype: 'image/png',
-          buffer: Buffer.from('thumbnail-content'),
+          buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
         }],
       },
     });

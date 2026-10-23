@@ -13,6 +13,7 @@ const STATUS_TEXT: Record<number, string> = {
   404: 'Not Found',
   405: 'Method Not Allowed',
   409: 'Conflict',
+  413: 'Payload Too Large',
   422: 'Unprocessable Entity',
   429: 'Too Many Requests',
   500: 'Internal Server Error',
@@ -60,7 +61,7 @@ export function createErrorHandler(
 
       const body: Record<string, unknown> = {
         error: getStatusText(statusCode),
-        message,
+        message: isDev || statusCode < 500 ? message : 'An unexpected server error occurred.',
       };
 
       if (isDev && isError) {

@@ -3,6 +3,7 @@
   const SUPPORTED_LOCALES = new Set(['pt-BR', 'en']);
   const STORAGE_KEY = 'ytmp-locale';
   const COOKIE_NAME = 'pmp_locale';
+  let storageScope = 'anonymous';
   const ATTRIBUTES = ['aria-label', 'aria-description', 'title', 'placeholder', 'alt'];
   const SKIP_TEXT_PARENTS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'CODE', 'PRE', 'TEXTAREA']);
 
@@ -732,8 +733,121 @@
     ['Mídia', 'Media', { pt: ['Midia'] }],
     ['Metadados', 'Metadata'],
     ['Revisão', 'Review', { pt: ['Revisao'] }],
+    ['Confirmar', 'Confirm'],
+    ['Plataformas, midia, destinos, metadados e uma confirmacao final. O fluxo fica salvo no navegador enquanto voce ajusta.', 'Platforms, media, destinations, metadata, and one final confirmation. The flow is saved in this browser while you make changes.'],
+    ['Conclusao', 'Outcome'],
+    ['Nao agendado', 'Not scheduled'],
+    ['Pendente', 'Pending'],
+    ['Como deseja concluir?', 'How do you want to finish?'],
+    ['Escolha agora o que deve acontecer quando voce confirmar a campanha.', 'Choose what should happen when you confirm the campaign.'],
+    ['Salvar como rascunho', 'Save as draft'],
+    ['Cria a campanha sem iniciar nenhuma publicacao.', 'Creates the campaign without starting any publication.'],
+    ['Publicar agora', 'Publish now'],
+    ['Cria, deixa pronta e inicia a publicacao imediatamente.', 'Creates the campaign, marks it ready, and starts publishing immediately.'],
+    ['Agendar', 'Schedule'],
+    ['Cria, deixa pronta e publica automaticamente nos horarios definidos.', 'Creates the campaign, marks it ready, and publishes automatically at the selected times.'],
+    ['Quando publicar?', 'When should it publish?'],
+    ['Use um horario geral e, se precisar, sobrescreva o horario em um destino.', 'Use one general time and override it for a destination when needed.'],
+    ['Prioridade dos horarios', 'Time priority'],
+    ['Horario do destino > padrao automatico > horario geral > publicacao manual', 'Destination time > automatic pattern > general time > manual publication'],
+    ['Selecionar destinos e agendamentos', 'Select destinations and schedules'],
+    ['Agora aparecem somente os canais e contas das plataformas escolhidas na Etapa 1.', 'Only channels and accounts from the platforms selected in Step 1 appear here.'],
+    ['Horario geral da campanha', 'General campaign time'],
+    ['Horario especifico deste destino', 'Specific time for this destination'],
+    ['Usar padrao aleatorio de dias e horarios para playlist.', 'Use a random day and time pattern for the content queue.'],
+    ['Usar padrao automatico de dias e horarios para a fila de conteudo.', 'Use an automatic day and time pattern for the content queue.'],
+    ['Criar como rascunho', 'Create as draft'],
+    ['Agendar publicacoes', 'Schedule publications'],
+    ['Etapa 5 de 5', 'Step 5 of 5'],
+    ['Confirmar e criar como rascunho', 'Confirm and create as draft'],
+    ['Confirmar e publicar agora', 'Confirm and publish now'],
+    ['Confirmar e agendar publicacoes', 'Confirm and schedule publications'],
+    ['Esta e a ultima etapa. Confira o resultado exato e confirme a acao escolhida.', 'This is the last step. Review the exact result and confirm the selected action.'],
+    ['Previa dos disparos', 'Publication preview'],
+    ['Video, destino e horario que serao usados.', 'Video, destination, and time that will be used.'],
+    ['Quando', 'When'],
+    ['Nao sera publicada', 'Will not be published'],
+    ['Assim que confirmar', 'As soon as you confirm'],
+    ['Horario pendente', 'Time pending'],
+    ['Tabela final por destino', 'Final table by destination'],
+    ['Resultado efetivo de cada publicacao antes do envio.', 'Effective result of each publication before sending.'],
+    ['Playlist do YouTube', 'YouTube playlist'],
+    ['Situacao', 'Status'],
+    ['Publicacao manual', 'Manual publication'],
+    ['Pronta para enviar', 'Ready to send'],
+    ['Pronta para agendar', 'Ready to schedule'],
+    ['Nao adicionar', 'Do not add'],
+    ['Nao se aplica', 'Not applicable'],
+    ['Conteudo publicado', 'Published content'],
+    ['Continuar de onde parou', 'Continue where you stopped'],
+    ['Processo concluido', 'Process completed'],
+    ['Rascunho criado', 'Draft created'],
+    ['Publicacao iniciada', 'Publication started'],
+    ['Publicacoes agendadas', 'Publications scheduled'],
+    ['Campanha concluida', 'Campaign completed'],
+    ['Resumo da criacao e proximos passos.', 'Creation summary and next steps.'],
+    ['Campanha criada', 'Campaign created'],
+    ['Destinos configurados:', 'Configured destinations:'],
+    ['Publicacoes', 'Publications'],
+    ['Primeiro disparo', 'First publication'],
+    ['Eventuais pendencias', 'Possible pending items'],
+    ['Nenhuma configuracao pendente. Acompanhe o processamento das publicacoes.', 'No configuration is pending. Follow publication processing.'],
+    ['Abrir campanha', 'Open campaign'],
+    ['Acompanhar publicacoes', 'Track publications'],
+    ['Criar outra campanha', 'Create another campaign'],
+    ['Envio interrompido', 'Process interrupted'],
+    ['Continue sem recriar o que ja foi salvo', 'Continue without recreating what was already saved'],
+    ['Verificacao final', 'Final check'],
+    ['Tudo pronto para confirmar', 'Everything is ready to confirm'],
+    ['Plataformas, midia, destinos, agenda e metadados foram conferidos.', 'Platforms, media, destinations, schedule, and metadata were checked.'],
+    ['Corrigir', 'Fix'],
+    ['Editar', 'Edit'],
+    ['Escolha plataformas.', 'Choose platforms.'],
+    ['Selecione pelo menos uma plataforma na Etapa 1.', 'Select at least one platform in Step 1.'],
+    ['Nenhum disparo configurado.', 'No publication configured.'],
+    ['Tags: sem tags', 'Tags: no tags'],
     ['Fonte', 'Source'],
     ['Formato', 'Format'],
+    ['Nome interno da campanha', 'Internal campaign name'],
+    ['Nome interno', 'Internal name'],
+    ['Titulo que sera publicado', 'Title to be published'],
+    ['Descricao que sera publicada', 'Description to be published'],
+    ['Conteudo essencial', 'Essential content'],
+    ['Obrigatorio', 'Required'],
+    ['Por canal', 'Per channel'],
+    ['Preencha primeiro o essencial. Configuracoes por plataforma e opcoes avancadas ficam separadas abaixo.', 'Fill in the essentials first. Platform settings and advanced options are separated below.'],
+    ['Estes campos identificam a campanha internamente e definem o texto principal da publicacao.', 'These fields identify the campaign internally and define the main publication text.'],
+    ['Configuracoes por plataforma', 'Platform settings'],
+    ['Somente controles relevantes para os destinos escolhidos.', 'Only controls relevant to the selected destinations.'],
+    ['Opcoes avancadas', 'Advanced options'],
+    ['Tags e automacao de nomes internos', 'Tags and internal-name automation'],
+    ['Privado (padrao efetivo)', 'Private (effective default)'],
+    ['Publico', 'Public'],
+    ['Nao listado', 'Unlisted'],
+    ['Privado', 'Private'],
+    ['Sem alteracao, todos os destinos serao criados como Privado.', 'Without changes, every destination will be created as Private.'],
+    ['Personalizar thumbnail', 'Customize thumbnail'],
+    ['Opcional · pode ser concluido depois de criar a campanha', 'Optional · can be completed after creating the campaign'],
+    ['Preset aplicado', 'Preset applied'],
+    ['Ver alteracoes', 'View changes'],
+    ['Desfazer', 'Undo'],
+    ['Preset desfeito', 'Preset undone'],
+    ['Os metadados anteriores foram restaurados.', 'The previous metadata was restored.'],
+    ['Exemplo', 'Example'],
+    ['Preencha a base para visualizar um exemplo.', 'Fill in the base to preview an example.'],
+    ['Recolher', 'Collapse'],
+    ['Horario', 'Time'],
+    ['Escolha o video', 'Choose the video'],
+    ['Selecione uma midia compativel com o formato.', 'Select a media asset compatible with the format.'],
+    ['Selecione os destinos', 'Select destinations'],
+    ['Escolha pelo menos um canal ou conta.', 'Choose at least one channel or account.'],
+    ['Informe o nome interno da campanha', 'Enter the internal campaign name'],
+    ['Defina um nome fixo ou ative a geracao automatica.', 'Set a fixed name or enable automatic generation.'],
+    ['Informe o titulo que sera publicado', 'Enter the title to be published'],
+    ['O titulo publicado e obrigatorio para todos os destinos.', 'The published title is required for every destination.'],
+    ['Informe a descricao que sera publicada', 'Enter the description to be published'],
+    ['A descricao publicada e obrigatoria para todos os destinos.', 'The published description is required for every destination.'],
+    ['Nenhuma publicacao configurada.', 'No publication configured.'],
     ['Destino', 'Destination'],
     ['Destino(s)', 'Destination(s)'],
     ['Privacidade do vídeo', 'Video privacy', { pt: ['Privacidade do video'] }],
@@ -783,6 +897,36 @@
   ].forEach((entry) => addPair(entry[0], entry[1], entry[2]));
 
   const patterns = [
+    {
+      pt: /^(\d+) a criar$/i,
+      en: /^(\d+) to create$/i,
+      toPt: (m) => `${m[1]} a criar`,
+      toEn: (m) => `${m[1]} to create`,
+    },
+    {
+      pt: /^(\d+) selecionados?$/i,
+      en: /^(\d+) selected$/i,
+      toPt: (m) => `${m[1]} selecionados`,
+      toEn: (m) => `${m[1]} selected`,
+    },
+    {
+      pt: /^Midia:\s*(.+)$/i,
+      en: /^Media:\s*(.+)$/i,
+      toPt: (m) => `Midia: ${m[1]}`,
+      toEn: (m) => `Media: ${m[1]}`,
+    },
+    {
+      pt: /^(\d+) problemas? para corrigir$/i,
+      en: /^(\d+) issues? to fix$/i,
+      toPt: (m) => `${m[1]} ${m[1] === '1' ? 'problema' : 'problemas'} para corrigir`,
+      toEn: (m) => `${m[1]} ${m[1] === '1' ? 'issue' : 'issues'} to fix`,
+    },
+    {
+      pt: /^Preset do video (.+) aplicado$/i,
+      en: /^Preset for video (.+) applied$/i,
+      toPt: (m) => `Preset do video ${m[1]} aplicado`,
+      toEn: (m) => `Preset for video ${m[1]} applied`,
+    },
     {
       pt: /^Plano (.+)$/i,
       en: /^Plan (.+)$/i,
@@ -1020,6 +1164,15 @@
     return DEFAULT_LOCALE;
   }
 
+  function normalizeStorageScope(scope) {
+    const normalizedScope = String(scope ?? '').trim();
+    return /^[A-Za-z0-9_-]{16,64}$/.test(normalizedScope) ? normalizedScope : 'anonymous';
+  }
+
+  function scopedStorageKey() {
+    return `${STORAGE_KEY}:${storageScope}`;
+  }
+
   function readCookieLocale() {
     const match = document.cookie.match(new RegExp(`(?:^|; )${COOKIE_NAME}=([^;]*)`));
     if (!match) return '';
@@ -1033,21 +1186,23 @@
   function resolveInitialLocale(serverLocale) {
     let storedLocale = '';
     try {
-      storedLocale = localStorage.getItem(STORAGE_KEY) || '';
+      storedLocale = localStorage.getItem(scopedStorageKey()) || '';
     } catch {
       storedLocale = '';
     }
-    return normalizeLocale(storedLocale || readCookieLocale() || serverLocale || document.documentElement.lang);
+    const cookieLocale = storageScope === 'anonymous' ? readCookieLocale() : '';
+    return normalizeLocale(storedLocale || cookieLocale || serverLocale || document.documentElement.lang);
   }
 
   function persistLocale(locale) {
     const normalized = normalizeLocale(locale);
     try {
-      localStorage.setItem(STORAGE_KEY, normalized);
+      localStorage.setItem(scopedStorageKey(), normalized);
     } catch {
       // Storage can be unavailable in private or sandboxed contexts.
     }
-    document.cookie = `${COOKIE_NAME}=${encodeURIComponent(normalized)}; Path=/; Max-Age=31536000; SameSite=Lax`;
+    const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${COOKIE_NAME}=${encodeURIComponent(normalized)}; Path=/; Max-Age=31536000; SameSite=Lax${secure}`;
     activeLocale = normalized;
     document.documentElement.lang = normalized;
     return normalized;
@@ -1205,10 +1360,19 @@
     ensureObserver(root || document.getElementById('app') || document.body);
   }
 
+  function setStorageScope(scope, serverLocale) {
+    storageScope = normalizeStorageScope(scope);
+    activeLocale = resolveInitialLocale(storageScope === 'anonymous' ? serverLocale : DEFAULT_LOCALE);
+    document.documentElement.lang = activeLocale;
+    document.body.dataset.initialLocale = activeLocale;
+    return activeLocale;
+  }
+
   window.PMP_I18N = {
     normalizeLocale,
     resolveInitialLocale,
     persistLocale,
+    setStorageScope,
     applyLocale,
     t,
     getCurrentLocale: () => activeLocale,

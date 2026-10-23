@@ -5,7 +5,7 @@ interface PrismaClient {
   mediaAsset: {
     create(args: { data: any }): Promise<any>;
     findUnique(args: { where: { id: string } }): Promise<any>;
-    findMany(args: { where?: any }): Promise<any[]>;
+    findMany(args?: { where?: any }): Promise<any[]>;
     update(args: { where: { id: string }; data: any }): Promise<any>;
     delete(args: { where: { id: string } }): Promise<any>;
   };
@@ -18,6 +18,7 @@ function toMediaAsset(row: any): MediaAsset {
     assetType: row.assetType as MediaAssetType,
     originalName: row.originalName,
     storagePath: row.storagePath,
+    sourcePath: row.sourcePath ?? null,
     sizeBytes: row.sizeBytes,
     mimeType: row.mimeType,
     durationSeconds: row.durationSeconds ?? 0,
@@ -37,6 +38,7 @@ export class PrismaMediaAssetRepository implements MediaAssetRepository {
         assetType: dto.assetType,
         originalName: dto.originalName,
         storagePath: dto.storagePath,
+        sourcePath: dto.sourcePath ?? null,
         sizeBytes: dto.sizeBytes,
         mimeType: dto.mimeType,
         durationSeconds: dto.durationSeconds ?? 0,

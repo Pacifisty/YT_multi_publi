@@ -97,7 +97,7 @@ export class MercadoPagoPaymentProviderAdapter implements PaymentProviderAdapter
       const signatureHeader = normalized['x-signature'] ?? '';
       if (!verifyMercadoPagoSignature(signatureHeader, this.webhookSecret, dataIdString, requestId)) {
         paymentLogger.logError(dataIdString || 'unknown', 'webhook_signature', 'Invalid or missing signature');
-        return null;
+        throw new Error('Invalid payment webhook signature.');
       }
     }
 
@@ -158,6 +158,11 @@ function verifyMercadoPagoSignature(
     else if (k === 'v1') v1 = v;
   }
   if (!ts || !v1) return false;
+
+  const timestampMs = Number(ts) * 1000;
+  if (!Number.isFinite(timestampMs) || Math.abs(Date.now() - timestampMs) > 5 * 60 * 1000) {
+    return false;
+  }
 
   const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
   const expected = createHmac('sha256', secret).update(manifest).digest('hex');

@@ -760,6 +760,7 @@ test('Growth profile controls are delegated to the PMP profile page', () => {
 
 test('Growth preference checkbox persists through the DOM change flow', () => {
   const sources = [
+    extractFunctionSource(APP_JS, 'getAccountScopedStorageKey'),
     extractFunctionSource(APP_JS, 'getDefaultGrowthPreferences'),
     extractFunctionSource(APP_JS, 'normalizeGrowthPreferences'),
     extractFunctionSource(APP_JS, 'writeStoredGrowthPreferences'),
@@ -767,6 +768,7 @@ test('Growth preference checkbox persists through the DOM change flow', () => {
   ].join('\n');
   const result = Function(`
     const GROWTH_PREFERENCES_STORAGE_KEY = 'ytmp-growth-preferences-v1';
+    let activeAccountStorageScope = 'owner%40example.com';
     const GROWTH_PREFERENCE_OPTIONS = [
       { id: 'retentionAlerts', label: 'Receber alertas de queda de retencao' },
       { id: 'educationalTips', label: 'Mostrar dicas de conteudo educativo' },
@@ -793,7 +795,7 @@ test('Growth preference checkbox persists through the DOM change flow', () => {
     checkbox.checked = false;
     checkbox.getAttribute = (name) => name === 'data-growth-preference' ? 'weeklyEmailSummary' : null;
     listeners.change({ target: checkbox });
-    return { state, stored: localStorage.store[GROWTH_PREFERENCES_STORAGE_KEY] };
+    return { state, stored: localStorage.store[getAccountScopedStorageKey(GROWTH_PREFERENCES_STORAGE_KEY)] };
   `)();
 
   assert.equal(result.state.growthPreferences.weeklyEmailSummary, false);

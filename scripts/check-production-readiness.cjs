@@ -53,6 +53,7 @@ requireHttpsUrl('PUBLIC_APP_URL');
 requireSecret('OAUTH_TOKEN_KEY', tokenKeyIsValid);
 requireSecret('ADMIN_EMAIL', (input) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input) && !input.endsWith('@example.com'));
 requireSecret('ADMIN_PASSWORD_HASH', (input) => input.startsWith('scrypt:') || input.startsWith('$argon2'));
+const googleOnlyAuth = value('AUTH_GOOGLE_ONLY').toLowerCase() === 'true';
 
 for (const name of [
   'GOOGLE_CLIENT_ID',
@@ -62,9 +63,12 @@ for (const name of [
   'INSTAGRAM_CLIENT_ID',
   'INSTAGRAM_CLIENT_SECRET',
   'MERCADOPAGO_WEBHOOK_SECRET',
-  'EMAIL_PROVIDER_API_KEY',
-  'EMAIL_FROM_ADDRESS',
 ]) requireSecret(name);
+
+if (!googleOnlyAuth) {
+  requireSecret('EMAIL_PROVIDER_API_KEY');
+  requireSecret('EMAIL_FROM_ADDRESS');
+}
 
 for (const name of [
   'GOOGLE_REDIRECT_URI',
@@ -77,7 +81,10 @@ for (const name of [
 ]) requireHttpsUrl(name);
 
 requireSecret('MERCADOPAGO_ACCESS_TOKEN', (input) => input.startsWith('APP_USR-'));
-requireSecret('EMAIL_PROVIDER', (input) => ['resend', 'sendgrid', 'mailgun'].includes(input.toLowerCase()));
+requireSecret('EMAIL_PROVIDER', (input) => googleOnlyAuth
+  ? ['disabled', 'resend', 'sendgrid', 'mailgun'].includes(input.toLowerCase())
+  : ['resend', 'sendgrid', 'mailgun'].includes(input.toLowerCase()));
+if (value('EMAIL_PROVIDER').toLowerCase() === 'disabled' && !googleOnlyAuth) errors.push('AUTH_GOOGLE_ONLY');
 if (value('EMAIL_PROVIDER').toLowerCase() === 'mailgun') requireSecret('MAILGUN_DOMAIN');
 
 const storageRoot = value('MEDIA_STORAGE_ROOT');

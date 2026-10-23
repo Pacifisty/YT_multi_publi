@@ -13,12 +13,26 @@ interface WindowEntry {
 }
 
 function getClientIp(req: IncomingMessage): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (forwarded) {
-    const first = Array.isArray(forwarded) ? forwarded[0] : forwarded.split(',')[0];
-    return first.trim();
+  const remoteAddress = req.socket?.remoteAddress ?? 'unknown';
+  if (isLoopback(remoteAddress)) {
+    const cloudflare = req.headers['cf-connecting-ip'];
+    if (cloudflare) {
+      return (Array.isArray(cloudflare) ? cloudflare[0] : cloudflare).trim();
+    }
+    const forwarded = req.headers['x-forwarded-for'];
+    if (forwarded) {
+      const first = Array.isArray(forwarded) ? forwarded[0] : forwarded.split(',')[0];
+      return first.trim();
+    }
   }
-  return req.socket?.remoteAddress ?? 'unknown';
+  return remoteAddress;
+}
+
+function isLoopback(address: string): boolean {
+  const normalized = address.toLowerCase();
+  return normalized === '127.0.0.1'
+    || normalized === '::1'
+    || normalized === '::ffff:127.0.0.1';
 }
 
 export function createRateLimiter(
@@ -30,6 +44,13 @@ export function createRateLimiter(
   return async (req: IncomingMessage, res: ServerResponse, next: NextFn): Promise<void> => {
     const ip = getClientIp(req);
     const now = Date.now();
+
+    // Opportunistic cleanup keeps a long-running process from retaining stale IPs.
+    if (clients.size > 10_000) {
+      for (const [clientIp, candidate] of clients.entries()) {
+        if (now >= candidate.resetAt) clients.delete(clientIp);
+      }
+    }
 
     let entry = clients.get(ip);
 

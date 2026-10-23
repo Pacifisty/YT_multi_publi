@@ -1,5 +1,6 @@
 import { describe, expect, test, beforeEach } from 'vitest';
 import {
+  DisabledEmailProvider,
   EmailService,
   MockEmailProvider,
   selectEmailProvider,
@@ -274,6 +275,21 @@ describe('EmailService', () => {
       const provider = selectEmailProvider();
 
       expect(provider).toBeInstanceOf(MockEmailProvider);
+    });
+
+    test('allows disabled delivery only in Google-only mode', () => {
+      const provider = selectEmailProvider(undefined, {
+        EMAIL_PROVIDER: 'disabled',
+        AUTH_GOOGLE_ONLY: 'true',
+        NODE_ENV: 'production',
+      });
+
+      expect(provider).toBeInstanceOf(DisabledEmailProvider);
+      expect(() => selectEmailProvider(undefined, {
+        EMAIL_PROVIDER: 'disabled',
+        AUTH_GOOGLE_ONLY: 'false',
+        NODE_ENV: 'production',
+      })).toThrow('AUTH_GOOGLE_ONLY=true');
     });
 
     test('returns SendGridEmailProvider when EMAIL_PROVIDER=sendgrid', () => {

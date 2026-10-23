@@ -18,6 +18,7 @@ interface PrismaClient {
     create(args: { data: any }): Promise<any>;
     upsert(args: { where: any; create: any; update: any }): Promise<any>;
     update(args: { where: { id: string }; data: any }): Promise<any>;
+    updateMany(args: { where: any; data: any }): Promise<{ count: number }>;
     deleteMany(args: { where: any }): Promise<any>;
     findFirst(args: { where: any }): Promise<any>;
   };
@@ -35,6 +36,10 @@ function toItemRecord(row: any): PlaylistItemRecord {
     videoAssetId: row.videoAssetId,
     position: row.position ?? 0,
     usedAt: row.usedAt ? new Date(row.usedAt).toISOString() : null,
+    status: row.status ?? 'available',
+    reservedAt: row.reservedAt ? new Date(row.reservedAt).toISOString() : null,
+    publishedAt: row.publishedAt ? new Date(row.publishedAt).toISOString() : null,
+    reservationToken: row.reservationToken ?? null,
     createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
   };
 }
@@ -44,7 +49,7 @@ function toPlaylistRecord(row: any): PlaylistRecord {
     id: row.id,
     ownerEmail: row.ownerEmail ?? null,
     name: row.name,
-    folderPath: row.folderPath ?? '',
+    folderPath: row.folderPath ?? null,
     items: Array.isArray(row.items) ? row.items.map(toItemRecord) : [],
     createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt),
     updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : String(row.updatedAt),
@@ -90,7 +95,7 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
 
   async findAll(ownerEmail?: string): Promise<PlaylistRecord[]> {
     const where = ownerEmail
-      ? { OR: [{ ownerEmail }, { ownerEmail: null }] }
+      ? { ownerEmail: ownerEmail.trim().toLowerCase() }
       : undefined;
     const rows = await this.prisma.playlist.findMany({
       where,
@@ -117,7 +122,8 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
     try {
       await this.prisma.playlist.delete({ where: { id } });
       return true;
-    } catch {
+    } catch (error: any) {
+      if (error?.code === 'P2003') throw new PlaylistDependencyConflictError();
       return false;
     }
   }
@@ -136,6 +142,10 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
         videoAssetId: item.videoAssetId,
         position: item.position,
         usedAt: item.usedAt ? new Date(item.usedAt) : null,
+        status: item.status ?? 'available',
+        reservedAt: item.reservedAt ? new Date(item.reservedAt) : null,
+        publishedAt: item.publishedAt ? new Date(item.publishedAt) : null,
+        reservationToken: item.reservationToken ?? null,
       },
       update: {
         position: item.position,
@@ -156,11 +166,45 @@ export class PrismaPlaylistRepository implements PlaylistRepository {
     }
   }
 
+  async reserveItem(itemId: string, reservationToken: string, reservedAt: string, expectedStatus: PlaylistItemRecord['status'] = 'available'): Promise<PlaylistItemRecord | null> {
+    const claimed = await this.prisma.playlistItem.updateMany({
+      where: { id: itemId, status: expectedStatus },
+      data: { status: 'reserved', reservedAt: new Date(reservedAt), reservationToken },
+    });
+    if (claimed.count !== 1) return null;
+    const row = await this.prisma.playlistItem.findFirst({ where: { id: itemId } });
+    return row ? toItemRecord(row) : null;
+  }
+
+  async releaseItem(itemId: string, reservationToken?: string): Promise<boolean> {
+    const result = await this.prisma.playlistItem.updateMany({
+      where: { id: itemId, ...(reservationToken ? { reservationToken } : {}) },
+      data: { status: 'available', reservedAt: null, reservationToken: null },
+    });
+    return result.count > 0;
+  }
+
+  async markItemPublished(itemId: string, publishedAt: string): Promise<boolean> {
+    const date = new Date(publishedAt);
+    const result = await this.prisma.playlistItem.updateMany({
+      where: { id: itemId },
+      data: { status: 'published', usedAt: date, publishedAt: date, reservedAt: null, reservationToken: null },
+    });
+    return result.count > 0;
+  }
+
   async removeItem(playlistId: string, videoAssetId: string): Promise<boolean> {
     const result = await this.prisma.playlistItem.deleteMany({
       where: { playlistId, videoAssetId },
     });
     return (result?.count ?? 0) > 0;
+  }
+}
+
+export class PlaylistDependencyConflictError extends Error {
+  constructor() {
+    super('A fila está vinculada a campanhas e não pode ser excluída.');
+    this.name = 'PlaylistDependencyConflictError';
   }
 }
 

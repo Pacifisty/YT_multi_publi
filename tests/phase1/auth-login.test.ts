@@ -109,6 +109,7 @@ describe('seeded admin session authentication boundary', () => {
       fullName: 'Creator User',
       needsPlanSelection: true,
       accountDeletionConfirmationMethod: 'password',
+      storageScope: expect.any(String),
     });
   });
 
@@ -141,6 +142,34 @@ describe('seeded admin session authentication boundary', () => {
 
     expect(response.status).toBe(401);
     expect(response.body.error).toContain('Google');
+  });
+
+  test('blocks every password flow when Google-only authentication is enabled', async () => {
+    const env = {
+      AUTH_GOOGLE_ONLY: 'true',
+      NODE_ENV: 'test',
+    };
+    const controller = new AuthController(new AuthService({ env }), createSessionCookieOptions(env));
+
+    const login = await controller.login({
+      body: { email: 'creator@example.com', password: 'secret123' },
+      session: createSession(),
+    });
+    const register = await controller.register({
+      body: { email: 'creator@example.com', password: 'secret123' },
+      session: createSession(),
+    });
+    const resetRequest = await controller.requestPasswordReset({
+      body: { email: 'creator@example.com' },
+    });
+    const reset = await controller.resetPassword({
+      body: { token: 'token', newPassword: 'new-secret-123' },
+    });
+
+    expect(login.status).toBe(403);
+    expect(register.status).toBe(403);
+    expect(resetRequest.status).toBe(403);
+    expect(reset.status).toBe(403);
   });
 
   test('passes the request session into Google OAuth start', async () => {
@@ -349,6 +378,47 @@ describe('seeded admin session authentication boundary', () => {
       body: {
         confirmationCode: code,
       },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.accountDeletion?.status).toBe('pending_deactivation');
+  });
+
+  test('uses a recent Google session plus EXCLUIR when Google-only mode is enabled', async () => {
+    const now = new Date('2026-05-04T12:00:00.000Z');
+    const repo = new InMemoryAuthUserRepository([
+      {
+        id: 'user-google-mode-delete-1',
+        email: 'google-mode@example.com',
+        fullName: 'Google Mode',
+        passwordHash: null,
+        googleSubject: 'google-mode-subject',
+        isActive: true,
+        planSelectionCompleted: true,
+        createdAt: new Date('2026-05-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-05-01T00:00:00.000Z'),
+      },
+    ]);
+    const authService = new AuthService({
+      env: { AUTH_GOOGLE_ONLY: 'true', NODE_ENV: 'test' },
+      userStore: repo,
+      now: () => now,
+    });
+    const controller = new AuthController(authService, createSessionCookieOptions({ NODE_ENV: 'test' }));
+    const session = {
+      adminUser: {
+        email: 'google-mode@example.com',
+        authenticatedAt: now.toISOString(),
+        needsPlanSelection: false,
+      },
+    } as any;
+
+    expect((await controller.me({ session })).body.user?.accountDeletionConfirmationMethod).toBe('google_reauth');
+    expect((await controller.requestAccountDeletion({ session, body: { confirmationText: 'errado' } })).status).toBe(401);
+
+    const response = await controller.requestAccountDeletion({
+      session,
+      body: { confirmationText: 'EXCLUIR' },
     });
 
     expect(response.status).toBe(200);

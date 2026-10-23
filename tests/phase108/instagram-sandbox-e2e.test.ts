@@ -55,19 +55,18 @@ describe('Instagram sandbox E2E harness', () => {
     const service = new InstagramOauthService({
       env: {
         INSTAGRAM_CLIENT_ID: 'instagram-client-id',
-        INSTAGRAM_REDIRECT_URI: 'https://app.example.com/workspace/accounts/callback?provider=instagram',
+        INSTAGRAM_REDIRECT_URI: 'https://app.example.com/api/accounts/oauth/instagram/callback',
       },
     });
 
     const redirectUrl = await service.createAuthorizationRedirect(session);
     const url = new URL(redirectUrl);
 
-    expect(url.origin).toBe('https://www.facebook.com');
-    expect(url.pathname).toContain('/dialog/oauth');
+    expect(url.origin).toBe('https://www.instagram.com');
+    expect(url.pathname).toBe('/oauth/authorize');
     expect(url.searchParams.get('client_id')).toBe('instagram-client-id');
     expect(url.searchParams.get('scope')).toContain('instagram_business_content_publish');
     expect(session.oauthStateNonce).toBeTruthy();
-    expect(session.instagramCodeVerifier).toBeTruthy();
     expect(service.validateCallbackState(session, session.oauthStateNonce!)).toBe(true);
     expect(service.validateCallbackState(session, 'wrong-state')).toBe(false);
   });

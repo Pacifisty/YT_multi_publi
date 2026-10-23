@@ -16,28 +16,33 @@ import {
 } from '../../apps/api/src/campaigns/campaign.service';
 
 describe('Phase 108 - Instagram OAuth and campaign targeting foundation', () => {
-  it('creates Instagram authorization redirects and exchanges codes through Meta Graph OAuth', async () => {
+  it('uses Instagram Login and exchanges a short-lived token for a long-lived token', async () => {
     const env = {
       INSTAGRAM_CLIENT_ID: 'ig-client',
       INSTAGRAM_CLIENT_SECRET: 'ig-secret',
-      INSTAGRAM_REDIRECT_URI: 'https://app.example.com/workspace/accounts/callback?provider=instagram',
+      INSTAGRAM_REDIRECT_URI: 'https://app.example.com/api/accounts/oauth/instagram/callback',
     };
     const fetchImpl = vi.fn(async (url: string | URL, init?: RequestInit) => {
       const href = String(url);
 
-      if (href.endsWith('/oauth/access_token') && init?.method === 'POST') {
+      if (href === 'https://api.instagram.com/oauth/access_token' && init?.method === 'POST') {
         expect(String(init.body)).toContain('client_id=ig-client');
+        expect(String(init.body)).toContain('grant_type=authorization_code');
         expect(String(init.body)).toContain('code=auth-code');
-        expect(String(init.body)).toContain('code_verifier=');
         return jsonResponse({
-          access_token: 'ig-access-token',
-          expires_in: 3600,
+          access_token: 'ig-short-lived-token',
           scope: 'instagram_business_basic,instagram_business_content_publish',
         });
       }
 
+      if (href.startsWith('https://graph.instagram.com/access_token?') && init?.method === 'GET') {
+        expect(href).toContain('grant_type=ig_exchange_token');
+        expect(href).toContain('access_token=ig-short-lived-token');
+        return jsonResponse({ access_token: 'ig-long-lived-token', expires_in: 5_184_000 });
+      }
+
       if (href.includes('/me?fields=id,name')) {
-        expect(href).toContain('access_token=ig-access-token');
+        expect(href).toContain('access_token=ig-long-lived-token');
         return jsonResponse({
           id: 'ig-user-123',
           name: 'Studio Reels',
@@ -52,18 +57,19 @@ describe('Phase 108 - Instagram OAuth and campaign targeting foundation', () => 
     const redirectUrl = await service.createAuthorizationRedirect(session);
     const parsed = new URL(redirectUrl);
 
-    expect(parsed.hostname).toBe('www.facebook.com');
+    expect(parsed.hostname).toBe('www.instagram.com');
+    expect(parsed.pathname).toBe('/oauth/authorize');
     expect(parsed.searchParams.get('client_id')).toBe('ig-client');
     expect(parsed.searchParams.get('scope')).toContain('instagram_business_content_publish');
+    expect(parsed.searchParams.get('enable_fb_login')).toBe('0');
     expect(session.oauthStateNonce).toBeTruthy();
-    expect(session.instagramCodeVerifier).toBeTruthy();
     expect(service.validateCallbackState(session, session.oauthStateNonce!)).toBe(true);
     expect(service.validateCallbackState(session, 'wrong-state')).toBe(false);
 
     const tokenResult = await service.exchangeCodeForTokens('auth-code', session.instagramCodeVerifier);
 
-    expect(tokenResult.accessToken).toBe('ig-access-token');
-    expect(tokenResult.refreshToken).toBe('ig-access-token');
+    expect(tokenResult.accessToken).toBe('ig-long-lived-token');
+    expect(tokenResult.refreshToken).toBe('ig-long-lived-token');
     expect(tokenResult.profile.providerSubject).toBe('ig-user-123');
     expect(tokenResult.profile.displayName).toBe('Studio Reels');
     expect(tokenResult.scopes).toContain('instagram_business_basic');

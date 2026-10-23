@@ -18,6 +18,7 @@ function createConnectedAccount(
 ): ConnectedAccountRecord {
   return {
     id: 'acct-1',
+    ownerEmail: 'admin@example.com',
     provider: 'google',
     googleSubject: 'google-sub-1',
     email: 'ops@example.com',
@@ -207,10 +208,12 @@ describe('account disconnect', () => {
 
   test('controller disconnect succeeds with proper confirmation', async () => {
     const crypto = createTokenCrypto();
+    const account = createConnectedAccount(crypto);
     const service = new AccountsService({
       tokenCryptoService: crypto,
+      getConnectedAccount: async (id) => id === account.id ? account : null,
       updateConnectedAccount: async (id, updates) =>
-        ({ ...createConnectedAccount(crypto), ...updates, id }) as ConnectedAccountRecord,
+        ({ ...account, ...updates, id }) as ConnectedAccountRecord,
     });
     const controller = new AccountsController(service, new SessionGuard());
 

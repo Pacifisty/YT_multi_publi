@@ -14,6 +14,7 @@ export interface InstagramPublishContext {
   videoUrl: string;
   caption: string;
   shareToFeed: boolean;
+  coverUrl?: string;
 }
 
 export interface InstagramPublishResult {
@@ -40,6 +41,7 @@ export interface InstagramUploadWorkerOptions {
   fetchContainerStatusFn?: InstagramFetchContainerStatusFn;
   getAccessToken: (connectedAccountId: string) => Promise<string>;
   getPublicVideoUrl: (videoAssetId: string) => Promise<string>;
+  getPublicThumbnailUrl?: (thumbnailAssetId: string) => Promise<string>;
   getInstagramBusinessAccountId?: (connectedAccountId: string) => Promise<string>;
   sleepMs?: (ms: number) => Promise<void>;
 }
@@ -65,6 +67,7 @@ export class InstagramUploadWorker {
   private readonly fetchContainerStatusFn: InstagramFetchContainerStatusFn;
   private readonly getAccessToken: (connectedAccountId: string) => Promise<string>;
   private readonly getPublicVideoUrl: (videoAssetId: string) => Promise<string>;
+  private readonly getPublicThumbnailUrl?: (thumbnailAssetId: string) => Promise<string>;
   private readonly getInstagramBusinessAccountId: (connectedAccountId: string) => Promise<string>;
   private readonly sleepMs: (ms: number) => Promise<void>;
 
@@ -77,6 +80,7 @@ export class InstagramUploadWorker {
     this.fetchContainerStatusFn = options.fetchContainerStatusFn ?? instagramFetchContainerStatus;
     this.getAccessToken = options.getAccessToken;
     this.getPublicVideoUrl = options.getPublicVideoUrl;
+    this.getPublicThumbnailUrl = options.getPublicThumbnailUrl;
     this.getInstagramBusinessAccountId = options.getInstagramBusinessAccountId ?? (async (connectedAccountId) => connectedAccountId);
     this.sleepMs = options.sleepMs ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   }
@@ -100,6 +104,9 @@ export class InstagramUploadWorker {
       const accessToken = await this.getAccessToken(target.connectedAccountId);
       const instagramBusinessAccountId = await this.getInstagramBusinessAccountId(target.connectedAccountId);
       const videoUrl = await this.getPublicVideoUrl(campaignVideoAssetId);
+      const coverUrl = target.thumbnailAssetId && this.getPublicThumbnailUrl
+        ? await this.getPublicThumbnailUrl(target.thumbnailAssetId)
+        : undefined;
       const caption = buildInstagramCaption(target);
       const container = await this.createContainerFn({
         accessToken,
@@ -107,6 +114,7 @@ export class InstagramUploadWorker {
         videoUrl,
         caption,
         shareToFeed: target.instagramShareToFeed ?? true,
+        coverUrl,
       });
 
       await this.waitForContainerReady(accessToken, container.containerId, instagramBusinessAccountId);
@@ -190,6 +198,7 @@ export async function instagramCreateReelsContainer(
     videoUrl: context.videoUrl,
     caption: context.caption,
     shareToFeed: context.shareToFeed,
+    coverUrl: context.coverUrl,
   });
   if (!response.creation_id) {
     throw new Error('Instagram Reels container creation did not return a creation id.');

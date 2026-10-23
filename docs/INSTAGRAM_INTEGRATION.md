@@ -4,7 +4,7 @@
 
 Instagram publishing lets a campaign target Instagram Business accounts alongside YouTube and TikTok targets. The flow is:
 
-1. User connects an Instagram account through Meta OAuth.
+1. User connects a professional Instagram account through Instagram Login.
 2. Tokens are encrypted into `ConnectedAccount`.
 3. A campaign target stores the Instagram account, caption, and feed-sharing option.
 4. The Instagram worker creates a Reels media container from a public HTTPS video URL.
@@ -37,7 +37,13 @@ INSTAGRAM_SANDBOX_BUSINESS_ACCOUNT_ID=
 INSTAGRAM_SANDBOX_PUBLIC_VIDEO_URL=
 ```
 
-`PUBLIC_APP_URL` and any sandbox/public media URLs must use HTTPS and be reachable by Meta. The Instagram account used for publishing must be a Business or Creator account connected to the Meta app with content publishing permissions.
+`PUBLIC_APP_URL` and any sandbox/public media URLs must use HTTPS and be reachable by Meta. The Instagram account used for publishing must be a Business or Creator account added to the Meta app with `instagram_business_basic` and `instagram_business_content_publish`. This integration uses Instagram Login directly and does not require a linked Facebook Page.
+
+OAuth and publishing use the direct Instagram endpoints:
+
+- Authorization: `https://www.instagram.com/oauth/authorize`
+- Code exchange: `https://api.instagram.com/oauth/access_token`
+- Token exchange/refresh and publishing: `https://graph.instagram.com`
 
 ## User Guide
 

@@ -66,4 +66,6 @@ vendor/
 *.log
 .cache/
 tmp/
+.runtime/
 # GSD planning docs are version-controlled
+.neon

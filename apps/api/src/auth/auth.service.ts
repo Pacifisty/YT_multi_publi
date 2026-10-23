@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomInt, randomUUID, scrypt as nodeScrypt, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomInt, randomUUID, scrypt as nodeScrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 
 import { GoogleOauthService, GOOGLE_AUTH_SCOPES, type GoogleOauthSession, type GoogleTokenResult } from '../integrations/google/google-oauth.service';
@@ -42,7 +42,7 @@ export type LoginResult =
     }
   | {
       ok: false;
-      status: 400 | 401 | 409 | 429 | 500;
+      status: 400 | 401 | 403 | 409 | 429 | 500;
       message: string;
     };
 
@@ -58,10 +58,11 @@ const DEV_GOOGLE_LOGIN_CODE = 'dev-google-login';
 const ACCOUNT_DEACTIVATION_DELAY_MS = 24 * 60 * 60 * 1000;
 const ACCOUNT_DELETION_DELAY_MS = 30 * 24 * 60 * 60 * 1000;
 const ACCOUNT_DELETION_CONFIRMATION_TTL_MS = 10 * 60 * 1000;
+const GOOGLE_REAUTH_MAX_AGE_MS = 10 * 60 * 1000;
 const PASSWORD_RESET_TTL_MS = 30 * 60 * 1000;
 const PASSWORD_RESET_GENERIC_MESSAGE = 'Se existir uma conta compativel, enviaremos as instrucoes de recuperacao para o email informado.';
 
-type AccountDeletionConfirmationMethod = 'password' | 'email_code';
+type AccountDeletionConfirmationMethod = 'password' | 'email_code' | 'google_reauth';
 
 export interface AccountDeletionSchedule {
   requestedAt: string;
@@ -73,6 +74,7 @@ export interface AccountDeletionSchedule {
 export interface AccountDeletionConfirmationInput {
   currentPassword?: string;
   confirmationCode?: string;
+  confirmationText?: string;
 }
 
 export interface AccountDeletionChallengeResult {
@@ -104,6 +106,10 @@ export class AuthService {
     this.googleOauthService = options.googleOauthService ?? createAuthGoogleOauthService(this.env);
     this.emailService = options.emailService;
     this.passwordResetStore = options.passwordResetStore ?? new InMemoryPasswordResetRepository();
+  }
+
+  isGoogleOnlyMode(): boolean {
+    return this.env.AUTH_GOOGLE_ONLY?.trim().toLowerCase() === 'true';
   }
 
   async requestPasswordReset(emailInput: string): Promise<{ ok: true; message: string }> {
@@ -283,8 +289,8 @@ export class AuthService {
     session?: AdminSession | null,
   ): Promise<LoginResult> {
     const sessionStateValid = this.googleOauthService.validateCallbackState(input.session, input.state);
-    const storedStateValid = this.consumeGoogleOauthState(input.state);
-    if (!sessionStateValid && !storedStateValid) {
+    this.consumeGoogleOauthState(input.state);
+    if (!sessionStateValid) {
       return {
         ok: false,
         status: 400,
@@ -361,6 +367,18 @@ export class AuthService {
     return session?.adminUser ?? null;
   }
 
+  createBrowserStorageScope(email: string): string {
+    const secret = this.env.OAUTH_TOKEN_KEY ?? this.env.ADMIN_PASSWORD_HASH;
+    if (!secret && this.env.NODE_ENV === 'production') {
+      throw new Error('OAUTH_TOKEN_KEY is required to derive a browser storage scope.');
+    }
+
+    return createHmac('sha256', secret ?? 'pmp-development-storage-scope')
+      .update(`browser-storage:${normalizeEmail(email)}`)
+      .digest('base64url')
+      .slice(0, 32);
+  }
+
   async getAccountDeletionSchedule(email: string): Promise<AccountDeletionSchedule | null> {
     const user = await this.userStore.findByEmail(email);
     return user ? this.toAccountDeletionSchedule(user) : null;
@@ -427,9 +445,6 @@ export class AuthService {
     const existingSchedule = this.toAccountDeletionSchedule(user);
     if (existingSchedule) {
       const sessionUser = this.toSessionUser(user);
-      if (session) {
-        session.adminUser = sessionUser;
-      }
       return {
         ok: true,
         schedule: existingSchedule,
@@ -438,7 +453,7 @@ export class AuthService {
       };
     }
 
-    const confirmationResult = await this.verifyAccountDeletionConfirmation(user, confirmation);
+    const confirmationResult = await this.verifyAccountDeletionConfirmation(user, confirmation, session);
     if (!confirmationResult.ok) {
       return confirmationResult;
     }
@@ -462,9 +477,6 @@ export class AuthService {
     }
 
     const sessionUser = this.toSessionUser(resolved);
-    if (session) {
-      session.adminUser = sessionUser;
-    }
 
     return {
       ok: true,
@@ -585,13 +597,34 @@ export class AuthService {
   }
 
   private getAccountDeletionConfirmationMethodForUser(user: AuthUser): AccountDeletionConfirmationMethod {
+    if (this.isGoogleOnlyMode()) return 'google_reauth';
     return user.passwordHash ? 'password' : 'email_code';
   }
 
   private async verifyAccountDeletionConfirmation(
     user: AuthUser,
     confirmation: AccountDeletionConfirmationInput,
+    session?: AdminSession | null,
   ): Promise<{ ok: true } | { ok: false; status: 401; message: string }> {
+    if (this.isGoogleOnlyMode()) {
+      const authenticatedAt = session?.adminUser?.authenticatedAt
+        ? new Date(session.adminUser.authenticatedAt).getTime()
+        : Number.NaN;
+      const isRecentGoogleSession = session?.adminUser?.email === user.email
+        && Number.isFinite(authenticatedAt)
+        && this.now().getTime() - authenticatedAt <= GOOGLE_REAUTH_MAX_AGE_MS;
+
+      if (confirmation.confirmationText?.trim().toUpperCase() === 'EXCLUIR' && isRecentGoogleSession) {
+        return { ok: true };
+      }
+
+      return {
+        ok: false,
+        status: 401,
+        message: 'Entre novamente com o Google e digite EXCLUIR para confirmar a exclusao da conta.',
+      };
+    }
+
     const currentPassword = confirmation.currentPassword?.trim();
     if (currentPassword && user.passwordHash && await verifyPasswordHash(currentPassword, user.passwordHash)) {
       return { ok: true };

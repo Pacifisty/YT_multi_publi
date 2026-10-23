@@ -7,6 +7,7 @@ interface MediaAssetRecord {
   asset_type: 'video' | 'thumbnail';
   original_name: string;
   storage_path: string;
+  source_path?: string | null;
   size_bytes: number;
   mime_type: string;
   duration_seconds: number;
@@ -21,6 +22,7 @@ function toRecord(asset: MediaAsset): MediaAssetRecord {
     asset_type: asset.assetType,
     original_name: asset.originalName,
     storage_path: asset.storagePath,
+    source_path: asset.sourcePath ?? null,
     size_bytes: asset.sizeBytes,
     mime_type: asset.mimeType,
     duration_seconds: asset.durationSeconds,
@@ -37,6 +39,7 @@ export function createMediaRepoAdapter(repo: MediaAssetRepository): MediaReposit
         assetType: record.asset_type,
         originalName: record.original_name,
         storagePath: record.storage_path,
+        sourcePath: record.source_path ?? null,
         sizeBytes: record.size_bytes,
         mimeType: record.mime_type,
         durationSeconds: record.duration_seconds,
@@ -77,6 +80,7 @@ export function createMediaRepoAdapter(repo: MediaAssetRepository): MediaReposit
       const partialAsset: Partial<MediaAsset> = {};
       if (data.original_name !== undefined) partialAsset.originalName = data.original_name;
       if (data.storage_path !== undefined) partialAsset.storagePath = data.storage_path;
+      if (data.source_path !== undefined) partialAsset.sourcePath = data.source_path;
       if (data.size_bytes !== undefined) partialAsset.sizeBytes = data.size_bytes;
       if (data.mime_type !== undefined) partialAsset.mimeType = data.mime_type;
       if (data.duration_seconds !== undefined) partialAsset.durationSeconds = data.duration_seconds;

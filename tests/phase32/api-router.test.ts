@@ -17,6 +17,7 @@ const authedSession = { adminUser: { email: 'admin@test.com' } };
 function createAccount(crypto: TokenCryptoService): ConnectedAccountRecord {
   return {
     id: 'acct-1',
+    ownerEmail: 'admin@test.com',
     provider: 'google',
     googleSubject: 'sub-1',
     email: 'user@gmail.com',
@@ -256,7 +257,7 @@ describe('API Router — media routes', () => {
   });
 
   it('POST /api/media creates an asset from JSON payload', async () => {
-    const videoBytes = Buffer.from('fake-video-bytes');
+    const videoBytes = Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypisom'), Buffer.alloc(24)]);
     const res = await router.handle({
       method: 'POST',
       path: '/api/media',
@@ -398,15 +399,16 @@ describe('API Router — background processing hooks', () => {
     const { campaign } = await campaignsModule.campaignService.createCampaign({
       title: 'Retryable campaign',
       videoAssetId: 'video-2',
+      ownerEmail: authedSession.adminUser.email,
     });
 
     const { target } = await campaignsModule.campaignService.addTarget(campaign.id, {
       channelId: 'channel-2',
       videoTitle: 'Video title',
       videoDescription: 'Video description',
-    });
+    }, authedSession.adminUser.email);
 
-    await campaignsModule.campaignService.markReady(campaign.id);
+    await campaignsModule.campaignService.markReady(campaign.id, authedSession.adminUser.email);
     await campaignsModule.launchService.launchCampaign(campaign.id);
 
     const jobs = await campaignsModule.jobService.getJobsForTarget(target.id);
@@ -474,7 +476,7 @@ describe('API Router - account plan routes', () => {
     expect(secondRes.body.account.tokens).toBe(165);
   });
 
-  it('POST /api/account/plan/select updates the current plan', async () => {
+  it('POST /api/account/plan/select rejects unpaid paid-plan activation', async () => {
     const res = await router.handle({
       method: 'POST',
       path: '/api/account/plan/select',
@@ -482,8 +484,7 @@ describe('API Router - account plan routes', () => {
       body: { plan: 'PRO' },
     });
 
-    expect(res.status).toBe(200);
-    expect(res.body.account.plan).toBe('PRO');
-    expect(res.body.account.allowedPlatforms).toEqual(['youtube', 'tiktok', 'instagram']);
+    expect(res.status).toBe(402);
+    expect(res.body.error).toContain('pagamento');
   });
 });

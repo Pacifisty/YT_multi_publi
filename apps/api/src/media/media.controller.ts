@@ -196,6 +196,32 @@ export class MediaController {
           },
         };
       }
+
+      const thumbnailContentValidation = await this.validationService.validateThumbnailContent(thumbnailFiles[0]);
+      if (!thumbnailContentValidation.valid) {
+        return {
+          status: 400,
+          body: {
+            code: thumbnailContentValidation.errors[0].code,
+            error: thumbnailContentValidation.errors[0].message,
+            field: thumbnailContentValidation.errors[0].field,
+            errors: thumbnailContentValidation.errors,
+          },
+        };
+      }
+    }
+
+    const videoContentValidation = await this.validationService.validateVideoContent(videoFiles[0]);
+    if (!videoContentValidation.valid) {
+      return {
+        status: 400,
+        body: {
+          code: videoContentValidation.errors[0].code,
+          error: videoContentValidation.errors[0].message,
+          field: videoContentValidation.errors[0].field,
+          errors: videoContentValidation.errors,
+        },
+      };
     }
 
     const ownerEmail = request.session?.adminUser?.email;
@@ -226,6 +252,72 @@ export class MediaController {
       status: 200,
       body: await this.mediaService.listAssets(request.session?.adminUser?.email),
     };
+  }
+
+  async createThumbnailForVideo(request: MediaRequest): Promise<{ status: number; body: unknown }> {
+    const guardResult = this.sessionGuard.check(request);
+    if (!guardResult.allowed) {
+      return { status: guardResult.status, body: { error: guardResult.reason } };
+    }
+
+    const videoAssetId = request.params?.id;
+    if (!videoAssetId) {
+      return { status: 400, body: { error: 'Missing video asset id' } };
+    }
+
+    let thumbnail: UploadedMediaFile | null = null;
+    try {
+      const payload = request.body && typeof request.body === 'object'
+        ? (request.body as { thumbnail?: JsonUploadFilePayload }).thumbnail
+        : undefined;
+      thumbnail = parseUploadedFileFromJson(payload, 'thumbnail');
+    } catch (error) {
+      return {
+        status: 400,
+        body: { error: error instanceof Error ? error.message : 'Invalid thumbnail payload.' },
+      };
+    }
+
+    if (!thumbnail) {
+      return { status: 400, body: { error: 'Missing required field: thumbnail.' } };
+    }
+
+    const validation = this.validationService.validateThumbnail(thumbnail);
+    if (!validation.valid) {
+      return {
+        status: 400,
+        body: {
+          code: validation.errors[0].code,
+          error: validation.errors[0].message,
+          field: validation.errors[0].field,
+          errors: validation.errors,
+        },
+      };
+    }
+
+    const contentValidation = await this.validationService.validateThumbnailContent(thumbnail);
+    if (!contentValidation.valid) {
+      return {
+        status: 400,
+        body: {
+          code: contentValidation.errors[0].code,
+          error: contentValidation.errors[0].message,
+          field: contentValidation.errors[0].field,
+          errors: contentValidation.errors,
+        },
+      };
+    }
+
+    const created = await this.mediaService.createThumbnailForVideo(
+      videoAssetId,
+      thumbnail,
+      request.session?.adminUser?.email,
+    );
+    if (!created) {
+      return { status: 404, body: { error: 'Video asset not found' } };
+    }
+
+    return { status: 201, body: { thumbnail: created } };
   }
 
   async getAsset(request: MediaRequest): Promise<{ status: number; body: unknown }> {
@@ -283,7 +375,21 @@ export class MediaController {
       return { status: 400, body: { error: 'Missing asset id' } };
     }
 
-    const ok = await this.mediaService.deleteAsset(id, request.session?.adminUser?.email);
+    let ok: boolean;
+    try {
+      ok = await this.mediaService.deleteAsset(id, request.session?.adminUser?.email);
+    } catch (error: any) {
+      if (error?.code === 'P2003') {
+        return {
+          status: 409,
+          body: {
+            code: 'MEDIA_ASSET_IN_USE',
+            error: 'Este arquivo está vinculado a uma fila, campanha, publicação ou thumbnail. Remova essas dependências antes de excluí-lo.',
+          },
+        };
+      }
+      throw error;
+    }
     if (!ok) {
       return { status: 404, body: { error: 'Asset not found' } };
     }

@@ -139,8 +139,10 @@ interface TargetCreateRequestBody {
   tags?: string[];
   publishAt?: string;
   playlistId?: string;
+  youtubePlaylistId?: string;
   privacy?: string;
   thumbnailAssetId?: string;
+  tiktokCoverTimestampMs?: number;
   instagramCaption?: string;
   instagramShareToFeed?: boolean;
 }
@@ -159,8 +161,10 @@ function normalizeTargetCreateBody(body: TargetCreateRequestBody | undefined):
       tags?: string[];
       publishAt?: string;
       playlistId?: string;
+      youtubePlaylistId?: string;
       privacy?: string;
       thumbnailAssetId?: string;
+      tiktokCoverTimestampMs?: number;
       instagramCaption?: string;
       instagramShareToFeed?: boolean;
     };
@@ -174,10 +178,15 @@ function normalizeTargetCreateBody(body: TargetCreateRequestBody | undefined):
   const videoTitle = normalizeNonEmptyString(body?.videoTitle);
   const videoDescription = normalizeNonEmptyString(body?.videoDescription);
   const publishAt = normalizeScheduledAt(body?.publishAt);
-  const playlistId = body?.playlistId === undefined ? undefined : normalizeNonEmptyString(body.playlistId);
+  const playlistId = body?.youtubePlaylistId !== undefined
+    ? normalizeNonEmptyString(body.youtubePlaylistId)
+    : body?.playlistId === undefined ? undefined : normalizeNonEmptyString(body.playlistId);
   const thumbnailAssetId = body?.thumbnailAssetId === undefined ? undefined : normalizeNonEmptyString(body.thumbnailAssetId);
   const instagramCaption = body?.instagramCaption === undefined ? undefined : normalizeNonEmptyString(body.instagramCaption);
   const instagramShareToFeed = normalizeOptionalBoolean(body?.instagramShareToFeed);
+  const tiktokCoverTimestampMs = body?.tiktokCoverTimestampMs === undefined
+    ? undefined
+    : Number(body.tiktokCoverTimestampMs);
 
   if (!destinationId || !videoTitle || !videoDescription) {
     return { ok: false, error: 'Missing required fields: destinationId/channelId, videoTitle, videoDescription' };
@@ -193,6 +202,10 @@ function normalizeTargetCreateBody(body: TargetCreateRequestBody | undefined):
 
   if (instagramShareToFeed === null) {
     return { ok: false, error: 'Invalid instagramShareToFeed: value must be a boolean.' };
+  }
+
+  if (tiktokCoverTimestampMs !== undefined && (!Number.isInteger(tiktokCoverTimestampMs) || tiktokCoverTimestampMs < 0)) {
+    return { ok: false, error: 'Invalid tiktokCoverTimestampMs: value must be a non-negative integer.' };
   }
 
   if (body?.publishAt !== undefined && !publishAt) {
@@ -226,8 +239,10 @@ function normalizeTargetCreateBody(body: TargetCreateRequestBody | undefined):
       tags: tags ?? undefined,
       publishAt: publishAt ?? undefined,
       playlistId,
+      youtubePlaylistId: playlistId,
       privacy,
       thumbnailAssetId,
+      tiktokCoverTimestampMs,
       instagramCaption,
       instagramShareToFeed,
     },
@@ -304,7 +319,7 @@ export class CampaignsController {
       return { status: guardResult.status, body: { error: guardResult.reason } };
     }
 
-    const body = request.body as { title?: string; videoAssetId?: string; scheduledAt?: string; playlistId?: string; autoMode?: boolean; schedulePattern?: string } | undefined;
+    const body = request.body as { title?: string; videoAssetId?: string; scheduledAt?: string; playlistId?: string; contentQueueId?: string; queueItemId?: string; autoMode?: boolean; schedulePattern?: string } | undefined;
     const title = normalizeNonEmptyString(body?.title);
     if (!title) {
       return { status: 400, body: { error: 'Missing required field: title' } };
@@ -320,15 +335,27 @@ export class CampaignsController {
       return { status: 400, body: { error: 'Invalid scheduledAt: use a valid date-time string' } };
     }
 
-    const result = await this.campaignService.createCampaign({
-      ownerEmail: request.session?.adminUser?.email,
-      title,
-      videoAssetId,
-      scheduledAt: scheduledAt ?? undefined,
-      playlistId: typeof body?.playlistId === 'string' ? body.playlistId : undefined,
-      autoMode: typeof body?.autoMode === 'boolean' ? body.autoMode : false,
-      schedulePattern: typeof body?.schedulePattern === 'string' ? body.schedulePattern : undefined,
-    });
+    let result;
+    try {
+      result = await this.campaignService.createCampaign({
+        ownerEmail: request.session?.adminUser?.email,
+        title,
+        videoAssetId,
+        scheduledAt: scheduledAt ?? undefined,
+        contentQueueId: normalizeNonEmptyString(body?.contentQueueId) ?? normalizeNonEmptyString(body?.playlistId),
+        queueItemId: normalizeNonEmptyString(body?.queueItemId),
+        autoMode: typeof body?.autoMode === 'boolean' ? body.autoMode : false,
+        schedulePattern: typeof body?.schedulePattern === 'string' ? body.schedulePattern : undefined,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === 'INVALID_VIDEO_ASSET') {
+        return { status: 422, body: { error: 'O arquivo de vídeo não existe, não pertence ao usuário ou não é do tipo vídeo.' } };
+      }
+      if (error instanceof Error && error.message === 'INVALID_CONTENT_QUEUE_SELECTION') {
+        return { status: 422, body: { error: 'A seleção da fila de conteúdo é inválida ou não pertence ao usuário.' } };
+      }
+      throw error;
+    }
 
     return { status: 201, body: result };
   }

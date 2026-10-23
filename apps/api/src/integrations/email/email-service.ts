@@ -51,6 +51,16 @@ class MockEmailProvider implements IEmailProvider {
 }
 
 /**
+ * DisabledEmailProvider: Explicit no-delivery mode for installations that use
+ * Google as the only authentication method and do not operate transactional email.
+ */
+class DisabledEmailProvider implements IEmailProvider {
+  async send(_notification: EmailNotification): Promise<EmailProviderResult> {
+    return { success: true, messageId: 'disabled' };
+  }
+}
+
+/**
  * SendGridEmailProvider: SendGrid API driver
  *
  * Uses the SendGrid HTTP API directly, without an optional runtime package.
@@ -238,7 +248,7 @@ export class EmailService {
           error: result.error,
         });
       } else {
-        this.logger?.info('Email sent', {
+        this.logger?.info(result.messageId === 'disabled' ? 'Email delivery disabled; notification skipped' : 'Email sent', {
           to: notification.to,
           subject: notification.subject,
           messageId: result.messageId,
@@ -268,6 +278,7 @@ export function selectEmailProvider(
   const apiKey = env.EMAIL_PROVIDER_API_KEY?.trim();
   const fromAddress = env.EMAIL_FROM_ADDRESS?.trim();
   const isProduction = env.NODE_ENV === 'production';
+  const googleOnlyAuth = env.AUTH_GOOGLE_ONLY?.trim().toLowerCase() === 'true';
 
   if (!providerType) {
     if (isProduction) {
@@ -275,6 +286,14 @@ export function selectEmailProvider(
     }
     logger?.info('EMAIL_PROVIDER not set; using MockEmailProvider');
     return new MockEmailProvider();
+  }
+
+  if (providerType === 'disabled') {
+    if (!googleOnlyAuth) {
+      throw new Error('EMAIL_PROVIDER=disabled requires AUTH_GOOGLE_ONLY=true');
+    }
+    logger?.info('Email delivery disabled; Google-only authentication is enabled');
+    return new DisabledEmailProvider();
   }
 
   if (isProduction && !fromAddress) {
@@ -317,4 +336,4 @@ export function selectEmailProvider(
 }
 
 // Export for testing
-export { MockEmailProvider };
+export { DisabledEmailProvider, MockEmailProvider };

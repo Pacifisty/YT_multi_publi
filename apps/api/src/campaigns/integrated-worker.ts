@@ -22,7 +22,9 @@ export interface IntegratedWorkerOptions {
   videoFileResolver: VideoFileResolver;
   thumbnailFileResolver?: ThumbnailFileResolver;
   getAccessTokenForConnectedAccount?: (connectedAccountId: string) => Promise<string>;
+  getInstagramBusinessAccountId?: (connectedAccountId: string) => Promise<string>;
   getPublicVideoUrl?: (videoAssetId: string) => Promise<string>;
+  tiktokForcePrivatePublishing?: boolean;
 }
 
 export interface IntegratedWorkerInstance {
@@ -64,6 +66,7 @@ export function createIntegratedWorker(options: IntegratedWorkerOptions): Integr
     getPublicVideoUrl: options.getPublicVideoUrl ?? (async () => {
       throw new Error('Public media URLs are not configured.');
     }),
+    forcePrivatePublishing: options.tiktokForcePrivatePublishing,
   });
 
   const instagramWorker = new InstagramUploadWorker({
@@ -76,6 +79,8 @@ export function createIntegratedWorker(options: IntegratedWorkerOptions): Integr
     getPublicVideoUrl: options.getPublicVideoUrl ?? (async () => {
       throw new Error('Public media URLs are not configured.');
     }),
+    getPublicThumbnailUrl: options.getPublicVideoUrl,
+    getInstagramBusinessAccountId: options.getInstagramBusinessAccountId,
   });
 
   const worker = new PlatformDispatchWorker({

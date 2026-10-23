@@ -2,6 +2,7 @@ export interface InstagramReelsContainerParams {
   videoUrl: string;
   caption: string;
   shareToFeed?: boolean;
+  coverUrl?: string;
 }
 
 export interface InstagramReelsContainerResponse {
@@ -41,7 +42,7 @@ export class InstagramApiClient {
   constructor(
     private readonly accessToken: string,
     private readonly instagramBusinessAccountId: string,
-    baseURL: string = 'https://graph.facebook.com/v19.0',
+    baseURL: string = 'https://graph.instagram.com/v25.0',
     options: InstagramApiClientOptions = {},
   ) {
     this.baseURL = baseURL.replace(/\/+$/, '');
@@ -55,6 +56,9 @@ export class InstagramApiClient {
     body.set('video_url', params.videoUrl);
     body.set('caption', params.caption);
     body.set('share_to_feed', String(params.shareToFeed ?? true));
+    if (params.coverUrl) {
+      body.set('cover_url', params.coverUrl);
+    }
     body.set('access_token', this.accessToken);
 
     const payload = await this.request(`/${encodeURIComponent(this.instagramBusinessAccountId)}/media`, {

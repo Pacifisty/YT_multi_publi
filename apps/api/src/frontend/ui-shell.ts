@@ -847,6 +847,13 @@ export function resolveFrontendAsset(path: string): FrontendAsset | null {
     };
   }
 
+  if (path === '/terms/tiktokcjWAx75yWOgVnqahdXU7WpTM1Nyi0KIC.txt') {
+    return {
+      contentType: 'text/plain; charset=utf-8',
+      body: 'tiktok-developers-site-verification=cjWAx75yWOgVnqahdXU7WpTM1Nyi0KIC',
+    };
+  }
+
   if (path === '/privacy/tiktokh4lzAEArircjMLNxYEvA21NjqtOGoEzF.txt') {
     return {
       contentType: 'text/plain; charset=utf-8',
@@ -854,10 +861,31 @@ export function resolveFrontendAsset(path: string): FrontendAsset | null {
     };
   }
 
+  if (path === '/privacy/tiktokjNTtASS3tb9INj34KUz5WyxRkyV2HRxP.txt') {
+    return {
+      contentType: 'text/plain; charset=utf-8',
+      body: 'tiktok-developers-site-verification=jNTtASS3tb9INj34KUz5WyxRkyV2HRxP',
+    };
+  }
+
   if (path === '/tiktokNVSgdCAUsAxDS5TEw8yXUi7A1FSf6jKc.txt') {
     return {
       contentType: 'text/plain; charset=utf-8',
       body: 'tiktok-developers-site-verification=NVSgdCAUsAxDS5TEw8yXUi7A1FSf6jKc',
+    };
+  }
+
+  if (path === '/tiktokwAZU3jEdhsOsCkOUkKnmL0S7ci4BF6HN.txt') {
+    return {
+      contentType: 'text/plain; charset=utf-8',
+      body: 'tiktok-developers-site-verification=wAZU3jEdhsOsCkOUkKnmL0S7ci4BF6HN',
+    };
+  }
+
+  if (path === '/tiktokoKDHZo2koBRxsyOq4rXzT8pCIYRzs33n.txt') {
+    return {
+      contentType: 'text/plain; charset=utf-8',
+      body: 'tiktok-developers-site-verification=oKDHZo2koBRxsyOq4rXzT8pCIYRzs33n',
     };
   }
 
@@ -905,8 +933,11 @@ export function renderFrontendDocument(path: string, locale: FrontendLocale = DE
     || normalizedPath === '/'
     || normalizedPath === '/login';
   const legalDocumentsBootstrap = needsLegalDocuments
-    ? `    <script>window.__PMP_LEGAL_DOCUMENTS__=${renderLegalDocumentsInlineJson()};</script>\n`
+    ? `    <script id="pmp-legal-documents" type="application/json">${renderLegalDocumentsInlineJson()}</script>\n`
     : '';
+  const runtimeConfigBootstrap = `    <script id="pmp-runtime-config" type="application/json">${JSON.stringify({
+    googleOnlyAuth: process.env.AUTH_GOOGLE_ONLY?.trim().toLowerCase() === 'true',
+  }).replaceAll('<', '\\u003c')}</script>\n`;
   const criticalArtworkPreload = normalizedPath === '/' || normalizedPath === '/login'
     ? '    <link rel="preload" href="/assets/optimized/UNI.webp" as="image" type="image/webp" fetchpriority="high" />\n'
     : '';
@@ -939,7 +970,7 @@ ${criticalArtworkPreload}    <link rel="preconnect" href="https://fonts.googleap
   </head>
     <body data-initial-path="${initialPath}" data-initial-locale="${escapeHtml(safeLocale)}">
     <div id="app">${initialContent}</div>
-${legalDocumentsBootstrap}    <script src="/i18n.js?v=${FRONTEND_ASSET_VERSION}"></script>
+${runtimeConfigBootstrap}${legalDocumentsBootstrap}    <script src="/i18n.js?v=${FRONTEND_ASSET_VERSION}"></script>
     <script type="module" src="/app.js?v=${FRONTEND_ASSET_VERSION}"></script>
   </body>
 </html>`;

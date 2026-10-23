@@ -29,6 +29,13 @@ export interface ChannelRecord {
   lastSyncedAt: string;
 }
 
+export interface YouTubePlaylistSummary {
+  id: string;
+  title: string;
+  itemCount: number;
+  privacyStatus: string | null;
+}
+
 export interface ConnectedAccountPersistenceInput {
   ownerEmail?: string;
   provider: string;
@@ -145,11 +152,6 @@ function filterAccountsByOwner(accounts: ConnectedAccountRecord[], ownerEmail?: 
     return accounts;
   }
 
-  const hasOwnedAccounts = accounts.some((account) => normalizeOwnerEmail(account.ownerEmail) !== null);
-  if (!hasOwnedAccounts) {
-    return accounts;
-  }
-
   return accounts.filter((account) => normalizeOwnerEmail(account.ownerEmail) === normalizedOwnerEmail);
 }
 
@@ -163,7 +165,11 @@ export class AccountsService {
   private readonly connectedAccountStore: ConnectedAccountStore;
   private readonly channelStore: ChannelStore;
   private readonly now: () => Date;
-  private readonly oauthStateStore = new Map<string, { createdAtMs: number; adminEmail?: string }>();
+  private readonly oauthStateStore = new Map<string, {
+    createdAtMs: number;
+    adminEmail?: string;
+    codeVerifier?: string;
+  }>();
 
   constructor(private readonly options: AccountsServiceOptions = {}) {
     this.tokenCryptoService = options.tokenCryptoService;
@@ -190,6 +196,7 @@ export class AccountsService {
         this.rememberOauthState(
           state,
           (session as { adminUser?: { email?: string } } | null | undefined)?.adminUser?.email,
+          typeof session?.tiktokCodeVerifier === 'string' ? session.tiktokCodeVerifier : undefined,
         );
       }
       return redirectUrl;
@@ -202,6 +209,7 @@ export class AccountsService {
         this.rememberOauthState(
           state,
           (session as { adminUser?: { email?: string } } | null | undefined)?.adminUser?.email,
+          typeof session?.instagramCodeVerifier === 'string' ? session.instagramCodeVerifier : undefined,
         );
       }
       return redirectUrl;
@@ -234,8 +242,8 @@ export class AccountsService {
     const adminEmail = (input.session as { adminUser?: { email?: string } } | null | undefined)?.adminUser?.email;
     const canonicalProvider = provider === 'youtube' ? 'google' : provider;
     const sessionStateValid = this.validateProviderCallbackState(canonicalProvider, input.session, input.state);
-    const storedStateValid = this.consumeOauthState(input.state, adminEmail);
-    const stateValid = sessionStateValid || storedStateValid;
+    const storedState = this.consumeOauthState(input.state, adminEmail);
+    const stateValid = sessionStateValid || Boolean(storedState);
 
     if (!stateValid) {
       return {
@@ -244,7 +252,14 @@ export class AccountsService {
       };
     }
 
-    const tokenResult = await this.exchangeProviderCode(canonicalProvider, input.code, input.session);
+    const callbackSession = storedState?.codeVerifier
+      ? {
+          ...(input.session ?? {}),
+          ...(canonicalProvider === 'tiktok' ? { tiktokCodeVerifier: storedState.codeVerifier } : {}),
+          ...(canonicalProvider === 'instagram' ? { instagramCodeVerifier: storedState.codeVerifier } : {}),
+        }
+      : input.session;
+    const tokenResult = await this.exchangeProviderCode(canonicalProvider, input.code, callbackSession);
     this.clearProviderSessionState(canonicalProvider, input.session);
     const googleSubject = 'googleSubject' in tokenResult.profile ? tokenResult.profile.googleSubject : undefined;
     const providerSubject = tokenResult.profile.providerSubject ?? googleSubject;
@@ -494,6 +509,37 @@ export class AccountsService {
     return this.channelStore.findById(channelId);
   }
 
+  async listYouTubePlaylists(channelId: string, ownerEmail?: string): Promise<YouTubePlaylistSummary[] | null> {
+    const channel = await this.getChannel(channelId);
+    if (!channel) return null;
+    const account = await this.getAccount(channel.connectedAccountId, ownerEmail);
+    if (!account) return null;
+    const accessToken = await this.resolveAccessTokenForChannel(channelId, { requirePlaylistWriteScope: true });
+    const result: YouTubePlaylistSummary[] = [];
+    let pageToken: string | undefined;
+    do {
+      const url = new URL('https://www.googleapis.com/youtube/v3/playlists');
+      url.searchParams.set('part', 'snippet,contentDetails,status');
+      url.searchParams.set('channelId', channel.youtubeChannelId);
+      url.searchParams.set('maxResults', '50');
+      if (pageToken) url.searchParams.set('pageToken', pageToken);
+      const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!response.ok) throw new Error(`YouTube playlists request failed (${response.status})`);
+      const payload = await response.json() as any;
+      for (const item of payload.items ?? []) {
+        if (!item?.id) continue;
+        result.push({
+          id: item.id,
+          title: item.snippet?.title ?? item.id,
+          itemCount: item.contentDetails?.itemCount ?? 0,
+          privacyStatus: item.status?.privacyStatus ?? null,
+        });
+      }
+      pageToken = payload.nextPageToken;
+    } while (pageToken);
+    return result;
+  }
+
   async getAccountForChannel(channelId: string): Promise<ConnectedAccountRecord | null> {
     const channel = await this.channelStore.findById(channelId);
     if (!channel) {
@@ -550,13 +596,7 @@ export class AccountsService {
       }
 
       if (normalizedOwnerEmail && normalizeOwnerEmail(account.ownerEmail) !== normalizedOwnerEmail) {
-        const accounts = this.options.listConnectedAccounts
-          ? await this.options.listConnectedAccounts()
-          : [account];
-        const hasOwnedAccounts = accounts.some((entry) => normalizeOwnerEmail(entry.ownerEmail) !== null);
-        if (hasOwnedAccounts || normalizeOwnerEmail(account.ownerEmail) !== null) {
-          return null;
-        }
+        return null;
       }
 
       return account;
@@ -567,10 +607,7 @@ export class AccountsService {
     }
 
     if (normalizedOwnerEmail && normalizeOwnerEmail(account.ownerEmail) !== normalizedOwnerEmail) {
-      const hasOwnedAccounts = this.connectedAccountStore.findAll().some((entry) => normalizeOwnerEmail(entry.ownerEmail) !== null);
-      if (hasOwnedAccounts || normalizeOwnerEmail(account.ownerEmail) !== null) {
-        return null;
-      }
+      return null;
     }
 
     return account;
@@ -732,27 +769,31 @@ export class AccountsService {
     return this.getGoogleOauthService().exchangeCodeForTokens(code);
   }
 
-  private rememberOauthState(state: string, adminEmail?: string): void {
+  private rememberOauthState(state: string, adminEmail?: string, codeVerifier?: string): void {
     this.cleanupExpiredOauthStates();
     this.oauthStateStore.set(state, {
       createdAtMs: this.now().getTime(),
       adminEmail,
+      codeVerifier,
     });
   }
 
-  private consumeOauthState(state: string, adminEmail?: string): boolean {
+  private consumeOauthState(
+    state: string,
+    adminEmail?: string,
+  ): { createdAtMs: number; adminEmail?: string; codeVerifier?: string } | null {
     this.cleanupExpiredOauthStates();
     const record = this.oauthStateStore.get(state);
     if (!record) {
-      return false;
+      return null;
     }
 
     if (record.adminEmail && adminEmail && record.adminEmail !== adminEmail) {
-      return false;
+      return null;
     }
 
     this.oauthStateStore.delete(state);
-    return true;
+    return record;
   }
 
   private cleanupExpiredOauthStates(): void {

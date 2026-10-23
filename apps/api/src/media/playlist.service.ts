@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readdir, stat } from 'node:fs/promises';
 import { extname, join, basename } from 'node:path';
 
-const VIDEO_EXTENSIONS = new Set(['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v']);
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.mov']);
 
 export interface PlaylistItemRecord {
   id: string;
@@ -10,6 +10,10 @@ export interface PlaylistItemRecord {
   videoAssetId: string;
   position: number;
   usedAt: string | null;
+  status?: 'available' | 'reserved' | 'published';
+  reservedAt?: string | null;
+  publishedAt?: string | null;
+  reservationToken?: string | null;
   createdAt: string;
 }
 
@@ -17,7 +21,7 @@ export interface PlaylistRecord {
   id: string;
   ownerEmail: string | null;
   name: string;
-  folderPath: string;
+  folderPath: string | null;
   items: PlaylistItemRecord[];
   createdAt: string;
   updatedAt: string;
@@ -42,6 +46,9 @@ export interface PlaylistRepository {
   delete(id: string): Promise<boolean>;
   upsertItem(item: PlaylistItemRecord): Promise<PlaylistItemRecord>;
   markItemUsed(itemId: string, usedAt: string): Promise<boolean>;
+  reserveItem(itemId: string, reservationToken: string, reservedAt: string, expectedStatus?: PlaylistItemRecord['status']): Promise<PlaylistItemRecord | null>;
+  releaseItem(itemId: string, reservationToken?: string): Promise<boolean>;
+  markItemPublished(itemId: string, publishedAt: string): Promise<boolean>;
   removeItem(playlistId: string, videoAssetId: string): Promise<boolean>;
 }
 
@@ -65,7 +72,8 @@ export class InMemoryPlaylistRepository implements PlaylistRepository {
 
   async findAll(ownerEmail?: string): Promise<PlaylistRecord[]> {
     if (!ownerEmail) return [...this.playlists];
-    return this.playlists.filter((p) => p.ownerEmail === ownerEmail || p.ownerEmail === null);
+    const normalizedOwnerEmail = ownerEmail.trim().toLowerCase();
+    return this.playlists.filter((p) => p.ownerEmail?.trim().toLowerCase() === normalizedOwnerEmail);
   }
 
   async update(id: string, data: Partial<PlaylistRecord>): Promise<PlaylistRecord | null> {
@@ -98,6 +106,44 @@ export class InMemoryPlaylistRepository implements PlaylistRepository {
     for (const p of this.playlists) {
       const item = p.items.find((i) => i.id === itemId);
       if (item) { item.usedAt = usedAt; return true; }
+    }
+    return false;
+  }
+
+  async reserveItem(itemId: string, reservationToken: string, reservedAt: string, expectedStatus: PlaylistItemRecord['status'] = 'available'): Promise<PlaylistItemRecord | null> {
+    for (const p of this.playlists) {
+      const item = p.items.find((i) => i.id === itemId);
+      if (!item || (item.status ?? 'available') !== expectedStatus) continue;
+      item.status = 'reserved';
+      item.reservedAt = reservedAt;
+      item.reservationToken = reservationToken;
+      return item;
+    }
+    return null;
+  }
+
+  async releaseItem(itemId: string, reservationToken?: string): Promise<boolean> {
+    for (const p of this.playlists) {
+      const item = p.items.find((i) => i.id === itemId);
+      if (!item || (reservationToken && item.reservationToken !== reservationToken)) continue;
+      item.status = 'available';
+      item.reservedAt = null;
+      item.reservationToken = null;
+      return true;
+    }
+    return false;
+  }
+
+  async markItemPublished(itemId: string, publishedAt: string): Promise<boolean> {
+    for (const p of this.playlists) {
+      const item = p.items.find((i) => i.id === itemId);
+      if (!item) continue;
+      item.status = 'published';
+      item.usedAt = publishedAt;
+      item.publishedAt = publishedAt;
+      item.reservedAt = null;
+      item.reservationToken = null;
+      return true;
     }
     return false;
   }
@@ -176,6 +222,7 @@ async function scanSubfolders(rootPath: string): Promise<Array<{ name: string; p
 
 export interface MediaAssetLookup {
   findByOriginalName(name: string): Promise<{ id: string; storage_path: string } | null>;
+  findByStoragePath(path: string): Promise<{ id: string; storage_path: string } | null>;
   registerVideoFile(file: ScannedVideoFile): Promise<{ id: string }>;
 }
 
@@ -205,13 +252,23 @@ export class PlaylistService {
     return this.playlistRepo.findById(id);
   }
 
-  async createPlaylist(input: { name: string; folderPath: string; ownerEmail?: string }): Promise<{ playlist: PlaylistRecord }> {
+  private isOwnedBy(playlist: PlaylistRecord, ownerEmail?: string): boolean {
+    if (!ownerEmail) return true;
+    return playlist.ownerEmail?.trim().toLowerCase() === ownerEmail.trim().toLowerCase();
+  }
+
+  async getOwnedPlaylist(id: string, ownerEmail?: string): Promise<PlaylistRecord | null> {
+    const playlist = await this.playlistRepo.findById(id);
+    return playlist && this.isOwnedBy(playlist, ownerEmail) ? playlist : null;
+  }
+
+  async createPlaylist(input: { name: string; folderPath?: string | null; ownerEmail?: string }): Promise<{ playlist: PlaylistRecord }> {
     const nowIso = this.now().toISOString();
     const record: PlaylistRecord = {
       id: randomUUID(),
-      ownerEmail: input.ownerEmail ?? null,
+      ownerEmail: input.ownerEmail?.trim().toLowerCase() || null,
       name: input.name,
-      folderPath: input.folderPath,
+      folderPath: input.folderPath?.trim() || null,
       items: [],
       createdAt: nowIso,
       updatedAt: nowIso,
@@ -219,12 +276,13 @@ export class PlaylistService {
     return { playlist: await this.playlistRepo.create(record) };
   }
 
-  async deletePlaylist(id: string): Promise<boolean> {
+  async deletePlaylist(id: string, ownerEmail?: string): Promise<boolean> {
+    if (!await this.getOwnedPlaylist(id, ownerEmail)) return false;
     return this.playlistRepo.delete(id);
   }
 
-  async addItemToPlaylist(playlistId: string, videoAssetId: string): Promise<{ item: PlaylistItemRecord } | { error: string }> {
-    const playlist = await this.playlistRepo.findById(playlistId);
+  async addItemToPlaylist(playlistId: string, videoAssetId: string, ownerEmail?: string): Promise<{ item: PlaylistItemRecord } | { error: string }> {
+    const playlist = await this.getOwnedPlaylist(playlistId, ownerEmail);
     if (!playlist) return { error: 'Playlist not found' };
     const nowIso = this.now().toISOString();
     const item = await this.playlistRepo.upsertItem({
@@ -233,17 +291,22 @@ export class PlaylistService {
       videoAssetId,
       position: playlist.items.length,
       usedAt: null,
+      status: 'available',
+      reservedAt: null,
+      publishedAt: null,
+      reservationToken: null,
       createdAt: nowIso,
     });
     return { item };
   }
 
-  async removeItemFromPlaylist(playlistId: string, videoAssetId: string): Promise<boolean> {
+  async removeItemFromPlaylist(playlistId: string, videoAssetId: string, ownerEmail?: string): Promise<boolean> {
+    if (!await this.getOwnedPlaylist(playlistId, ownerEmail)) return false;
     return this.playlistRepo.removeItem(playlistId, videoAssetId);
   }
 
-  async pickNextAutoVideo(playlistId: string): Promise<{ videoAssetId: string; itemId: string } | null> {
-    const playlist = await this.playlistRepo.findById(playlistId);
+  async pickNextAutoVideo(playlistId: string, ownerEmail?: string): Promise<{ videoAssetId: string; itemId: string } | null> {
+    const playlist = await this.getOwnedPlaylist(playlistId, ownerEmail);
     if (!playlist || playlist.items.length === 0) return null;
 
     // Prefer never-used items, then oldest-used
@@ -252,6 +315,43 @@ export class PlaylistService {
 
     const pick = pool[Math.floor(Math.random() * pool.length)];
     return { videoAssetId: pick.videoAssetId, itemId: pick.id };
+  }
+
+  async reserveNextVideo(
+    playlistId: string,
+    ownerEmail?: string,
+    options: { sequence?: 'random' | 'sequential' | 'fresh-first'; repeat?: 'no-repeat' | 'allow-repeat' | 'stop' } = {},
+  ): Promise<{ videoAssetId: string; itemId: string; reservationToken: string } | null> {
+    const playlist = await this.getOwnedPlaylist(playlistId, ownerEmail);
+    if (!playlist) return null;
+    const available = playlist.items.filter((item) => item.status !== 'reserved');
+    const neverPublished = available.filter((item) => item.usedAt === null);
+    const repeat = options.repeat ?? 'no-repeat';
+    let pool = neverPublished;
+    if (pool.length === 0 && repeat === 'allow-repeat') pool = available;
+    if (pool.length === 0) return null;
+
+    const sequence = options.sequence ?? 'sequential';
+    const ordered = [...pool].sort((a, b) => a.position - b.position || a.createdAt.localeCompare(b.createdAt));
+    const candidates = sequence === 'random'
+      ? ordered.map((value) => ({ value, sort: Math.random() })).sort((a, b) => a.sort - b.sort).map(({ value }) => value)
+      : sequence === 'fresh-first'
+        ? [...ordered].sort((a, b) => (a.usedAt ?? '').localeCompare(b.usedAt ?? ''))
+        : ordered;
+    for (const selected of candidates) {
+      const reservationToken = randomUUID();
+      const reserved = await this.playlistRepo.reserveItem(selected.id, reservationToken, this.now().toISOString(), selected.status ?? 'available');
+      if (reserved) return { videoAssetId: reserved.videoAssetId, itemId: reserved.id, reservationToken };
+    }
+    return null;
+  }
+
+  async releaseReservation(itemId: string, reservationToken?: string): Promise<boolean> {
+    return this.playlistRepo.releaseItem(itemId, reservationToken);
+  }
+
+  async markItemPublished(itemId: string): Promise<boolean> {
+    return this.playlistRepo.markItemPublished(itemId, this.now().toISOString());
   }
 
   async markItemUsed(itemId: string): Promise<boolean> {
@@ -265,7 +365,7 @@ export class PlaylistService {
   ): Promise<{ playlists: PlaylistRecord[]; created: number; updated: number }> {
     const subfolders = await scanSubfolders(rootPath);
     const existingPlaylists = await this.playlistRepo.findAll(ownerEmail);
-    const byFolder = new Map(existingPlaylists.map((p) => [p.folderPath, p]));
+    const byFolder = new Map(existingPlaylists.filter((p) => p.folderPath).map((p) => [p.folderPath!, p]));
 
     let created = 0;
     let updated = 0;
@@ -283,15 +383,20 @@ export class PlaylistService {
       }
 
       const videoFiles = await scanVideoFiles(folder.path);
+      let nextPosition = playlist.items.reduce((max, item) => Math.max(max, item.position), -1) + 1;
       for (const file of videoFiles) {
-        const existing = await assetLookup.findByOriginalName(file.name);
+        const existing = await assetLookup.findByStoragePath(file.absolutePath);
         const assetId = existing ? existing.id : (await assetLookup.registerVideoFile(file)).id;
         await this.playlistRepo.upsertItem({
           id: randomUUID(),
           playlistId: playlist.id,
           videoAssetId: assetId,
-          position: playlist.items.length,
+          position: nextPosition++,
           usedAt: null,
+          status: 'available',
+          reservedAt: null,
+          publishedAt: null,
+          reservationToken: null,
           createdAt: nowIso,
         });
       }

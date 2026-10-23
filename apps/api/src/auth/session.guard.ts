@@ -3,7 +3,7 @@ export interface AdminSessionUser {
   fullName?: string;
   authenticatedAt?: string;
   needsPlanSelection?: boolean;
-  accountDeletionConfirmationMethod?: 'password' | 'email_code';
+  accountDeletionConfirmationMethod?: 'password' | 'email_code' | 'google_reauth';
   accountDeletionRequestedAt?: string;
   accountDeactivationAt?: string;
   accountDeletionAt?: string;

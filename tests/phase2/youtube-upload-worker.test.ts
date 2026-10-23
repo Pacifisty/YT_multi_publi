@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from 'vitest';
 import {
   YouTubeUploadWorker,
   YouTubeUploadPartialFailureError,
+  youtubeResumableUpload,
   type YouTubeUploadFn,
 } from '../../apps/api/src/campaigns/youtube-upload.worker';
 import { PublishJobService, InMemoryPublishJobRepository } from '../../apps/api/src/campaigns/publish-job.service';
@@ -39,6 +40,19 @@ async function createReadyTargetScenario() {
 }
 
 describe('YouTube upload worker', () => {
+  test('rejects a missing video file before opening an upload stream', async () => {
+    await expect(youtubeResumableUpload({
+      accessToken: 'unused-token',
+      filePath: '__definitely_missing__/video.mp4',
+      thumbnailFilePath: null,
+      title: 'Missing video',
+      description: 'The database record exists but the file does not.',
+      tags: [],
+      playlistId: null,
+      privacy: 'private',
+    })).rejects.toThrow('Video asset file is missing or unreadable');
+  });
+
   test('processes a queued job and uploads to YouTube', async () => {
     const { jobService, campaignService, target, campaign } = await createReadyTargetScenario();
 

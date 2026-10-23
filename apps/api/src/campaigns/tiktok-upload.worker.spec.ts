@@ -165,6 +165,34 @@ describe('TikTokUploadWorker', () => {
   });
 
   describe('Privacy level selection', () => {
+    it('should force SELF_ONLY for a sandbox or unaudited client', async () => {
+      const publishFn = vi.fn().mockResolvedValue({ publishId: 'pub-private' });
+      const fetchStatusFn = vi.fn().mockResolvedValue({
+        status: 'PUBLISH_COMPLETE',
+        publiclyAvailablePostId: 'vid-private',
+      });
+
+      worker = new TikTokUploadWorker({
+        jobService,
+        campaignService,
+        auditService,
+        forcePrivatePublishing: true,
+        queryCreatorInfoFn: vi.fn().mockResolvedValue({
+          privacyLevelOptions: ['PUBLIC_TO_EVERYONE', 'SELF_ONLY'],
+        }),
+        publishFn,
+        fetchStatusFn,
+        getAccessToken: vi.fn().mockResolvedValue('token-abc'),
+        getPublicVideoUrl: vi.fn().mockResolvedValue('https://r2.example.com/video.mp4'),
+      });
+
+      await worker.processPickedJob(mockJob, { ...mockTarget, privacy: 'public' }, 'video-asset-123');
+
+      expect(publishFn).toHaveBeenCalledWith(
+        expect.objectContaining({ privacy: 'SELF_ONLY' }),
+      );
+    });
+
     it('should select preferred privacy level when available', async () => {
       const creatorInfo: TikTokCreatorInfo = {
         privacyLevelOptions: ['PUBLIC_TO_EVERYONE', 'SELF_ONLY'],

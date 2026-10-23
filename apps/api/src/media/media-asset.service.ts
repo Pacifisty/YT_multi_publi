@@ -8,6 +8,7 @@ export interface MediaAsset {
   assetType: MediaAssetType;
   originalName: string;
   storagePath: string;
+  sourcePath?: string | null;
   sizeBytes: number;
   mimeType: string;
   durationSeconds: number;
@@ -20,6 +21,7 @@ export interface CreateMediaAssetDto {
   assetType: string;
   originalName: string;
   storagePath: string;
+  sourcePath?: string | null;
   sizeBytes: number;
   mimeType: string;
   durationSeconds?: number;

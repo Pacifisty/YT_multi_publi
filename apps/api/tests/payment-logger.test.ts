@@ -22,7 +22,8 @@ describe('PaymentLogger', () => {
     expect(logs.length).toBe(1);
     const entry = JSON.parse(logs[0]);
     expect(entry.intentId).toBe('pay_123');
-    expect(entry.email).toBe('user@example.com');
+    expect(entry.email).toBeUndefined();
+    expect(entry.emailRef).toMatch(/^email_[a-f0-9]{16}$/);
     expect(entry.status).toBe('pending');
     expect(entry.scope).toBe('checkout');
     expect(entry.timestamp).toBeDefined();

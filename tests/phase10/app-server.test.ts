@@ -104,6 +104,41 @@ describe('App server bootstrap', () => {
     expect(res.status).toBe(401);
   });
 
+  test('preserves the OAuth state cookie through the complete app routing layer', async () => {
+    const app = createApp({
+      env: {
+        ADMIN_EMAIL: 'admin@example.com',
+        ADMIN_PASSWORD_HASH: 'plain:secret123',
+        GOOGLE_CLIENT_ID: 'replace-me',
+        GOOGLE_CLIENT_SECRET: 'replace-me',
+        GOOGLE_AUTH_REDIRECT_URI: 'http://127.0.0.1:3000/login/callback',
+        NODE_ENV: 'development',
+      },
+    });
+
+    const start = await app.handleRequest(makeRequest({
+      method: 'GET',
+      path: '/auth/google/start',
+    }));
+    const redirect = new URL(start.body.redirectUrl);
+    const state = redirect.searchParams.get('state') ?? '';
+    const code = redirect.searchParams.get('code') ?? '';
+
+    const callback = await app.handleRequest(makeRequest({
+      method: 'GET',
+      path: '/auth/google/callback',
+      query: { code, state },
+      headers: { cookie: `pmp_login_oauth_state=${state}` },
+    }));
+
+    expect(callback.status).toBe(200);
+    expect(callback.body.user?.email).toBe('admin@example.com');
+    expect(callback.cookies).toContainEqual(expect.objectContaining({
+      name: 'gsd_admin_session',
+      value: expect.stringMatching(/^v2\./),
+    }));
+  });
+
   test('app routes POST /auth/logout', async () => {
     const app = createApp();
 
